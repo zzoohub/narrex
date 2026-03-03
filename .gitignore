@@ -1,0 +1,118 @@
+# OS & Editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+*.sublime-*
+
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p8
+*.p12
+*.jks
+*.mobileprovision
+secrets/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+debug.log
+
+# Build & Output
+build/
+dist/
+out/
+.output/
+.cache/
+
+# Node.js / TypeScript
+node_modules/
+.npm/
+.yarn/
+.turbo/
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+coverage/
+
+# Next.js
+.next/
+.vercel/
+next-env.*
+
+# React Native / Expo
+.expo/
+web-build/
+expo-env.d.ts
+*.hbc
+ios/Pods/
+ios/build/
+*.xcworkspace
+*.xcuserdata
+android/.gradle/
+android/build/
+*.apk
+*.aab
+*.keystore
+!debug.keystore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+.eggs/
+.venv/
+venv/
+ENV/
+.uv/
+.python-version
+*.whl
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.dmypy.json
+.ruff_cache/
+
+# Rust
+target/
+
+# Database
+*.sqlite3
+*.db
+
+# Docker
+.docker/
+
+# Cloudflare
+.wrangler/
+.dev.vars
+
+# GCP
+gcloud-service-key.json
+*-credentials.json
+.gcloudignore
+
+# Pulumi
+infra/bin/
+infra/sdks/
+.pulumi/
+
+# Sentry
+.env.sentry-build-plugin
+
+# Misc
+*.orig.*
+*.bak
+*.tmp
+.diagram/

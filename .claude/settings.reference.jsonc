@@ -1,0 +1,388 @@
+// ┌─────────────────────────────────────────────────────────────────────────┐
+// │  Claude Code 프로젝트 권한 설정 레퍼런스                                    │
+// │  실제 적용 파일: .claude/settings.json  (이 파일은 문서용)                    │
+// │                                                                         │
+// │  공식 문서: https://code.claude.com/docs/en/settings                     │
+// │  우선순위: managed > CLI args > local > project > user                   │
+// │  규칙 평가: deny 먼저 → ask → allow (첫 매칭 승)                           │
+// │  Bash 패턴: 접두사 매칭 (정규식 아님). :* = 콜론 와일드카드                    │
+// │             셸 연산자(&&, ||, |, ;, >) 포함 시 패턴 매칭 불가 → 수동 승인     │
+// │                                                                         │
+// │  ⚡ 실제 3개 프로젝트(idea-fork, mealio, zzoo.dev)의                      │
+// │     승인 로그를 분석하여 구성함.                                             │
+// │                                                                         │
+// │  경로 패턴:                                                                  │
+// │     ./ = 프로젝트 루트 기준 상대경로                                       │
+// │     ** = 어느 디렉터리든 (글로벌). deny에서 시크릿 차단 시 사용.           │
+// │                                                                         │
+// │  환경변수 프리픽스 주의:                                                    │
+// │     "PYTHONPATH=src uv run" → "uv:*"로 커버 안 됨.                       │
+// │     프리픽스 포함 패턴을 별도로 등록해야 함.                                  │
+// │     프로젝트 고유 env(DATABASE_URL 등)는 settings.local.json에.            │
+// └─────────────────────────────────────────────────────────────────────────┘
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+
+  "permissions": {
+    "allow": [
+
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      //  파일 시스템
+      //  deny 규칙에서 .env/secrets만 차단하므로 전체 개방.
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      "Read",                     // 파일 내용 읽기
+      "Edit",                     // 기존 파일 부분 수정 (특정 줄 교체)
+      "Write",                    // 파일 새로 생성 또는 전체 덮어쓰기
+      "MultiEdit",                // 여러 파일 동시 수정
+      "NotebookEdit",             // Jupyter 노트북 셀 편집
+
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      //  탐색 & 검색 — 읽기 전용, 항상 안전
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      "Glob",                     // 파일명 패턴 매칭 (*.ts, src/**/*.py 등)
+      "Grep",                     // 파일 내용 텍스트 검색 (정규식 지원)
+      "LS",                       // 디렉터리 목록 조회
+
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      //  웹 — Claude 내장 도구 (샌드박스 안에서 동작)
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      "WebFetch",                 // URL에서 콘텐츠 가져오기 (문서, API 응답 등)
+      "WebSearch",                // 웹 검색 (에러 메시지 조회 등)
+
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      //  에이전트 내부 도구
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      "Task",                     // 서브에이전트 실행 (복잡한 작업을 분할)
+      "TodoWrite",                // 구조화된 작업 목록 관리
+      "Skill",                    // 학습된 스킬 실행
+
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      //  Git — 서브커맨드별 등록
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      "Bash(git add:*)",          // 스테이징 영역에 파일 추가
+      "Bash(git status:*)",       // 작업 트리 상태 확인
+      "Bash(git diff:*)",         // 변경사항 비교
+      "Bash(git log:*)",          // 커밋 히스토리 조회
+      "Bash(git show:*)",         // 커밋/객체 상세 보기
+      "Bash(git branch:*)",       // 브랜치 목록/생성/삭제
+      "Bash(git checkout:*)",     // 브랜치 전환 (레거시)
+      "Bash(git switch:*)",       // 브랜치 전환 (신규)
+      "Bash(git merge:*)",        // 브랜치 병합
+      "Bash(git rebase:*)",       // 커밋 히스토리 재배치
+      "Bash(git stash:*)",        // 임시 변경사항 저장/복원
+      "Bash(git commit:*)",       // 변경사항 커밋
+      "Bash(git push:*)",         // 원격 저장소에 푸시
+      "Bash(git pull:*)",         // 원격 변경사항 가져오기 + 병합
+      "Bash(git fetch:*)",        // 원격 변경사항 가져오기 (병합 없이)
+      "Bash(git reset:*)",        // HEAD/스테이지 되돌리기
+      "Bash(git restore:*)",      // 작업 트리 파일 복원
+      "Bash(git cherry-pick:*)",  // 특정 커밋만 가져오기
+      "Bash(git tag:*)",          // 태그 생성/삭제/조회
+      "Bash(git remote:*)",       // 원격 저장소 관리
+      "Bash(git rev-parse:*)",    // Git 참조를 SHA로 변환
+      "Bash(git blame:*)",        // 줄별 마지막 수정자 확인
+      "Bash(git shortlog:*)",     // 커밋 요약 통계
+      "Bash(git clean:*)",        // 추적되지 않는 파일 삭제
+      "Bash(git ls-tree:*)",      // 트리 객체 내용 조회 (파일 구조 확인)
+      "Bash(git mv:*)",           // 파일 이동/이름변경 (Git 추적 유지)
+      "Bash(git -C:*)",           // 다른 디렉터리에서 git 실행 (멀티레포 작업)
+
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      //  GitHub CLI (gh)
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      "Bash(gh pr:*)",            // PR 생성/조회/머지/리뷰
+      "Bash(gh issue:*)",         // 이슈 생성/조회/댓글
+      "Bash(gh repo:*)",          // 레포 관리 (clone, fork, create 등)
+      "Bash(gh run:*)",           // GitHub Actions 워크플로우 상태/로그
+      "Bash(gh auth:*)",          // 인증 상태 확인/갱신
+      "Bash(gh api:*)",           // GitHub REST/GraphQL API 직접 호출
+      "Bash(gh browse:*)",        // 브라우저에서 레포/PR/이슈 열기
+
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      //  Just — 프로젝트 task runner (justfile 기반)
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      "Bash(just:*)",             // justfile에 정의된 모든 레시피 실행
+
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      //  Node.js / Bun / 패키지 매니저
+      //  상위 패턴(bun:*)이 하위(bun run:*)를 이론상 커버하지만,
+      //  Claude Code가 구체적 패턴으로 따로 물어보는 경우가 실제로 있음.
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      "Bash(bun:*)",              // bun install, bun run, bun test 등 전부
+      "Bash(bun run:*)",          // 스크립트 실행 (package.json scripts)
+      "Bash(bun run lint:*)",     // 린트 실행
+      "Bash(bunx:*)",             // bun 경유 패키지 실행 (npx 대응)
+      "Bash(npm:*)",              // npm 전체 (install, run, test 등)
+      "Bash(npm install:*)",      // 의존성 설치
+      "Bash(npm run build:*)",    // 빌드 스크립트 실행
+      "Bash(npm test:*)",         // 테스트 실행
+      "Bash(npx:*)",              // npm 경유 패키지 실행
+      "Bash(npx tsc:*)",          // TypeScript 컴파일러 실행
+      "Bash(npx next build:*)",   // Next.js 프로덕션 빌드
+      "Bash(npx vitest run:*)",   // Vitest 테스트 러너
+      "Bash(npx jest:*)",         // Jest 테스트 러너
+      "Bash(pnpm:*)",             // pnpm 패키지 매니저 전체
+      "Bash(yarn:*)",             // yarn 패키지 매니저 전체
+      "Bash(node:*)",             // Node.js 직접 실행 (스크립트, REPL)
+      "Bash(tsc:*)",              // TypeScript 컴파일러 (글로벌)
+
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      //  Python / uv
+      //  ⚠️  환경변수 프리픽스(PYTHONPATH=src)가 붙으면
+      //     "uv:*"로 매칭 안 됨 → 프리픽스 패턴 별도 등록 필수.
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      "Bash(uv:*)",               // uv 전체 (sync, run, pip 등)
+      "Bash(uv sync:*)",          // lockfile 기반 의존성 동기화
+      "Bash(uv run:*)",           // uv 관리 환경에서 명령 실행
+      "Bash(python:*)",           // Python 인터프리터 직접 실행
+      "Bash(python3:*)",          // Python 3 명시 실행
+      "Bash(pip:*)",              // pip 패키지 관리 (레거시)
+      "Bash(pytest:*)",           // 테스트 러너
+      "Bash(ruff:*)",             // 초고속 Python 린터/포매터
+      "Bash(mypy:*)",             // 정적 타입 체커
+      "Bash(uvicorn:*)",          // ASGI 서버 (FastAPI 등)
+      "Bash(PYTHONPATH=src uv run:*)",         // src 레이아웃 프로젝트 실행
+      "Bash(PYTHONPATH=src uv run pytest:*)",  // src 레이아웃 테스트
+      "Bash(PYTHONPATH=src uv run python:*)",  // src 레이아웃 스크립트
+      "Bash(PYTHONPATH=src python:*)",         // venv 없이 직접 실행
+      "Bash(PYTHONPATH=src python3:*)",        // 위와 동일 (python3 명시)
+      "Bash(PYTHONPATH=src .venv/bin/python:*)", // 가상환경 인터프리터 직접 지정
+
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      //  Rust / Cargo
+      //  SQLX_OFFLINE=true: DB 없이 sqlx 쿼리 검증 (CI/빌드 시 필수).
+      //  DATABASE_URL=... 패턴은 프로젝트마다 다르므로 settings.local.json에.
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      "Bash(cargo:*)",            // cargo 전체 (build, test, run 등)
+      "Bash(cargo build:*)",      // 프로젝트 컴파일
+      "Bash(cargo test:*)",       // 테스트 실행
+      "Bash(cargo check:*)",      // 타입 체크만 (빌드보다 빠름)
+      "Bash(cargo run:*)",        // 바이너리 빌드 + 실행
+      "Bash(cargo clippy:*)",     // Rust 린터 (경고/제안)
+      "Bash(cargo fmt:*)",        // 코드 포매팅 (rustfmt)
+      "Bash(cargo sqlx:*)",       // sqlx-cli (마이그레이션, prepare 등)
+      "Bash(SQLX_OFFLINE=true cargo:*)",       // DB 없이 sqlx 매크로 검증
+      "Bash(SQLX_OFFLINE=true cargo check:*)", // 오프라인 타입 체크
+      "Bash(SQLX_OFFLINE=true cargo build:*)", // 오프라인 빌드
+      "Bash(SQLX_OFFLINE=true cargo test:*)",  // 오프라인 테스트
+
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      //  Docker
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      "Bash(docker:*)",           // docker 전체 (build, run, stop 등)
+      "Bash(docker compose:*)",   // Compose v2 (docker compose up 등)
+      "Bash(docker-compose:*)",   // Compose v1 레거시 (하이픈 구문)
+      "Bash(docker ps:*)",        // 실행 중인 컨테이너 목록
+      "Bash(docker exec:*)",      // 실행 중 컨테이너에서 명령 실행
+
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      //  Expo / React Native
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      "Bash(expo:*)",             // Expo CLI (start, prebuild, install 등)
+      "Bash(eas:*)",              // Expo Application Services (빌드/배포)
+
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      //  Pulumi (Infrastructure as Code)
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      "Bash(pulumi:*)",           // IaC 전체 (up, preview, destroy, stack 등)
+
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      //  DB 도구
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      "Bash(psql:*)",             // PostgreSQL 대화형 클라이언트
+      "Bash(PGPASSWORD=postgres psql:*)", // 로컬 dev DB 비밀번호 프리픽스
+      "Bash(pg_dump:*)",          // PostgreSQL 백업/덤프
+      "Bash(redis-cli:*)",        // Redis 대화형 클라이언트
+
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      //  네트워크 도구
+      //  이전에 deny에 있었으나, 실제 2/3 프로젝트에서 allow.
+      //  API 테스트, 헬스체크 등 개발에 필수적으로 사용.
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      "Bash(curl:*)",             // HTTP 요청 (API 테스트, 헬스체크)
+      "Bash(wget:*)",             // 파일 다운로드 (의존성 설치 스크립트 등)
+
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      //  유틸리티 — 자주 쓰는 셸 기본 명령
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      "Bash(cat:*)",              // 파일 내용 출력
+      "Bash(head:*)",             // 파일 앞부분 출력
+      "Bash(tail:*)",             // 파일 뒷부분 출력 (로그 모니터링)
+      "Bash(wc:*)",               // 줄/단어/바이트 수 세기
+      "Bash(find:*)",             // 파일/디렉터리 재귀 검색
+      "Bash(ls:*)",               // 디렉터리 목록 (상세 옵션 포함)
+      "Bash(tree:*)",             // 디렉터리 트리 구조 시각화
+      "Bash(echo:*)",             // 텍스트 출력 (변수 확인, 파일 생성)
+      "Bash(printf:*)",           // 포맷된 텍스트 출력
+      "Bash(mkdir:*)",            // 디렉터리 생성 (-p 재귀 포함)
+      "Bash(cp:*)",               // 파일/디렉터리 복사
+      "Bash(mv:*)",               // 파일 이동/이름변경
+      "Bash(rm:*)",               // 파일 삭제 (rm -rf /*는 deny에서 차단)
+      "Bash(touch:*)",            // 빈 파일 생성 / 타임스탬프 갱신
+      "Bash(chmod:*)",            // 파일 권한 변경 (777은 deny에서 차단)
+      "Bash(chown:*)",            // 파일 소유자 변경
+      "Bash(ln:*)",               // 심볼릭/하드 링크 생성
+      "Bash(sed:*)",              // 스트림 편집기 (텍스트 치환)
+      "Bash(awk:*)",              // 패턴 매칭/텍스트 처리
+      "Bash(grep:*)",             // 텍스트 패턴 검색
+      "Bash(sort:*)",             // 줄 정렬
+      "Bash(uniq:*)",             // 중복 줄 제거
+      "Bash(diff:*)",             // 파일 비교
+      "Bash(which:*)",            // 실행 파일 경로 확인
+      "Bash(type:*)",             // 명령어 종류 확인 (alias, builtin 등)
+      "Bash(env:*)",              // 환경변수 목록 또는 환경 설정 후 실행
+      "Bash(printenv:*)",         // 특정 환경변수 값 출력
+      "Bash(export:*)",           // 환경변수 설정/내보내기
+      "Bash(pwd)",                // 현재 작업 디렉터리 출력
+      "Bash(date:*)",             // 날짜/시간 출력
+      "Bash(xargs:*)",            // stdin을 인자로 변환하여 명령 실행
+      "Bash(dirname:*)",          // 경로에서 디렉터리 부분 추출
+      "Bash(basename:*)",         // 경로에서 파일명 부분 추출
+      "Bash(realpath:*)",         // 절대 경로로 변환 (심링크 해소)
+      "Bash(readlink:*)",         // 심볼릭 링크 대상 확인
+      "Bash(jq:*)",               // JSON 파싱/변환/필터
+      "Bash(yq:*)",               // YAML 파싱/변환/필터
+      "Bash(cut:*)",              // 텍스트 필드 추출 (구분자 기반)
+      "Bash(tr:*)",               // 문자 변환/삭제
+      "Bash(tee:*)",              // stdout을 파일과 화면에 동시 출력
+      "Bash(cd:*)",               // 디렉터리 이동
+      "Bash(lsof:*)",             // 열린 파일/포트 확인 (포트 충돌 디버깅)
+      "Bash(ps:*)",               // 실행 중 프로세스 목록
+      "Bash(kill:*)",             // 프로세스 종료 (로컬 dev 서버 정리 등)
+      "Bash(yes:*)",              // 자동 응답 (y 반복 출력)
+      "Bash(xxd:*)",              // hex dump (바이너리 파일 디버깅)
+      "Bash(file:*)",             // 파일 타입/인코딩 확인
+      "Bash(stat:*)",             // 파일 상세 메타데이터 (크기, 권한, 시간)
+      "Bash(du:*)",               // 디스크 사용량 확인
+      "Bash(df:*)",               // 파일시스템 여유 공간 확인
+      "Bash(tar:*)",              // 아카이브 생성/해제 (.tar.gz 등)
+      "Bash(zip:*)",              // zip 아카이브 생성
+      "Bash(unzip:*)",            // zip 아카이브 해제
+      "Bash(gzip:*)",             // gzip 압축/해제
+      "Bash(gunzip:*)",           // gzip 해제
+      "Bash(base64:*)",           // Base64 인코딩/디코딩
+      "Bash(md5sum:*)",           // MD5 체크섬 (파일 무결성 확인)
+      "Bash(shasum:*)",           // SHA 체크섬
+      "Bash(openssl:*)",          // 인증서/해시/암호화 도구
+      "Bash(nslookup:*)",         // DNS 조회
+      "Bash(dig:*)",              // DNS 상세 조회
+      "Bash(ping:*)",             // 네트워크 연결 확인
+      "Bash(nc:*)",               // 네트워크 연결 테스트 (netcat)
+      "Bash(pbcopy:*)",           // macOS: 클립보드에 복사
+      "Bash(pbpaste:*)",          // macOS: 클립보드에서 붙여넣기
+      "Bash(say:*)",              // macOS: TTS 음성 출력
+
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      //  빌드 / 프레임워크 도구
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      "Bash(make:*)",             // Makefile 기반 빌드
+      "Bash(wrangler:*)",         // Cloudflare Workers CLI (배포/개발)
+      "Bash(turbo:*)",            // Turborepo (모노레포 빌드 오케스트레이션)
+      "Bash(eslint:*)",           // JavaScript/TypeScript 린터
+      "Bash(prettier:*)",         // 코드 포매터
+      "Bash(vitest:*)",           // Vite 네이티브 테스트 러너
+      "Bash(bunx vitest run:*)",  // bunx 경유 vitest 실행
+      "Bash(playwright:*)",       // E2E 브라우저 테스트
+      "Bash(open:*)",             // macOS: URL/파일을 기본 앱으로 열기
+
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      //  스캐폴딩 — 프로젝트 초기화 시 사용
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      "Bash(bunx shadcn@latest init:*)",      // shadcn/ui 프로젝트 초기화
+      "Bash(bunx shadcn@latest add:*)",       // shadcn/ui 컴포넌트 추가
+      "Bash(bunx create-next-app@latest:*)",  // Next.js 프로젝트 생성 (bun)
+      "Bash(npx create-next-app@latest:*)",   // Next.js 프로젝트 생성 (npm)
+      "Bash(npx @tailwindcss/cli:*)"          // Tailwind CSS CLI
+
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      //  MCP 플러그인 — 프로젝트별로 settings.local.json에 추가 권장
+      //
+      //  Playwright (브라우저 자동화):
+      //    "mcp__plugin_playwright_playwright__browser_navigate",
+      //    "mcp__plugin_playwright_playwright__browser_take_screenshot",
+      //    "mcp__plugin_playwright_playwright__browser_console_messages",
+      //    "mcp__plugin_playwright_playwright__browser_evaluate",
+      //
+      //  Context7 (라이브러리 최신 문서 조회):
+      //    "mcp__plugin_context7_context7__resolve-library-id",
+      //    "mcp__plugin_context7_context7__query-docs",
+      //
+      //  Neon DB (서버리스 PostgreSQL):
+      //    "mcp__plugin_neon-plugin_neon__list_projects",
+      //    "mcp__plugin_neon-plugin_neon__run_sql",
+      //    "mcp__plugin_neon-plugin_neon__describe_project",
+      //
+      //  Stitch (AI UI 생성):
+      //    "mcp__stitch__create_project",
+      //    "mcp__stitch__generate_screen_from_text",
+      //    "mcp__stitch__list_screens",
+      //    "mcp__stitch__list_projects",
+      //    "mcp__stitch__get_project"
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+    ],
+
+    "deny": [
+
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      //  시크릿 / 환경변수 파일 읽기 차단 (글로벌)
+      //  ** 패턴으로 프로젝트 안팝을 불문하고 어디서든 차단.
+      //  deny가 allow보다 우선이므로 Read 전체를 열어도 이것들은 안전.
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      "Read(**/.env)",             // 어디서든 .env 파일 읽기 차단
+      "Read(**/.env.*)",           // .env.production, .env.local 등 전부
+      "Read(**/.dev.vars)",        // Cloudflare Workers 로컬 시크릿
+      "Read(**/secrets/**)",       // 어디서든 secrets/ 디렉터리 전체
+      "Read(**/.ssh/**)",          // SSH 키 (~/.ssh 포함)
+      "Read(**/credentials.json)", // GCP 등 서비스 인증 정보
+      "Read(**/*.pem)",            // SSL/TLS 인증서
+      "Read(**/*.key)",            // 개인키 파일
+      "Read(**/*.p12)",            // PKCS#12 인증서 번들
+      "Read(**/*.jks)",            // Java KeyStore
+
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      //  시스템 파괴 / 권한 상승 명령
+      //  프롬프트 인젝션에 의한 최악의 시나리오 방지.
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      "Bash(sudo:*)",              // 루트 권한 실행 (전체 차단)
+      "Bash(su:*)",                // 다른 사용자로 전환
+      "Bash(rm -rf /*)",           // 루트 파일시스템 전체 삭제
+      "Bash(rm -rf /)",            // 위와 동일 (슬래시만)
+      "Bash(chmod 777:*)",         // 전체 읽기/쓰기/실행 (보안 취약)
+      "Bash(shutdown:*)",          // 시스템 종료
+      "Bash(reboot:*)",            // 시스템 재시작
+      "Bash(mkfs:*)",              // 디스크 포맷 (데이터 완전 파괴)
+      "Bash(dd:*)",                // 디스크 직접 읽기/쓰기 (위험한 저수준 I/O)
+
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      //  원격 접속 — 코드/시크릿 유출 위험
+      //  프롬프트 인젝션 시 공격자 서버로 데이터 전송 가능.
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      "Bash(ssh:*)",               // 원격 서버 접속 (터널링 포함)
+      "Bash(scp:*)",               // 원격 파일 복사 (업로드/다운로드)
+      "Bash(rsync:*)",             // 원격 파일 동기화 (대량 전송 가능)
+
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      //  프로덕션 설정 직접 수정 방지
+      // ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+      "Write(**/infra/**/*.prod.*)",  // 어디서든 프로덕션 인프라 설정 생성 차단
+      "Write(**/production.*)",      // production.* 파일 생성 차단
+      "Edit(**/infra/**/*.prod.*)"    // 어디서든 프로덕션 인프라 설정 수정 차단
+    ]
+  }
+}
+
+// ┌─────────────────────────────────────────────────────────────────────────┐
+// │  프로젝트별 settings.local.json에 추가할 패턴 예시:                         │
+// │                                                                         │
+// │  Rust + sqlx (DB URL 포함):                                             │
+// │    "Bash(DATABASE_URL=\"postgresql://...\" cargo sqlx prepare:*)"        │
+// │                                                                         │
+// │  다른 레포 git 조작:                                                      │
+// │    "Bash(git -C /Users/zzoo/apps/other-repo:*)"                         │
+// │                                                                         │
+// │  Python 가상환경 직접 실행:                                                │
+// │    "Bash(PYTHONPATH=src .venv/bin/python:*)"                            │
+// │                                                                         │
+// │  MCP 플러그인 (Neon, Playwright 등):                                     │
+// │    "mcp__plugin_neon-plugin_neon__run_sql"                              │
+// └─────────────────────────────────────────────────────────────────────────┘
