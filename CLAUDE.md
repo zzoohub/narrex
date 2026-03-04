@@ -36,6 +36,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Worker  | `localhost:8081~`           | TBD  |
 | DB      | Docker Compose (`5432`)     | TBD  |
 | Redis   | Docker Compose (`6379`)     | TBD  |
+| LLM     | Ollama (`11434`)            | Provider-agnostic gateway (OpenAI, Anthropic, Google) |
 
 ## Principles & Constraints
 ### MUST

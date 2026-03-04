@@ -24,8 +24,8 @@ The result: most aspiring writers abandon their projects. They outline in docs, 
 
 Three converging factors make this the right moment:
 
-1. **Model quality inflection.** Scene-level prose generation in Korean is now viable with Sonnet-class models. The output is good enough to revise rather than discard — a critical threshold for an "edit, don't write" workflow.
-2. **Cost structure viability.** Prompt caching, context compression (AI summaries instead of full prior text), and model tiering (Haiku for inline, Sonnet for scenes, Opus for structure) bring per-scene costs to ~$0.03-0.06. A complete 40-episode novel costs $3.60-9.60 in AI generation — sustainable at $12-25/month subscription pricing.
+1. **Model quality inflection.** Scene-level prose generation in Korean is now viable with frontier-class models. The output is good enough to revise rather than discard — a critical threshold for an "edit, don't write" workflow.
+2. **Cost structure viability.** Prompt caching, context compression (AI summaries instead of full prior text), and model tiering (lightweight for inline, mid-tier for scenes, frontier for structure) bring per-scene costs to ~$0.03-0.06. A complete 40-episode novel costs $3.60-9.60 in AI generation — sustainable at $12-25/month subscription pricing. A provider-agnostic LLM gateway enables switching providers to optimize cost without code changes.
 3. **Competitive vacuum.** No tool — Korean or international — combines visual story structure with AI drafting. International tools (Sudowrite, Novelcrafter, NovelAI) are English-only and lack visual timelines. Korean tools (단편.ai, 이음AI, TypeTak, AIWC) are either fully automated generators, character-only management, or weak writing assistants. The intersection of visual structure + scene-level AI + Korean web novel specialization is unoccupied.
 
 ### Evidence Summary
@@ -33,7 +33,7 @@ Three converging factors make this the right moment:
 - User insight (qualitative): Writers describe their bottleneck as "How to develop this scene?" not "What's the next sentence?" — the structural gap is the primary pain point.
 - Competitive analysis: 8 tools reviewed (4 international, 4 Korean). Zero offer visual timeline + AI scene generation. Closest international competitor (Novelcrafter) has codex/worldbuilding but no timeline or AI generation. Closest Korean competitor (이음AI) has character management but no visual structure or timeline.
 - Market context: Korean web novel market continues rapid growth. Platforms (Kakao Page, Naver Series) have expanding demand for content, creating pull for tools that help more people produce publishable work.
-- Cost modeling: Per-scene generation cost validated at $0.03-0.06 using Claude model pricing with prompt caching. 40-episode novel at ~120-160 scenes = $3.60-9.60 total generation cost per novel.
+- Cost modeling: Per-scene generation cost validated at $0.03-0.06 with prompt caching. 40-episode novel at ~120-160 scenes = $3.60-9.60 total generation cost per novel.
 
 ---
 
@@ -303,9 +303,13 @@ REQ-039  System uses context compression (AI-generated summaries of prior
 REQ-040  System uses prompt caching for stable context (Config, prior
          summaries) to reduce cost and latency on repeated generations.
 
-REQ-041  System applies model tiering: lightweight models for inline
-         suggestions, mid-tier models for scene generation, and advanced
-         models for structure planning and revision analysis.
+REQ-041  System applies model tiering via a provider-agnostic LLM gateway:
+         lightweight models for inline suggestions, mid-tier models for
+         scene generation, and frontier models for structure planning and
+         revision analysis. The gateway abstracts multiple providers
+         (OpenAI, Anthropic, Google, etc.) behind a unified interface,
+         enabling model switching without code changes. Local development
+         uses Ollama for cost-free iteration.
 ```
 
 ### 5.8 Editor
@@ -457,7 +461,7 @@ REQ-051  Product team can monitor: user acquisition funnel, project
 
 ### Assumptions
 
-- **Scene-level Korean prose generation is good enough to revise.** Current Sonnet-class models produce Korean prose that is serviceable as a starting point. If quality degrades significantly for genre-specific tropes (regression, martial arts), fine-tuning or specialized prompting may be required. Plan to validate with user testing in first month.
+- **Scene-level Korean prose generation is good enough to revise.** Current frontier-class models produce Korean prose that is serviceable as a starting point. If quality degrades significantly for genre-specific tropes (regression, martial arts), the provider-agnostic LLM gateway enables rapid provider switching. Specialized prompting or fine-tuning may also be required. Plan to validate with user testing in first month.
 - **Context compression preserves narrative fidelity.** AI-generated summaries of prior chapters can maintain enough detail for foreshadowing and character consistency over 40+ episodes. Not yet validated at scale — plan to test with 50-episode test novels.
 - **Aspiring writers will pay for AI generation.** The assumption that users who cannot write novels will pay $12-25/month for AI assistance is based on comparable creative tool pricing (Canva, Midjourney) but not directly validated in the Korean web novel writing market.
 - **Users will engage with the visual timeline rather than finding it overwhelming.** The multi-track timeline is the core differentiator but also the highest UX risk. Progressive disclosure and onboarding tutorials are planned, but the assumption that non-technical hobbyist writers will adopt a timeline interface needs validation.

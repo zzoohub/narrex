@@ -52,4 +52,4 @@ We will know this is working when users who enter with just an idea (free-text d
 - [ ] Can context compression (AI-summarized prior chapters) maintain enough narrative fidelity for foreshadowing and character consistency over 40+ episodes?
 - [ ] What is the right free-tier AI generation limit (currently assumed 10/month) to demonstrate value without excessive cost?
 - [ ] Should we validate with hobbyist writers first (broader market, lower expectations) or beginner serializers (narrower but higher willingness to pay)?
-- [ ] What is the optimal model tiering strategy (e.g., Haiku for inline assist, Sonnet for scene generation, Opus for structure planning) to balance quality and cost?
+- [x] ~~What is the optimal model tiering strategy?~~ **Decided:** Provider-agnostic LLM gateway with self-hosted abstraction (Rust trait). Supports OpenAI, Anthropic, Google, etc. behind a unified interface. Model tiering by task type deferred to Phase 2. Local dev uses Ollama.
