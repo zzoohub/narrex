@@ -26,7 +26,7 @@ The core loop is: idea in -> visual structure out -> arrange story -> generate s
 
 1. **Input + auto-structuring (REQ-001, REQ-002, REQ-004) is non-negotiable.** The product's first-moment promise is "bring your idea, we'll structure it." Without this, users face the same blank-page problem they already have.
 
-2. **Single-track timeline (REQ-009, REQ-010, REQ-014, REQ-015) is the minimum visual structure.** Multi-track (parallel storylines per character) adds significant UI complexity. A single-track timeline — a linear sequence of events you can add, delete, reorder, and inspect — is sufficient to validate whether visual story structuring resonates with the target user.
+2. **Multi-track timeline (REQ-009, REQ-010, REQ-011, REQ-012, REQ-013, REQ-014, REQ-015) is the visual structure.** Target genres (regression fantasy, romance-fantasy, martial arts) routinely feature simultaneous storylines — the protagonist training while the antagonist schemes. A multi-track timeline with parallel tracks, merge/branch points, and vertical alignment of simultaneous events is included in Phase 1 because omitting it would make the visual structure feel incomplete for the stories users actually write.
 
 3. **Character relationship map (REQ-024, REQ-025, REQ-026) is essential for context assembly.** AI draft quality depends on character awareness. Without character data in the generation context, output will be generic. The character map also serves as a tangible, visual "look, it understands my story" moment during onboarding.
 
@@ -54,10 +54,10 @@ The core loop is: idea in -> visual structure out -> arrange story -> generate s
 |----------|--------|-------------|-----------------|-----------|
 | P0 | REQ-001 | User can create a new project by entering free-form text describing their story idea | Accept any length of text input. System should handle inputs ranging from a single sentence to multi-page dumps. If input is too vague to structure (fewer than ~2 meaningful story elements), system asks 2-3 clarifying questions before proceeding. | Primary entry point. Most users will start here. |
 | P0 | REQ-002 | User can create a new project by importing a file | Support Notion export (.zip with Markdown), standalone Markdown (.md), and plain text (.txt) files via drag-and-drop or file picker. Parse and extract narrative content, character references, and plot points. | Secondary entry point. Users with existing notes in Notion or docs need this path. |
-| P0 | REQ-004 | System auto-structures any input into initial Config, Timeline, and Character Map | From the user's input, generate: (a) Config bar values (genre, theme, era/location, POV, tone) inferred from content; (b) Timeline with ordered event nodes representing key plot points; (c) Character Map with character nodes and inferred relationships. All generated elements are editable. System shows a brief summary of what it inferred and invites the user to review and adjust. | The core "magic moment." Without this, the product is just another blank canvas. |
+| P0 | REQ-004 | System auto-structures any input into initial Config, Timeline, and Character Map | From the user's input, generate: (a) Config bar values (genre, theme, era/location, POV, tone) inferred from content; (b) Timeline with ordered event nodes representing key plot points — placing simultaneous events on parallel tracks where applicable; (c) Character Map with character nodes and inferred relationships. All generated elements are editable. System shows a brief summary of what it inferred and invites the user to review and adjust. | The core "magic moment." Without this, the product is just another blank canvas. |
 
 **Acceptance criteria for REQ-004:**
-- Given a 200+ word input with identifiable characters and plot points, the system produces at least 5 timeline nodes, 2 characters with at least 1 relationship, and a populated config bar within 30 seconds.
+- Given a 200+ word input with identifiable characters and plot points, the system produces at least 5 timeline nodes (across one or more tracks if parallel storylines are detected), 2 characters with at least 1 relationship, and a populated config bar within 30 seconds.
 - Given a vague input (e.g., "a love story"), the system asks 2-3 clarifying questions before generating structure.
 - All auto-generated elements (nodes, characters, config values) are individually editable after generation.
 - User can trigger re-generation of the entire structure from the same input if the first result misses the mark.
@@ -77,15 +77,33 @@ The core loop is: idea in -> visual structure out -> arrange story -> generate s
 
 | Priority | REQ-ID | Requirement | Phase 1 Detail | Rationale |
 |----------|--------|-------------|-----------------|-----------|
-| P0 | REQ-009 | System displays a timeline with horizontal axis representing time progression | Phase 1: single-track only (no vertical axis for parallel tracks). The timeline is a horizontal sequence of event nodes. Nodes are visually connected to show narrative flow. The timeline supports horizontal scrolling/zooming for stories with many nodes. | Core visual metaphor. Single-track is sufficient to validate the timeline concept without multi-track complexity. |
-| P0 | REQ-010 | User can add, delete, and reorder event nodes on the timeline via drag-and-drop | Add: click a "+" button between existing nodes or at the end of the timeline. Delete: right-click or use a delete action on a selected node (with confirmation if the node has generated content). Reorder: drag a node to a new position; adjacent nodes shift to accommodate. | Fundamental timeline manipulation. Without this, the timeline is read-only and not useful as an authoring tool. |
+| P0 | REQ-009 | System displays a timeline with horizontal axis representing time progression | The timeline is a horizontal sequence of event nodes across one or more parallel tracks. Nodes are visually connected to show narrative flow. The timeline supports horizontal scrolling/zooming for stories with many nodes, and vertical expansion for multiple tracks. | Core visual metaphor. Multi-track is included because target genres routinely feature parallel storylines. |
+| P0 | REQ-010 | User can add, delete, and reorder event nodes on the timeline via drag-and-drop | Add: click a "+" button between existing nodes or at the end of a track. Delete: right-click or use a delete action on a selected node (with confirmation if the node has generated content). Reorder: drag a node to a new position within the same track or across tracks; adjacent nodes shift to accommodate. | Fundamental timeline manipulation. Without this, the timeline is read-only and not useful as an authoring tool. |
+| P0 | REQ-011 | User can add and remove parallel tracks on the timeline | User can create a new track (with an optional label, e.g., character name or storyline name) and delete empty tracks. Each track represents an independent storyline that progresses in parallel. | Parallel storylines are a staple of target genres. Tracks allow users to visually separate simultaneous narrative threads. |
+| P0 | REQ-012 | User can create merge points and branch points on the timeline | Branch point: a node on one track splits into nodes on two or more tracks (storylines diverge). Merge point: nodes from multiple tracks converge into a single node (storylines reconverge). Visual indicators distinguish branch/merge points from regular nodes. | Branch and merge points represent the moments where storylines split apart or come together — critical narrative structure for multi-POV stories. |
+| P0 | REQ-013 | System vertically aligns simultaneous events across tracks | Nodes at the same narrative time across different tracks are vertically aligned so users can see what is happening simultaneously. Alignment is automatic based on node position but can be manually adjusted. | Without vertical alignment, the multi-track timeline loses its primary benefit — showing what happens at the same time across different storylines. |
 | P0 | REQ-014 | User can open a node overlay panel to edit event details | Phase 1 overlay fields: event title (required), involved characters (multi-select from character map), location (free text), plot summary (free text, used as primary context for AI generation), mood/tone tags (optional, override config-level tone for this scene). Deferred fields: episode assignment, episode-end hook type, foreshadowing links, expected word count. | The node overlay is where users shape what the AI generates for each scene. Plot summary is the most critical field — it's the user's creative direction for the scene. |
 | P0 | REQ-015 | System displays node visual states | Four states: (a) Empty — no content, no draft generated; (b) AI Draft — AI has generated a draft, user has not edited; (c) Edited — user has modified the AI draft or written original content; (d) Needs Revision — config or character data changed since draft was generated. Visual distinction via color, icon, or fill level. | Users need to see at a glance which scenes are done, which need work, and which may be stale. Essential for managing a multi-scene project. |
 
 **Acceptance criteria for REQ-010:**
 - User can add a new node between any two existing nodes with a single interaction (click "+").
 - User can drag a node from position 3 to position 7; nodes 4-7 shift left, and the moved node lands at position 7. The operation completes in under 500ms visually.
+- User can drag a node from one track to another; the node's track assignment updates and vertical alignment adjusts accordingly.
 - Deleting a node with existing content shows a confirmation dialog. Deleting an empty node does not require confirmation.
+
+**Acceptance criteria for REQ-011:**
+- User can create a new track with a single interaction. Track label is optional and editable.
+- User can delete a track only if it contains no nodes (or confirms deletion of all contained nodes).
+- The timeline displays up to 5 parallel tracks without significant layout degradation.
+
+**Acceptance criteria for REQ-012:**
+- User can create a branch point by dragging from one node to create a new node on a different track.
+- User can create a merge point by connecting nodes from multiple tracks into a single downstream node.
+- Branch and merge points are visually distinct from regular sequential connections.
+
+**Acceptance criteria for REQ-013:**
+- Nodes at the same narrative time position across different tracks are vertically aligned within 1 grid unit.
+- User can manually adjust alignment by dragging a node horizontally without breaking track assignment.
 
 **Acceptance criteria for REQ-014:**
 - Opening a node overlay does not navigate away from the timeline — the overlay appears alongside or on top of the timeline.
@@ -114,7 +132,7 @@ The core loop is: idea in -> visual structure out -> arrange story -> generate s
 | Priority | REQ-ID | Requirement | Phase 1 Detail | Rationale |
 |----------|--------|-------------|-----------------|-----------|
 | P0 | REQ-034 | User can select any event node and trigger "Generate AI Draft" | User selects a node on the timeline or opens it in the editor, then presses a "Generate" button. System produces a single prose draft (Phase 1 generates one variation; multiple variations deferred to Phase 2). Output length targets 1,500-3,000 Korean characters per scene. Generation shows a loading state with estimated time. If generation fails, system shows a clear error message with a retry option. | The core value delivery moment. This is where the product converts visual structure into readable prose. |
-| P0 | REQ-035 | System auto-assembles the AI prompt from structured context | Phase 1 context assembly includes: (a) Global Config settings (genre, tone, era, POV); (b) Current node's plot summary, characters, location, mood tags; (c) Character cards and relationship data for characters involved in the scene; (d) AI-compressed summaries of preceding nodes (not full text — summaries generated and cached as each node's draft is completed); (e) Next node's title and summary (if it exists) for narrative continuity. Deferred context sources: foreshadowing links, episode position, simultaneous events from other tracks, episode-end hook type. | "Your structure is your prompt." The auto-assembly is the technical core of the product — it transforms visual editing into prompt engineering without the user knowing. |
+| P0 | REQ-035 | System auto-assembles the AI prompt from structured context | Phase 1 context assembly includes: (a) Global Config settings (genre, tone, era, POV); (b) Current node's plot summary, characters, location, mood tags; (c) Character cards and relationship data for characters involved in the scene; (d) AI-compressed summaries of preceding nodes (not full text — summaries generated and cached as each node's draft is completed); (e) Next node's title and summary (if it exists) for narrative continuity. Deferred context sources: foreshadowing links, episode position, episode-end hook type. Note: simultaneous events from other tracks ARE included in Phase 1 context assembly (via REQ-013). | "Your structure is your prompt." The auto-assembly is the technical core of the product — it transforms visual editing into prompt engineering without the user knowing. |
 
 **Acceptance criteria for REQ-034:**
 - Pressing "Generate" on a node with a plot summary and at least one assigned character produces a prose draft within 30 seconds.
@@ -159,10 +177,7 @@ The core loop is: idea in -> visual structure out -> arrange story -> generate s
 |--------|-------------|--------------|
 | REQ-003 | Genre templates (pre-populated config and starter timeline) | Templates require curated genre-specific content (regression, romance-fantasy, martial arts structures). Auto-structuring from free text is the higher-priority entry point. Templates are a Phase 2 onboarding enhancement once we understand which genres users actually choose. |
 | REQ-005 | First-project onboarding tutorial | A guided tutorial requires a stable UI to build against. Phase 1 UI will iterate rapidly. Instead, rely on clear empty states, inline hints, and a simple first-time flow that pushes users to their first generation. Structured onboarding is a Phase 2 polish item. |
-| REQ-006 | AI coaching system (contextual suggestions) | Coaching requires understanding common user patterns and failure points — data we don't have yet. Phase 1 will generate this data. Coaching is a Phase 2+ retention feature. |
-| REQ-011 | Multi-track timeline (add/remove parallel tracks) | Multi-track introduces significant UI complexity (track management, cross-track alignment, merge/branch points). Single-track is sufficient to validate the timeline concept. If users request parallel storylines, that signal informs Phase 2 prioritization. |
-| REQ-012 | Merge points and branch points on timeline | Depends on multi-track (REQ-011). |
-| REQ-013 | Vertical alignment of simultaneous events across tracks | Depends on multi-track (REQ-011). |
+| REQ-006 | AI chat panel (user-initiated questions and brainstorming) | Chat panel requires a working project context (Config, Timeline, Character Map) to be useful. Phase 1 focuses on getting the core data structures right. AI chat is a Phase 2 feature once the context it draws from is stable. |
 | REQ-016 | Foreshadowing connection lines between nodes | Valuable but not essential for the core loop. Adds visual complexity to the timeline. Deferred to Phase 2 where it pairs with revision tools (REQ-047) that verify foreshadowing payoffs. |
 | REQ-017 | AI gap detection (suggests scenes to fill narrative holes) | Requires enough user data to understand what "good" story structure looks like. Also depends on a stable timeline experience. Phase 2+ feature. |
 | REQ-018, REQ-019, REQ-020, REQ-021, REQ-022, REQ-023 | Episode organization layer (event-to-episode mapping, dividers, word count estimates, hook types, AI episode-aware pacing) | The entire episode layer is deferred. In Phase 1, nodes map 1:1 to scenes — there is no separate episode concept. This dramatically simplifies the data model and UI. Episode organization is the centerpiece of Phase 2. |
@@ -196,7 +211,7 @@ This is the journey that validates the core hypothesis. A user who completes thi
 3. System processes the input:
    - If input contains identifiable characters and plot points -> system generates a Config bar (genre, tone, etc.), a single-track Timeline with event nodes, and a Character Map with relationship lines. A brief summary shows: "I found X characters, Y plot points. Here's your story structure."
    - If input is too vague (e.g., "a love story") -> system asks 2-3 clarifying questions (e.g., "What genre?", "Who is the main character?", "What is the central conflict?") and then generates structure.
-4. User sees the workspace: a horizontal timeline with nodes across the top/center, a character graph in a side panel, and a config bar (collapsible) at the top. Everything is pre-filled from auto-structuring.
+4. User sees the workspace: a horizontal multi-track timeline with nodes across the top/center (parallel storylines on separate tracks), a character graph in a side panel, and a config bar (collapsible) at the top. Everything is pre-filled from auto-structuring.
 5. User reviews the auto-generated structure. They:
    - Rename a node that doesn't match their intent.
    - Click a character node and edit the personality description to be more specific.
@@ -220,7 +235,7 @@ This is the journey that validates the core hypothesis. A user who completes thi
 - **Step 9 (first draft quality):** If the AI draft is bad enough to discard entirely, the core value proposition fails. Mitigation: include rich context in the prompt (config, character data, plot summary); direction-based editing lets users steer without rewriting.
 - **Step 10 (editing skill gap):** User may not know how to improve the draft. Mitigation: direction-based editing (REQ-043) lets users describe intent ("more tension") instead of executing prose craft.
 
-**Phase 1 difference from full vision:** In the full product, step 8 would generate 2-3 variations with tone sliders. In Phase 1, it generates one draft. Users who dislike the output can re-generate or use direction-based edits.
+**Phase 1 difference from full vision:** In the full product, step 8 would generate 2-3 variations with tone sliders. In Phase 1, it generates one draft. Users who dislike the output can re-generate or use direction-based edits. Multi-track timeline is included in Phase 1, so users can organize parallel storylines from the start.
 
 ### Journey 2: Building the Character Map
 
@@ -301,7 +316,7 @@ If any of the first three criteria are not met after 8 weeks, the team should di
 | Risk | Severity | Likelihood | Mitigation |
 |------|----------|------------|------------|
 | AI prose quality in Korean is below the "worth editing" threshold for target genres | Critical | Medium | Pre-launch quality benchmark with target users. Multiple model provider options. Genre-specific prompt engineering. If quality is insufficient at launch, delay launch and iterate on prompting. |
-| Single-track timeline feels too simple to demonstrate the "visual structure" value prop | Medium | Medium | Design the single-track UI to feel intentional, not limited. Show clear visual feedback (node states, connections) that demonstrates the structure concept. If users request multi-track, that validates Phase 2 prioritization. |
+| Multi-track timeline adds onboarding complexity for first-time users | Medium | Low | Provide a sensible default (single track) on project creation; parallel tracks appear only when auto-structuring detects simultaneous events or the user explicitly adds a track. Inline hints explain the track concept on first encounter. |
 | Context window limits cause quality degradation for projects with 15+ nodes | High | Medium | Phase 1 projects are likely 10-20 nodes. Implement summary-based context compression from the start. Monitor generation quality by node position. If degradation is detected, invest in compression quality before Phase 2. |
 | Users generate one scene and leave — the tool is a novelty, not a workflow | High | Medium | Push toward multi-scene engagement in the UX: after first generation, suggest "Generate the next scene?" Show progress on the timeline. Track generation-to-second-generation conversion as an early warning metric. |
 | Per-user AI costs are higher than modeled due to re-generation and direction-based edits | Medium | Low | Monitor per-user token usage from day one. Set internal cost alerts. If costs exceed projections, consider generation limits even for beta users to collect accurate usage data. |

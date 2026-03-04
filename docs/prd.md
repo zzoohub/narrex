@@ -142,10 +142,13 @@ REQ-005  System provides a first-project onboarding tutorial that
          progressively introduces features (Config, Timeline, Character Map,
          Editor) without requiring the user to read documentation.
 
-REQ-006  AI coaching system provides contextual suggestions throughout the
-         product (e.g., "Add a character here", "Adding conflict to this
-         event would make it more interesting", "There's a gap between
-         these events — how about this scene?").
+REQ-006  System provides an AI chat panel where the user can ask questions
+         about their story, request structural advice, brainstorm ideas,
+         or get writing guidance at any time (e.g., "How should I develop
+         this character's arc?", "What conflict would work here?", "Help
+         me connect these two plot points"). The chat is context-aware —
+         it has access to the current project's Config, Timeline, and
+         Character Map.
 ```
 
 ### 5.2 Config (Global Story Settings)
@@ -471,7 +474,7 @@ REQ-051  Product team can monitor: user acquisition funnel, project
 |------|----------|------------|------------|
 | AI prose quality in Korean is not good enough to revise (users discard rather than edit) | Critical | Medium | Multiple variations + tone sliders give users more control. Run quality benchmarks before launch with target users. Fallback: integrate multiple model providers for A/B quality comparison. |
 | Context compression loses critical narrative details over 40+ episodes | High | Medium | Implement foreshadowing link system that preserves tagged important details regardless of compression. Test with progressively longer manuscripts during development. |
-| Visual timeline is too complex for target users (hobbyist writers, not technical users) | High | Medium | Progressive feature disclosure (start with simple list view, unlock timeline complexity as user advances). AI coaching guides users through features. Validate with user testing before full launch. |
+| Visual timeline is too complex for target users (hobbyist writers, not technical users) | High | Medium | Progressive feature disclosure (start with simple list view, unlock timeline complexity as user advances). AI chat panel available for users to ask questions when stuck. Validate with user testing before full launch. |
 | Per-user AI costs exceed subscription revenue (especially for Pro/unlimited users) | High | Low | Model tiering (cheap models for simple tasks, expensive models only for scene generation). Prompt caching for stable context. Usage monitoring with cost alerts. Adjust unlimited tier pricing if needed. |
 | Competitors add visual timeline features (Sudowrite, Novelcrafter) | Medium | Low | Korean language specialization and web novel genre knowledge create a defensible niche. Speed of execution matters — first-mover advantage in the Korean market. |
 | Users create elaborate structures but never generate/write (tool becomes a planning toy, not a writing tool) | Medium | Medium | Onboarding flow pushes users to generate their first AI draft within the first session. Surface "ready to write" prompts when structure reaches a viable state. Track structure-to-generation conversion as a key metric. |
@@ -517,7 +520,7 @@ REQ-051  Product team can monitor: user acquisition funnel, project
 
 1. **Visual timeline-based structure.** No competitor — international or Korean — offers a multi-track visual timeline for story planning. This is the primary differentiator.
 2. **Visual editing = AI prompting.** Manipulating the UI (moving nodes, editing character cards, dragging episode dividers) directly shapes what the AI generates. No prompt engineering required.
-3. **Beginner-friendly UX.** Progressive feature disclosure and AI coaching guide non-technical users through the tool, unlike competitors that assume writing experience.
+3. **Beginner-friendly UX.** Progressive feature disclosure and an always-available AI chat panel let non-technical users ask for help on their own terms, unlike competitors that assume writing experience.
 4. **AI variations.** Multiple draft versions + tone sliders + AI Surprise give authors meaningful creative control, unlike single-output generators.
 5. **Korean web novel specialization.** Genre-aware (regression, romance-fantasy, martial arts), Korean-native prose output, episode-length calibrated for web novel standards (3,000-5,000 characters).
 6. **Authoring tool, not generator.** Author involvement at every step — the tool augments creative judgment instead of replacing it.
@@ -532,7 +535,7 @@ Prove that a user can go from idea to a multi-episode AI-assisted draft using th
 
 **Included:**
 - Free text input and file import with AI auto-structuring (REQ-001, REQ-002, REQ-004)
-- Timeline with single-track node editing: add, delete, move via drag-and-drop (REQ-009, REQ-010, REQ-014, REQ-015)
+- Multi-track timeline with node editing: add, delete, move via drag-and-drop, parallel tracks, merge/branch points, vertical alignment (REQ-009, REQ-010, REQ-011, REQ-012, REQ-013, REQ-014, REQ-015)
 - Node overlay with event details (REQ-014)
 - Character relationship map: node graph, relationship lines, character cards (REQ-024, REQ-025, REQ-026)
 - Per-node AI draft generation with auto-assembled context (REQ-034, REQ-035)
@@ -540,7 +543,6 @@ Prove that a user can go from idea to a multi-episode AI-assisted draft using th
 - Basic Config bar (REQ-007, REQ-008)
 
 **Deferred to Phase 2+:**
-- Multi-track timeline (start with single track)
 - Episode organization layer (nodes map 1:1 to scenes initially)
 - World map
 - Temporal relationship tracking
@@ -555,7 +557,7 @@ Prove that a user can go from idea to a multi-episode AI-assisted draft using th
 
 ### Phase 2: Episode Layer & Polish
 
-Add episode organization, multi-track timeline, variations, and export.
+Add episode organization, variations, and export.
 
 ### Phase 3: Depth & Delight
 
