@@ -187,9 +187,11 @@ REQ-014  User can open a node overlay panel to edit: event title, episode
          tags, episode-end hook type, foreshadowing links to other nodes,
          and expected word count.
 
-REQ-015  System displays node visual states: unwritten (empty), AI draft
-         complete (partial fill), author-edited complete (full fill), and
-         needs revision (warning indicator).
+REQ-015  System displays node visual states: empty (no content),
+         draft (partial fill — AI generated or manually written, not yet
+         confirmed), confirmed (full fill — author marked as done), and
+         needs review (warning indicator — prior changes may affect
+         consistency).
 
 REQ-016  User can create foreshadowing connection lines between nodes to
          indicate narrative links (setup/payoff relationships).
@@ -216,8 +218,9 @@ REQ-021  System estimates and displays per-episode word count based on
          assigned nodes and target range (configurable, default
          3,000-5,000 characters for web novels).
 
-REQ-022  User can tag each episode ending with a hook type: twist, crisis,
-         breadcrumb, emotional explosion, or custom.
+REQ-022  System automatically classifies each episode ending's hook type
+         (twist, crisis, breadcrumb, emotional explosion, etc.) after
+         generation and displays it as a read-only label.
 
 REQ-023  AI uses episode-node links to determine narrative position context
          (e.g., "Episode 7 of 40, entering mid-section") and adjusts
@@ -228,7 +231,9 @@ REQ-023  AI uses episode-node links to determine narrative position context
 
 ```
 REQ-024  System displays an interactive node graph of characters with
-         clickable character nodes.
+         clickable character nodes. Layout uses a force-directed graph
+         algorithm (characters with more relationships gravitate to the
+         center). Users can drag nodes to adjust positions manually.
 
 REQ-025  User can click a character node to view and edit a character card:
          name, personality, appearance, secrets, motivation, and profile
