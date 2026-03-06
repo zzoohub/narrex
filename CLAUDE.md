@@ -45,8 +45,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 3. All service code changes must use skills, including after plan mode.
 4. After implementation, check if sub-agents are needed and run in parallel:
    - **z-security-reviewer**: Run when changes affect security-sensitive areas (auth, data access, API endpoints).
-   - **z-verifier**: Run when changes include testable code (new/modified functions, logic branches). 
-   > Skip all for docs/copy-only changes. Skip browser test if `claude-in-chrome` MCP is unavailable.
+   - **z-verifier**: Run for any code change. Skip only for docs-only or copy-only changes (no code files modified).
 
 ### MUST NOT
 - (project-specific anti-patterns here)

@@ -1,0 +1,165 @@
+direction: down
+
+# Actors
+writer: Writer {
+  shape: person
+  style.stroke: "#2563eb"
+}
+
+# External Services
+llm-providers: LLM Providers {
+  style.stroke: "#059669"
+  style.border-radius: 8
+  style.font-size: 12
+  label: "LLM Providers\n(OpenAI, Anthropic, Google)"
+}
+
+oauth-providers: OAuth Providers {
+  style.stroke: "#9333ea"
+  style.border-radius: 8
+  style.font-size: 12
+  label: "OAuth Providers\n(Google, Kakao)"
+}
+
+r2: Cloudflare R2 {
+  shape: cylinder
+  style.stroke: "#f97316"
+  label: "Object Storage\n(Cloudflare R2)"
+}
+
+posthog: PostHog {
+  style.stroke: "#6366f1"
+  style.border-radius: 8
+  label: "Analytics\n(PostHog)"
+}
+
+# System Boundary
+system: Narrex System {
+  style.stroke: "#0ea5e9"
+  style.fill: "#f8fafc"
+  style.border-radius: 12
+
+  web: Web Client {
+    style.stroke: "#3b82f6"
+    style.fill: "#eff6ff"
+    style.border-radius: 8
+    label: |md
+      **Web Client**
+      TanStack Start + SolidJS
+      Tailwind CSS v4
+    |
+  }
+
+  api: API Server {
+    style.stroke: "#10b981"
+    style.fill: "#ecfdf5"
+    style.border-radius: 8
+    label: |md
+      **API Server**
+      FastAPI + Uvicorn
+      Auth, Project, Timeline,
+      Character, Generation, Editor
+    |
+  }
+
+  worker: Background Worker {
+    style.stroke: "#f59e0b"
+    style.fill: "#fffbeb"
+    style.border-radius: 8
+    label: |md
+      **Background Worker**
+      ARQ (Python)
+      Summary compression,
+      File parsing
+    |
+  }
+
+  gateway: LLM Gateway {
+    style.stroke: "#059669"
+    style.fill: "#ecfdf5"
+    style.border-radius: 8
+    label: |md
+      **LLM Gateway**
+      LiteLLM
+      Provider routing, failover,
+      cost tracking
+    |
+  }
+
+  db: PostgreSQL {
+    shape: cylinder
+    style.stroke: "#3b82f6"
+    label: "PostgreSQL\n(Neon prod / Docker dev)"
+  }
+
+  redis: Redis {
+    shape: cylinder
+    style.stroke: "#dc2626"
+    label: "Redis\nTask queue, cache,\nsessions, rate limits"
+  }
+}
+
+# Connections - User
+writer -> system.web: "HTTPS" {
+  style.stroke: "#2563eb"
+}
+
+# Connections - Internal
+system.web -> system.api: "REST + SSE" {
+  style.stroke: "#64748b"
+}
+
+system.api -> system.db: "SQL (SQLAlchemy async)" {
+  style.stroke: "#3b82f6"
+}
+
+system.api -> system.redis: "Cache, sessions, rate limits" {
+  style.stroke: "#dc2626"
+}
+
+system.api -> system.gateway: "HTTP (prompt + stream)" {
+  style.stroke: "#059669"
+}
+
+system.worker -> system.db: "SQL" {
+  style.stroke: "#3b82f6"
+  style.stroke-dash: 5
+}
+
+system.worker -> system.gateway: "HTTP (summary generation)" {
+  style.stroke: "#059669"
+  style.stroke-dash: 5
+}
+
+system.worker -> system.redis: "Consume tasks" {
+  style.stroke: "#dc2626"
+  style.stroke-dash: 5
+}
+
+system.api -> system.redis: "Enqueue tasks" {
+  style.stroke: "#f59e0b"
+  style.stroke-dash: 5
+}
+
+# Connections - External
+system.gateway -> llm-providers: "HTTPS (streaming)" {
+  style.stroke: "#059669"
+}
+
+system.api -> oauth-providers: "OAuth2 flow" {
+  style.stroke: "#9333ea"
+}
+
+system.api -> r2: "Presigned URLs" {
+  style.stroke: "#f97316"
+}
+
+system.web -> r2: "Direct upload (presigned)" {
+  style.stroke: "#f97316"
+  style.stroke-dash: 5
+}
+
+system.web -> posthog: "Client-side events" {
+  style.stroke: "#6366f1"
+  style.stroke-dash: 5
+}

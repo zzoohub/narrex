@@ -1,1 +1,275 @@
 @import 'tailwindcss';
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Narrex Design System — "Ink & Amber"
+   A cinematic writing studio: warm lamplight on dark surfaces.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Light tokens ──────────────────────────────────────────────────────── */
+:root {
+  --canvas: #f5f2eb;
+  --surface: #ffffff;
+  --surface-raised: #efeae0;
+  --surface-overlay: rgba(255, 255, 255, 0.92);
+  --border-default: #dcd7cc;
+  --border-subtle: #e8e4db;
+  --fg: #1a1a1f;
+  --fg-secondary: #4a4740;
+  --fg-muted: #8a857a;
+  --accent: #b8862d;
+  --accent-hover: #a07424;
+  --accent-muted: rgba(184, 134, 45, 0.10);
+  --accent-fg: #ffffff;
+  --success: #3d8c5c;
+  --success-muted: rgba(61, 140, 92, 0.10);
+  --warning: #c4862a;
+  --warning-muted: rgba(196, 134, 42, 0.10);
+  --error: #c44040;
+  --error-muted: rgba(196, 64, 64, 0.10);
+  --focus-ring: rgba(184, 134, 45, 0.45);
+  --skeleton-base: #e8e4db;
+  --skeleton-shine: #f5f2eb;
+  --node-empty-border: #c4bfb4;
+  --node-draft-fill: #e8d5a8;
+  --node-edited-fill: #a3d4b8;
+  --node-revision-fill: #e8c8a0;
+  --node-revision-border: #d4983c;
+  color-scheme: light;
+}
+
+/* ── Dark tokens ───────────────────────────────────────────────────────── */
+.dark {
+  --canvas: #0c0c10;
+  --surface: #151519;
+  --surface-raised: #1c1c24;
+  --surface-overlay: rgba(21, 21, 25, 0.95);
+  --border-default: #282834;
+  --border-subtle: #202028;
+  --fg: #e8e5dd;
+  --fg-secondary: #a8a49c;
+  --fg-muted: #5e5a52;
+  --accent: #d4a04d;
+  --accent-hover: #e8b862;
+  --accent-muted: rgba(212, 160, 77, 0.10);
+  --accent-fg: #0c0c10;
+  --success: #5cb88a;
+  --success-muted: rgba(92, 184, 138, 0.10);
+  --warning: #d4a04d;
+  --warning-muted: rgba(212, 160, 77, 0.10);
+  --error: #d45050;
+  --error-muted: rgba(212, 80, 80, 0.10);
+  --focus-ring: rgba(212, 160, 77, 0.35);
+  --skeleton-base: #1c1c24;
+  --skeleton-shine: #282834;
+  --node-empty-border: #3a3a48;
+  --node-draft-fill: #4a3d22;
+  --node-edited-fill: #2a4a38;
+  --node-revision-fill: #4a3820;
+  --node-revision-border: #d4983c;
+  color-scheme: dark;
+}
+
+/* ── Tailwind v4 theme registration ────────────────────────────────────── */
+@theme {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-overlay: var(--surface-overlay);
+  --color-border-default: var(--border-default);
+  --color-border-subtle: var(--border-subtle);
+  --color-fg: var(--fg);
+  --color-fg-secondary: var(--fg-secondary);
+  --color-fg-muted: var(--fg-muted);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-muted: var(--accent-muted);
+  --color-accent-fg: var(--accent-fg);
+  --color-success: var(--success);
+  --color-success-muted: var(--success-muted);
+  --color-warning: var(--warning);
+  --color-warning-muted: var(--warning-muted);
+  --color-error: var(--error);
+  --color-error-muted: var(--error-muted);
+  --color-focus-ring: var(--focus-ring);
+  --color-skeleton-base: var(--skeleton-base);
+  --color-skeleton-shine: var(--skeleton-shine);
+  --color-node-empty-border: var(--node-empty-border);
+  --color-node-draft-fill: var(--node-draft-fill);
+  --color-node-edited-fill: var(--node-edited-fill);
+  --color-node-revision-fill: var(--node-revision-fill);
+  --color-node-revision-border: var(--node-revision-border);
+
+  --font-display: 'Cormorant Garamond', 'Noto Serif KR', Georgia, serif;
+  --font-body: 'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, 'Noto Sans KR', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  --animate-fade-in: fade-in 0.3s ease-out both;
+  --animate-slide-up: slide-up 0.4s ease-out both;
+  --animate-scale-in: scale-in 0.2s ease-out both;
+  --animate-shimmer: shimmer 2s ease-in-out infinite;
+}
+
+/* ── Keyframes ─────────────────────────────────────────────────────────── */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+@keyframes stream-cursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* ── Base ──────────────────────────────────────────────────────────────── */
+html {
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+body {
+  background-color: var(--canvas);
+  color: var(--fg);
+  margin: 0;
+}
+
+/* ── Scrollbar ─────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--fg-muted); }
+
+/* ── Focus ─────────────────────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── Selection ─────────────────────────────────────────────────────────── */
+::selection {
+  background: var(--accent-muted);
+  color: var(--fg);
+}
+
+/* ── Reduced motion ────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── Resize handles ────────────────────────────────────────────────────── */
+.resize-h {
+  width: 5px;
+  cursor: col-resize;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 10;
+  transition: background 0.15s;
+}
+.resize-h::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 1px;
+  height: 32px;
+  background: var(--border-default);
+  border-radius: 1px;
+  transition: background 0.15s;
+}
+.resize-h:hover, .resize-h:active {
+  background: var(--accent-muted);
+}
+.resize-h:hover::after, .resize-h:active::after {
+  background: var(--accent);
+}
+.resize-v {
+  height: 5px;
+  cursor: row-resize;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 10;
+  transition: background 0.15s;
+}
+.resize-v::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 32px;
+  height: 1px;
+  background: var(--border-default);
+  border-radius: 1px;
+  transition: background 0.15s;
+}
+.resize-v:hover, .resize-v:active {
+  background: var(--accent-muted);
+}
+.resize-v:hover::after, .resize-v:active::after {
+  background: var(--accent);
+}
+
+/* ── Timeline node shapes ──────────────────────────────────────────────── */
+.tl-node {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid var(--node-empty-border);
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+  position: relative;
+}
+.tl-node:hover {
+  border-color: var(--accent);
+  transform: scale(1.1);
+}
+.tl-node[data-selected="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+.tl-node[data-status="ai-draft"] {
+  background: linear-gradient(to top, var(--node-draft-fill) 50%, transparent 50%);
+  border-color: var(--accent);
+}
+.tl-node[data-status="edited"] {
+  background: var(--node-edited-fill);
+  border-color: var(--success);
+}
+.tl-node[data-status="needs-revision"] {
+  background: var(--node-revision-fill);
+  border-color: var(--node-revision-border);
+}
+
+/* ── Streaming cursor ──────────────────────────────────────────────────── */
+.stream-cursor::after {
+  content: '';
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  background: var(--accent);
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  animation: stream-cursor 0.8s ease-in-out infinite;
+}
