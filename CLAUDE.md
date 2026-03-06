@@ -71,7 +71,7 @@ All commands in `justfile`. Run `just --list` to see all recipes.
 - Design system: **z-design-system**
 - UI: **frontend-design**
 - Web source code:
-  - If **TanStack Start (SolidJS)** → **z-solidjs** (implementation) -> **simplify** (optimization)
+  - If **TanStack Start (SolidJS)** → **z-solidjs**
   - If **Next.js** → **vercel-composition-patterns** (composition) → **vercel-react-best-practices** (optimization)
   
 
