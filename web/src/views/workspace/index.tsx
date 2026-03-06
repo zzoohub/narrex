@@ -3,7 +3,6 @@ import { Link } from '@tanstack/solid-router'
 import { useI18n } from '@/shared/lib/i18n'
 import { useTheme } from '@/shared/stores/theme'
 import {
-  Button,
   IconPanelLeft,
   IconPanelBottom,
   IconChevronLeft,

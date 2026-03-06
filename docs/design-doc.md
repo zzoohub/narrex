@@ -70,7 +70,7 @@ Phase 1 validates the core loop: idea input -> auto-structuring -> visual timeli
 
 **System Architecture: Modular Monolith + Async Background Tasks**
 
-A single FastAPI backend service with internal domain module boundaries, plus Redis-backed background workers for non-blocking tasks. All LLM-facing user interactions use SSE streaming directly from the API process.
+A single Axum backend service with internal domain module boundaries, plus Tokio-spawned background tasks for non-blocking work. All LLM-facing user interactions use SSE streaming directly from the API process.
 
 **Why Modular Monolith over Microservices:**
 - Solo developer — operational simplicity is paramount
@@ -78,17 +78,19 @@ A single FastAPI backend service with internal domain module boundaries, plus Re
 - The domains (timeline, character, generation) are tightly coupled around the project aggregate
 - A modular monolith can be extracted into services later if needed (Shopify pattern)
 
-**Why Python (FastAPI) over Rust (Axum):**
-- LLM integration is the core feature. Python's AI ecosystem (LiteLLM, tokenizers, structured output parsing) is significantly richer
-- Streaming from LLM providers is well-tested in Python's async ecosystem (httpx + asyncio)
-- Solo developer velocity matters more than per-request performance at beta scale
-- Trade-off: higher memory/CPU per instance (~100MB vs ~10MB Rust), but acceptable for 20-50 users
+**Why Rust (Axum):**
+- LiteLLM runs as a separate service with HTTP API — the API server just calls it via `reqwest`. No Python-specific LLM libraries needed in the API server.
+- ~10MB memory vs ~100MB Python — directly reduces Cloud Run cost (critical for solopreneur economics)
+- Near-zero cold starts (~100ms vs ~2s) — better UX for auto-scaling
+- Compiler safety + SQLx compile-time query checking eliminates entire error classes
+- SSE streaming is well-supported via `axum::response::sse::Sse` + `reqwest` byte stream forwarding
+- Trade-off: slower initial development velocity, but long-term maintenance and reliability are higher
 
 **Code Structure: Hexagonal (Ports & Adapters)**
-- Domain logic is pure Python, no framework dependencies
-- Ports define interfaces (LLM provider, storage, etc.)
-- Adapters implement ports (PostgreSQL, LiteLLM, R2, etc.)
-- Swappable adapters enable: Ollama for local dev, cloud providers for production; in-memory for testing, PostgreSQL for production
+- Domain logic is pure Rust, no framework dependencies
+- Ports define trait interfaces (LLM gateway, storage, etc.)
+- Adapters implement traits (PostgreSQL via SQLx, LiteLLM via reqwest, R2 via aws-sdk, etc.)
+- Swappable adapters enable: mock implementations for testing, different backing services for dev vs production
 
 ### 3.2 Container Diagram
 

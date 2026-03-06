@@ -10,7 +10,6 @@ import {
   IconUser,
   IconMoon,
   IconSun,
-  IconGlobe,
 } from '@/shared/ui'
 import type { Project } from '@/shared/types'
 
@@ -47,7 +46,8 @@ type ViewState = 'loading' | 'empty' | 'loaded'
 export function DashboardView() {
   const { t } = useI18n()
   const { theme, toggle } = useTheme()
-  const [state, setState] = createSignal<ViewState>('loaded')
+  // Change initial state to test: 'loading' | 'empty' | 'loaded'
+  const [state, _setState] = createSignal<ViewState>('loaded')
 
   function formatDate(date: Date) {
     return date.toLocaleDateString('ko-KR', {

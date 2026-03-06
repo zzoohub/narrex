@@ -10,7 +10,7 @@ import {
   IconPen,
   IconAlertTriangle,
 } from '@/shared/ui'
-import type { Track, TimelineNode } from '@/shared/types'
+import type { Track } from '@/shared/types'
 
 interface TimelinePanelProps {
   tracks: Track[]
