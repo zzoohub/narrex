@@ -56,7 +56,7 @@ system: Narrex System {
     style.border-radius: 8
     label: |md
       **API Server**
-      FastAPI + Uvicorn
+      Axum + Tokio (Rust)
       Auth, Project, Timeline,
       Character, Generation, Editor
     |
@@ -68,7 +68,7 @@ system: Narrex System {
     style.border-radius: 8
     label: |md
       **Background Worker**
-      ARQ (Python)
+      tokio::spawn (Rust)
       Summary compression,
       File parsing
     |
@@ -109,7 +109,7 @@ system.web -> system.api: "REST + SSE" {
   style.stroke: "#64748b"
 }
 
-system.api -> system.db: "SQL (SQLAlchemy async)" {
+system.api -> system.db: "SQL (SQLx)" {
   style.stroke: "#3b82f6"
 }
 

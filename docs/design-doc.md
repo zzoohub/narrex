@@ -99,11 +99,11 @@ A single Axum backend service with internal domain module boundaries, plus Tokio
 | Container | Technology | Responsibility | Communication |
 |---|---|---|---|
 | **Web Client** | TanStack Start + SolidJS + Tailwind CSS v4 | Desktop-first SPA: timeline, character map, editor, config bar | REST + SSE to API |
-| **API Server** | FastAPI + Uvicorn | Business logic, auth, data access, LLM orchestration, SSE streaming, context assembly | REST/SSE from client; HTTP to LLM Gateway; SQL to DB; Redis for cache/queue |
-| **Background Worker** | ARQ (Python, Redis-backed) | Async tasks: node summary compression, file parsing | Consumes Redis queue; SQL to DB; HTTP to LLM Gateway |
+| **API Server** | Axum + Tokio (Rust) | Business logic, auth, data access, LLM orchestration, SSE streaming, context assembly | REST/SSE from client; HTTP to LLM Gateway; SQL to DB; Redis for cache |
+| **Background Tasks** | tokio::spawn (in-process) | Async tasks: node summary compression, file parsing | Shares DB pool and HTTP client with API; runs within the same process |
 | **LLM Gateway** | LiteLLM (self-hosted) | Provider-agnostic routing to OpenAI/Anthropic/Google. Failover, cost tracking, unified API | HTTP from API/Worker; HTTP to LLM providers |
-| **PostgreSQL** | PostgreSQL 18 (Docker dev / Neon prod) | Primary data store: users, projects, timelines, characters, drafts, summaries | SQL from API/Worker |
-| **Redis** | Redis 7 (Docker dev / Memorystore prod) | Task queue (ARQ), session cache, rate limiting | From API/Worker |
+| **PostgreSQL** | PostgreSQL 18 (Docker dev / Neon prod) | Primary data store: users, projects, timelines, characters, drafts, summaries | SQL from API (SQLx) |
+| **Redis** | Redis 8 (Docker dev / Memorystore prod) | Session cache, rate limiting, cached context components | From API |
 | **Object Storage** | Cloudflare R2 | Character profile images, imported files | Presigned URLs from API; direct upload from client |
 
 ### 3.3 Component Overview
@@ -209,7 +209,7 @@ Forward tokens to client via SSE as they arrive
 On stream complete:
   +-- Save full draft to DB
   +-- Update node status to "AI Draft"
-  +-- Enqueue background task: generate compressed summary
+  +-- Spawn background task (tokio::spawn): generate compressed summary
 ```
 
 Consistency: draft saved after full generation completes. If stream interrupts, no partial draft in DB — client shows whatever was streamed, user can re-generate.
@@ -281,13 +281,13 @@ User
 - Strong consistency for all writes. Read-your-own-writes guaranteed.
 - Retention: all user content retained indefinitely. Generation logs retained for 1 year.
 
-**Redis (Cache + Queue)**
-- Background task queue (ARQ)
+**Redis (Cache + Sessions)**
 - Session tokens (refresh token store)
 - Rate limiting counters (sliding window)
 - Cached components for context assembly (project config, character cards, node summaries)
-- Consistency: eventual (cache). Tasks at-least-once delivery.
+- Consistency: eventual (cache).
 - TTL: cache entries 15min-1hr, session tokens 30 days
+- Note: background tasks (summary compression, file parsing) run in-process via `tokio::spawn` — no external task queue needed at beta scale
 
 **Cloudflare R2 (Object Storage)**
 - Character profile images, imported files (.md, .txt, .zip)
@@ -314,20 +314,21 @@ Context assembly is the most latency-sensitive read path, but inputs change freq
 
 **Production: GCP Cloud Run (asia-northeast3, Seoul)**
 
-- API Server: containerized FastAPI. Min 1 instance (avoid cold starts), max 10.
-- Background Worker: separate Cloud Run service. Min 0 (scale-to-zero), max 5.
-- LLM Gateway: LiteLLM as a separate lightweight Cloud Run service.
+- API Server: containerized Rust binary (~10MB). Min 1 instance (near-zero cold start anyway), max 10.
+- LLM Gateway: LiteLLM as a separate lightweight Cloud Run service (Python — the only Python component).
 - Request timeout: 300s for LLM-streaming endpoints, 60s default.
+- Background tasks run in-process (tokio::spawn) — no separate worker service needed.
 
 **Why Cloud Run:**
-- FastAPI requires Python runtime — not compatible with Cloudflare Workers (V8 only)
+- Container-based, supports any language/runtime
 - Auto-scaling without Kubernetes complexity
 - Native support for SSE streaming with long timeouts
 - GCP ecosystem alignment (Memorystore, Cloud Logging)
 - Seoul region for Korean audience latency
+- Rust binary cold starts are ~100ms, but min 1 instance avoids even that
 
 **Why not alternatives:**
-- Workers: V8-only, can't run Python
+- Workers: Rust can compile to WASM but SQLx and reqwest don't support WASM targets well
 - Compute Engine: unnecessary for request-response workloads
 - Lambda/Fargate: different cloud ecosystem, no advantage
 
@@ -335,7 +336,7 @@ Context assembly is the most latency-sensitive read path, but inputs change freq
 
 - **CI/CD:** GitHub Actions
 - **Pipeline:** PR merge -> build container -> push to Artifact Registry -> deploy to Cloud Run (rolling update)
-- **Database migrations:** Alembic, run as a pre-deploy CI step
+- **Database migrations:** sqlx-cli (`sqlx migrate run`), run as a pre-deploy CI step
 - **Rollback:** Cloud Run revision-based instant rollback
 - **Strategy:** Rolling update. Blue-green is overkill for beta scale.
 
@@ -343,7 +344,7 @@ Context assembly is the most latency-sensitive read path, but inputs change freq
 
 | Environment | API | DB | Redis | LLM |
 |---|---|---|---|---|
-| Local | Uvicorn (hot reload, port 8080) | Docker PostgreSQL 18 (port 5432) | Docker Redis 7 (port 6379) | Ollama (port 11434) |
+| Local | cargo watch (hot reload, port 8080) | Docker PostgreSQL 18 (port 5432) | Docker Redis 8 (port 6379) | Ollama (port 11434) |
 | Production | Cloud Run (Seoul) | Neon (closest region) | GCP Memorystore | LiteLLM -> Cloud providers |
 
 Staging environment deferred until team grows beyond solo developer.
@@ -364,7 +365,7 @@ Staging environment deferred until team grows beyond solo developer.
 **Authorization:**
 - RBAC with two roles: `user` (default), `admin` (internal)
 - Resource-level: users can only access their own projects
-- Enforced at API middleware layer (FastAPI dependencies)
+- Enforced at API middleware layer (Axum extractors / Tower middleware)
 
 **Why social login only:** Target users universally have Kakao and Google accounts. Eliminates password management and credential stuffing risk. Trade-off: dependency on OAuth providers — mitigated by supporting multiple providers.
 
@@ -402,12 +403,13 @@ Staging environment deferred until team grows beyond solo developer.
 - Degradation: if all providers fail, clear error with retry button
 
 **Database:**
-- Connection pooling: SQLAlchemy async engine (pool_size=10, max_overflow=20)
+- Connection pooling: SQLx PgPool (max_connections=20)
 - Retry on connection failure: 3 attempts with 500ms backoff
 
-**Background tasks:**
-- ARQ retry: 3 attempts with exponential backoff
+**Background tasks (tokio::spawn):**
+- Retry: 3 attempts with exponential backoff within the spawned task
 - Summary generation failure is non-critical — context assembly works without summaries, just with lower quality
+- If task panics, caught by tokio runtime — does not crash the server
 
 **Client-side:**
 - Auto-save: debounce 1s, retry on failure, show "Offline — changes will sync" status
@@ -422,7 +424,7 @@ Staging environment deferred until team grows beyond solo developer.
 **Secret management:** Environment variables via Cloud Run, sourced from Pulumi config secrets
 
 **Input validation:**
-- All API inputs validated via Pydantic models
+- All API inputs validated via serde deserialization + validator crate
 - File uploads: content-type validation, 10MB limit (files), 5MB (images)
 - Text inputs: length limits on all fields
 - LLM prompt injection: user input placed in designated template sections, never interpolated into system instructions
@@ -433,7 +435,7 @@ Staging environment deferred until team grows beyond solo developer.
 - General API: 100 req/min per user
 
 **OWASP considerations:**
-- SQL injection: prevented by SQLAlchemy parameterized queries
+- SQL injection: prevented by SQLx parameterized queries (compile-time checked)
 - XSS: SolidJS auto-escapes; CSP headers
 - CSRF: JWT in Authorization header; SameSite=Strict on refresh cookie
 - Denial of wallet: rate limiting on generation endpoints
@@ -527,18 +529,20 @@ Not applicable — greenfield project.
 
 ## 10. Architecture Decision Records (ADRs)
 
-### ADR-1: Backend Language — Python (FastAPI)
+### ADR-1: Backend Language — Rust (Axum)
 
 - **Status:** Accepted
-- **Context:** Default backend per team convention is Rust (Axum). Narrex's core feature is LLM-powered text generation with complex context assembly and streaming.
-- **Decision:** Python (FastAPI) with hexagonal architecture.
+- **Context:** Narrex's core feature is LLM-powered text generation. LiteLLM runs as a separate service with an HTTP API, so the API server only needs to make HTTP calls — no Python-specific LLM libraries required in the API process itself.
+- **Decision:** Rust (Axum) with hexagonal architecture.
 - **Alternatives Considered:**
-  - Rust (Axum): lower memory, near-zero cold starts, compiler safety -> rejected because LLM integration libraries (LiteLLM, tokenizers) are Python-first. Streaming SSE with LLM providers has more battle-tested Python implementations. Performance difference irrelevant at beta scale.
-  - Node.js (Hono): JS ecosystem alignment with frontend -> rejected because Python's AI ecosystem is stronger, and frontend/backend share no code.
+  - Python (FastAPI): richer AI ecosystem, faster prototyping -> rejected because LiteLLM abstracts provider differences as a separate service. The API server's job (REST, auth, SQL queries, context assembly, SSE forwarding) is all standard HTTP + DB work where Rust excels. Python's AI ecosystem advantage doesn't apply when the LLM gateway is external.
+  - Node.js (Hono): JS ecosystem alignment with frontend -> rejected because frontend/backend share no code (SolidJS != Node patterns). Rust's type safety and performance are stronger.
 - **Consequences:**
-  - (+) Rich AI ecosystem, faster development velocity, simpler LLM streaming
-  - (-) Higher memory (~100MB vs ~10MB Rust), slower cold starts (~2s vs ~100ms)
-  - (-) No compile-time safety — mitigated by Pydantic validation, strict typing, pytest
+  - (+) ~10MB memory vs ~100MB Python — directly reduces Cloud Run cost
+  - (+) Near-zero cold starts (~100ms) — better for auto-scaling
+  - (+) Compiler safety + SQLx compile-time query checking eliminates entire error classes
+  - (+) Lower per-instance cloud cost (critical for solopreneur economics)
+  - (-) Slower initial development velocity — mitigated by AI-assisted development (Claude Code) and hexagonal architecture reducing boilerplate friction
 
 ### ADR-2: Frontend — TanStack Start (SolidJS)
 
@@ -556,7 +560,7 @@ Not applicable — greenfield project.
 
 - **Status:** Accepted
 - **Context:** Solo developer building a product with tightly coupled domains. Need async processing for summary generation and file parsing, but domains don't need independent scaling.
-- **Decision:** Single FastAPI application with internal domain boundaries. ARQ (Redis-backed) for background tasks.
+- **Decision:** Single Axum application with internal domain boundaries. `tokio::spawn` for background tasks.
 - **Alternatives Considered:**
   - Microservices: separate services per domain -> rejected because solo developer, shared database, tightly coupled domains. Would create a distributed monolith.
   - Full event-driven: all inter-module communication via events -> rejected because most interactions are synchronous user requests. Only background tasks genuinely need async.
@@ -667,7 +671,7 @@ LLM call (streamed)
 | Prior node summaries | ~4K tokens | Most recent nodes get more budget |
 | Next node + simultaneous events | ~1K tokens | Lightweight — title + summary only |
 
-**Summary compression:** After a draft is saved or edited, a background task (ARQ) generates a ~200-300 token compressed summary. This summary is used as context for future node generations, keeping prior context within budget regardless of project size.
+**Summary compression:** After a draft is saved or edited, a background task (`tokio::spawn`) generates a ~200-300 token compressed summary. This summary is used as context for future node generations, keeping prior context within budget regardless of project size.
 
 ### 11.3 Streaming Architecture
 
@@ -680,7 +684,7 @@ LLM call (streamed)
 | `done` | `{ token_count, cost }` | Generation complete |
 | `error` | `{ type, message, retryable }` | Generation failed |
 
-**Implementation:** FastAPI `StreamingResponse` with an async generator that consumes the LiteLLM streaming response and yields SSE-formatted events. The generator bridges the LLM provider's token stream to the client's EventSource.
+**Implementation:** Axum `Sse` response with an async stream (`tokio_stream`) that consumes the LiteLLM streaming response via `reqwest` and yields SSE-formatted events. The stream bridges the LLM provider's token stream to the client's EventSource.
 
 **Timeout budget:** 300s on Cloud Run for generation endpoints. Breakdown: ~5s context assembly + ~5s TTFT + ~30s token generation + safety margin.
 
