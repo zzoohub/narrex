@@ -284,4 +284,42 @@ describe('HTTP helpers', () => {
     const init = mockFetch.mock.calls[0]![1] as RequestInit
     expect(init.credentials).toBe('include')
   })
+
+  // ---- Signal passing for post, patch, del ----
+
+  it('post() passes AbortSignal to fetch', async () => {
+    mockFetch.mockReturnValue(jsonResponse({ ok: true }))
+    const controller = new AbortController()
+    await post('/v1/items', { name: 'test' }, controller.signal)
+    const init = mockFetch.mock.calls[0]![1] as RequestInit
+    expect(init.signal).toBe(controller.signal)
+  })
+
+  it('patch() passes AbortSignal to fetch', async () => {
+    mockFetch.mockReturnValue(jsonResponse({ ok: true }))
+    const controller = new AbortController()
+    await patch('/v1/items/1', { name: 'updated' }, controller.signal)
+    const init = mockFetch.mock.calls[0]![1] as RequestInit
+    expect(init.signal).toBe(controller.signal)
+  })
+
+  it('del() passes AbortSignal to fetch', async () => {
+    mockFetch.mockReturnValue(
+      Promise.resolve(new Response(null, { status: 204 })),
+    )
+    const controller = new AbortController()
+    await del('/v1/items/1', controller.signal)
+    const init = mockFetch.mock.calls[0]![1] as RequestInit
+    expect(init.signal).toBe(controller.signal)
+  })
+
+  // ---- Response with empty content-type ----
+
+  it('handles response with no content-type header', async () => {
+    mockFetch.mockReturnValue(
+      Promise.resolve(new Response(null, { status: 200 })),
+    )
+    const result = await get('/v1/test')
+    expect(result).toBeUndefined()
+  })
 })

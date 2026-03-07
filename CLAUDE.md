@@ -39,7 +39,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Principles & Constraints
 ### MUST
-1. **TDD**: Apply TDD to all source code changes. Write failing tests first → implement → green.
+1. **TDD**: Write all tests first as a spec, then implement, then verify all pass. (Tests → Impl → Green).
    - Axum: `nextest`
    - FastAPI: `pytest` + `httpx` + `anyio`
    - Next.js: `vitest` + `@testing-library/react`

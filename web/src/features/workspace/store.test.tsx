@@ -840,7 +840,10 @@ describe('WorkspaceStore', () => {
 
   describe('operations on loaded workspace data', () => {
     async function loadedWorkspace(): Promise<{ ctx: WorkspaceContextValue; dispose: () => void }> {
-      vi.mocked(projectApi.getWorkspace).mockResolvedValue({ data: WORKSPACE_DATA })
+      // Deep-clone to prevent SolidJS store proxy mutations from leaking
+      // between tests via shared object references.
+      const clonedData = JSON.parse(JSON.stringify(WORKSPACE_DATA))
+      vi.mocked(projectApi.getWorkspace).mockResolvedValue({ data: clonedData })
 
       let ctxRef: WorkspaceContextValue | undefined
       let disposeFn: (() => void) | undefined
@@ -1206,6 +1209,314 @@ describe('WorkspaceStore', () => {
       expect(ctx.saveStatus()).toBe('error')
 
       dispose()
+    })
+  })
+
+  // ---- Async .then() success handlers (server ID replacement) ----
+
+  describe('server ID replacement on create success', () => {
+    it('addScene replaces temp ID with server ID on success', async () => {
+      const serverScene = {
+        id: 'server-s-new',
+        trackId: 't1',
+        projectId: 'p1',
+        title: '',
+        status: 'empty' as const,
+        startPosition: 5,
+        duration: 1,
+        plotSummary: null,
+        location: null,
+        moodTags: [],
+        characterIds: [],
+        createdAt: '2024-01-01T00:00:00Z',
+        updatedAt: '2024-01-01T00:00:00Z',
+      }
+      vi.mocked(sceneApi.createScene).mockResolvedValue({ data: serverScene })
+
+      let ctxRef: WorkspaceContextValue | undefined
+      let disposeFn: (() => void) | undefined
+
+      renderWorkspace((ctx, dispose) => {
+        ctxRef = ctx
+        disposeFn = dispose
+      })
+
+      ctxRef!.addScene('t1', 5)
+
+      // Optimistic scene has temp ID
+      const tempScene = ctxRef!.state.scenes.find(s => s.startPosition === 5)
+      expect(tempScene!.id).toMatch(/^temp_/)
+      const tempId = tempScene!.id
+
+      // Flush the resolved promise (.then handler)
+      await Promise.resolve()
+      await Promise.resolve()
+
+      // Server ID should replace temp ID
+      expect(ctxRef!.state.scenes.find(s => s.id === tempId)).toBeUndefined()
+      expect(ctxRef!.state.scenes.find(s => s.id === 'server-s-new')).toBeDefined()
+      expect(ctxRef!.selectedSceneId()).toBe('server-s-new')
+
+      disposeFn!()
+    })
+
+    it('addScene removes scene on API failure', async () => {
+      vi.mocked(sceneApi.createScene).mockRejectedValue(new Error('fail'))
+
+      let ctxRef: WorkspaceContextValue | undefined
+      let disposeFn: (() => void) | undefined
+
+      renderWorkspace((ctx, dispose) => {
+        ctxRef = ctx
+        disposeFn = dispose
+      })
+
+      ctxRef!.addScene('t1', 5)
+      const tempScene = ctxRef!.state.scenes.find(s => s.startPosition === 5)
+      expect(tempScene).toBeDefined()
+
+      await Promise.resolve()
+      await Promise.resolve()
+
+      // Scene should be removed on failure
+      expect(ctxRef!.state.scenes.find(s => s.startPosition === 5)).toBeUndefined()
+      expect(ctxRef!.saveStatus()).toBe('error')
+
+      disposeFn!()
+    })
+
+    it('addTrack replaces temp ID with server ID on success', async () => {
+      const serverTrack = {
+        id: 'server-t-new',
+        projectId: 'p1',
+        position: 0,
+        label: 'New Track',
+        createdAt: '2024-01-01T00:00:00Z',
+        updatedAt: '2024-01-01T00:00:00Z',
+      }
+      vi.mocked(trackApi.createTrack).mockResolvedValue({ data: serverTrack })
+
+      let ctxRef: WorkspaceContextValue | undefined
+      let disposeFn: (() => void) | undefined
+
+      renderWorkspace((ctx, dispose) => {
+        ctxRef = ctx
+        disposeFn = dispose
+      })
+
+      ctxRef!.addTrack('New Track')
+      const tempTrack = ctxRef!.state.tracks.find(t => t.label === 'New Track')
+      expect(tempTrack!.id).toMatch(/^temp_/)
+      const tempId = tempTrack!.id
+
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(ctxRef!.state.tracks.find(t => t.id === tempId)).toBeUndefined()
+      expect(ctxRef!.state.tracks.find(t => t.id === 'server-t-new')).toBeDefined()
+
+      disposeFn!()
+    })
+
+    it('addTrack removes track on API failure', async () => {
+      vi.mocked(trackApi.createTrack).mockRejectedValue(new Error('fail'))
+
+      let ctxRef: WorkspaceContextValue | undefined
+      let disposeFn: (() => void) | undefined
+
+      renderWorkspace((ctx, dispose) => {
+        ctxRef = ctx
+        disposeFn = dispose
+      })
+
+      ctxRef!.addTrack('Will Fail')
+      expect(ctxRef!.state.tracks.find(t => t.label === 'Will Fail')).toBeDefined()
+
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(ctxRef!.state.tracks.find(t => t.label === 'Will Fail')).toBeUndefined()
+      expect(ctxRef!.saveStatus()).toBe('error')
+
+      disposeFn!()
+    })
+
+    it('addCharacter replaces temp ID with server ID on success', async () => {
+      const serverChar = {
+        id: 'server-c-new',
+        projectId: 'p1',
+        name: 'Villain',
+        personality: null,
+        appearance: null,
+        secrets: null,
+        motivation: null,
+        profileImageUrl: null,
+        graphX: 150,
+        graphY: 150,
+        createdAt: '2024-01-01T00:00:00Z',
+        updatedAt: '2024-01-01T00:00:00Z',
+      }
+      vi.mocked(characterApi.createCharacter).mockResolvedValue({ data: serverChar })
+
+      let ctxRef: WorkspaceContextValue | undefined
+      let disposeFn: (() => void) | undefined
+
+      renderWorkspace((ctx, dispose) => {
+        ctxRef = ctx
+        disposeFn = dispose
+      })
+
+      ctxRef!.addCharacter('Villain')
+      const tempChar = ctxRef!.state.characters.find(c => c.name === 'Villain')
+      expect(tempChar!.id).toMatch(/^temp_/)
+      const tempId = tempChar!.id
+
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(ctxRef!.state.characters.find(c => c.id === tempId)).toBeUndefined()
+      expect(ctxRef!.state.characters.find(c => c.id === 'server-c-new')).toBeDefined()
+      expect(ctxRef!.selectedCharacterId()).toBe('server-c-new')
+
+      disposeFn!()
+    })
+
+    it('addCharacter removes character on API failure', async () => {
+      vi.mocked(characterApi.createCharacter).mockRejectedValue(new Error('fail'))
+
+      let ctxRef: WorkspaceContextValue | undefined
+      let disposeFn: (() => void) | undefined
+
+      renderWorkspace((ctx, dispose) => {
+        ctxRef = ctx
+        disposeFn = dispose
+      })
+
+      ctxRef!.addCharacter('Will Fail')
+      expect(ctxRef!.state.characters.find(c => c.name === 'Will Fail')).toBeDefined()
+
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(ctxRef!.state.characters.find(c => c.name === 'Will Fail')).toBeUndefined()
+      expect(ctxRef!.saveStatus()).toBe('error')
+
+      disposeFn!()
+    })
+
+    it('addRelationship replaces temp ID with server ID on success', async () => {
+      const serverRel = {
+        id: 'server-r-new',
+        projectId: 'p1',
+        characterAId: 'c1',
+        characterBId: 'c2',
+        label: 'Rival',
+        visualType: 'dashed' as const,
+        direction: 'bidirectional' as const,
+        createdAt: '2024-01-01T00:00:00Z',
+        updatedAt: '2024-01-01T00:00:00Z',
+      }
+      vi.mocked(characterApi.createRelationship).mockResolvedValue({ data: serverRel })
+
+      let ctxRef: WorkspaceContextValue | undefined
+      let disposeFn: (() => void) | undefined
+
+      renderWorkspace((ctx, dispose) => {
+        ctxRef = ctx
+        disposeFn = dispose
+      })
+
+      ctxRef!.addRelationship('c1', 'c2', 'Rival', 'dashed')
+      const tempRel = ctxRef!.state.relationships.find(r => r.label === 'Rival')
+      expect(tempRel!.id).toMatch(/^temp_/)
+      const tempId = tempRel!.id
+
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(ctxRef!.state.relationships.find(r => r.id === tempId)).toBeUndefined()
+      expect(ctxRef!.state.relationships.find(r => r.id === 'server-r-new')).toBeDefined()
+
+      disposeFn!()
+    })
+
+    it('addRelationship removes relationship on API failure', async () => {
+      vi.mocked(characterApi.createRelationship).mockRejectedValue(new Error('fail'))
+
+      let ctxRef: WorkspaceContextValue | undefined
+      let disposeFn: (() => void) | undefined
+
+      renderWorkspace((ctx, dispose) => {
+        ctxRef = ctx
+        disposeFn = dispose
+      })
+
+      ctxRef!.addRelationship('c1', 'c2', 'Rival', 'dashed')
+      expect(ctxRef!.state.relationships.find(r => r.label === 'Rival')).toBeDefined()
+
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(ctxRef!.state.relationships.find(r => r.label === 'Rival')).toBeUndefined()
+      expect(ctxRef!.saveStatus()).toBe('error')
+
+      disposeFn!()
+    })
+
+    it('addConnection replaces temp ID with server ID on success', async () => {
+      const serverConn = {
+        id: 'server-conn-new',
+        projectId: 'p1',
+        sourceSceneId: 's1',
+        targetSceneId: 's3',
+        connectionType: 'merge' as const,
+        createdAt: '2024-01-01T00:00:00Z',
+      }
+      vi.mocked(connectionApi.createConnection).mockResolvedValue({ data: serverConn })
+
+      let ctxRef: WorkspaceContextValue | undefined
+      let disposeFn: (() => void) | undefined
+
+      renderWorkspace((ctx, dispose) => {
+        ctxRef = ctx
+        disposeFn = dispose
+      })
+
+      ctxRef!.addConnection('s1', 's3', 'merge')
+      const tempConn = ctxRef!.state.connections.find(c => c.targetSceneId === 's3')
+      expect(tempConn!.id).toMatch(/^temp_/)
+      const tempId = tempConn!.id
+
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(ctxRef!.state.connections.find(c => c.id === tempId)).toBeUndefined()
+      expect(ctxRef!.state.connections.find(c => c.id === 'server-conn-new')).toBeDefined()
+
+      disposeFn!()
+    })
+
+    it('addConnection removes connection on API failure', async () => {
+      vi.mocked(connectionApi.createConnection).mockRejectedValue(new Error('fail'))
+
+      let ctxRef: WorkspaceContextValue | undefined
+      let disposeFn: (() => void) | undefined
+
+      renderWorkspace((ctx, dispose) => {
+        ctxRef = ctx
+        disposeFn = dispose
+      })
+
+      ctxRef!.addConnection('s1', 's3', 'merge')
+      expect(ctxRef!.state.connections.find(c => c.targetSceneId === 's3')).toBeDefined()
+
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(ctxRef!.state.connections.find(c => c.targetSceneId === 's3')).toBeUndefined()
+      expect(ctxRef!.saveStatus()).toBe('error')
+
+      disposeFn!()
     })
   })
 })
