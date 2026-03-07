@@ -13,7 +13,7 @@ CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 -- =============================================================================
 
 CREATE TYPE scene_status AS ENUM ('empty', 'ai_draft', 'edited', 'needs_revision');
-CREATE TYPE connection_type AS ENUM ('sequential', 'branch', 'merge');
+CREATE TYPE connection_type AS ENUM ('branch', 'merge');
 CREATE TYPE relationship_visual AS ENUM ('solid', 'dashed', 'arrowed');
 CREATE TYPE relationship_direction AS ENUM ('bidirectional', 'a_to_b', 'b_to_a');
 CREATE TYPE pov_type AS ENUM ('first_person', 'third_limited', 'third_omniscient');
@@ -111,23 +111,26 @@ CREATE TABLE scene (
     project_id      UUID             NOT NULL REFERENCES project(id) ON DELETE CASCADE,
     created_at      TIMESTAMPTZ      NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ      NOT NULL DEFAULT now(),
-    position        DOUBLE PRECISION NOT NULL,
+    start_position  DOUBLE PRECISION NOT NULL,
+    duration        DOUBLE PRECISION NOT NULL DEFAULT 1.0,
     status          scene_status     NOT NULL DEFAULT 'empty',
     title           TEXT             NOT NULL,
     plot_summary    TEXT,
     location        TEXT,
     mood_tags       TEXT[]           DEFAULT '{}',
-    CONSTRAINT chk_scene_position CHECK (position > 0),
+    CONSTRAINT chk_scene_start_position CHECK (start_position >= 0),
+    CONSTRAINT chk_scene_duration CHECK (duration > 0),
     CONSTRAINT chk_scene_title_length CHECK (char_length(title) <= 500)
 );
 
 COMMENT ON TABLE scene IS 'Scene on the timeline. Central entity for AI context assembly.';
 COMMENT ON COLUMN scene.project_id IS 'Denormalized from track.project_id for query performance';
-COMMENT ON COLUMN scene.position IS 'Fractional ordering. Initial spacing: 1024.0. Insert at midpoint.';
+COMMENT ON COLUMN scene.start_position IS 'Fractional ordering. Initial spacing: 1024.0. Insert at midpoint.';
+COMMENT ON COLUMN scene.duration IS 'Timeline extent. Default 1.0. Overlapping ranges on different tracks = simultaneous.';
 COMMENT ON COLUMN scene.mood_tags IS 'Override config-level tone for this scene';
 
-CREATE INDEX idx_scene_project_position ON scene (project_id, position);
-CREATE INDEX idx_scene_track_position ON scene (track_id, position);
+CREATE INDEX idx_scene_project_position ON scene (project_id, start_position);
+CREATE INDEX idx_scene_track_position ON scene (track_id, start_position);
 CREATE INDEX idx_scene_mood_tags ON scene USING GIN (mood_tags);
 
 CREATE TRIGGER trg_scene_updated_at
@@ -141,12 +144,12 @@ CREATE TABLE scene_connection (
     source_scene_id UUID            NOT NULL REFERENCES scene(id) ON DELETE CASCADE,
     target_scene_id UUID            NOT NULL REFERENCES scene(id) ON DELETE CASCADE,
     created_at      TIMESTAMPTZ     NOT NULL DEFAULT now(),
-    connection_type connection_type  NOT NULL DEFAULT 'sequential',
+    connection_type connection_type  NOT NULL,
     CONSTRAINT chk_no_self_connection CHECK (source_scene_id != target_scene_id),
     CONSTRAINT uq_scene_connection UNIQUE (source_scene_id, target_scene_id)
 );
 
-COMMENT ON TABLE scene_connection IS 'Narrative flow between scenes: sequential, branch, merge.';
+COMMENT ON TABLE scene_connection IS 'Cross-track narrative links: branch and merge points. Sequential flow is implicit from start_position ordering within a track.';
 
 CREATE INDEX idx_scene_connection_source ON scene_connection (source_scene_id);
 CREATE INDEX idx_scene_connection_target ON scene_connection (target_scene_id);

@@ -203,7 +203,7 @@ Workspace (Timeline panel)
   |     -> Right panel shows Scene Detail
   |     -> Center panel shows Editor (if draft exists) or empty state
   |
-  +-- Move scene: Drag to new position (within track or across tracks)
+  +-- Move scene: Drag to new start_position (within track or across tracks)
   |     -> Ghost preview shows destination
   |     -> Adjacent scenes shift to accommodate
   |     -> Drop completes move (optimistic UI)
@@ -544,10 +544,10 @@ This is the core visual differentiator. Design must balance power (multi-track, 
 
 | State | Visual | Icon | Tooltip |
 |-------|--------|------|---------|
-| Empty | Hollow circle, thin border | (none) | "No content yet" |
-| AI Draft | Half-filled circle | Small pen icon | "AI draft — not yet edited" |
-| Edited | Solid filled circle | Checkmark | "Author-edited" |
-| Needs Revision | Filled circle with warning border | Warning triangle | "Settings changed since draft" |
+| Empty | Hollow rectangular clip, thin border | (none) | "No content yet" |
+| AI Draft | Half-filled rectangular clip | Small pen icon | "AI draft — not yet edited" |
+| Edited | Solid filled rectangular clip | Checkmark | "Author-edited" |
+| Needs Revision | Filled rectangular clip with warning border | Warning triangle | "Settings changed since draft" |
 
 **Scene interaction:**
 
@@ -581,7 +581,7 @@ This is the core visual differentiator. Design must balance power (multi-track, 
 
 **Vertical alignment of simultaneous events:**
 
-Scenes at the same narrative time across tracks are snapped to a vertical column. A faint vertical line connects aligned scenes. Hovering an aligned column highlights all scenes in that time position.
+Scenes whose timeline ranges (start_position + duration) overlap across tracks are vertically aligned. A faint vertical band spans the overlapping region. Hovering an overlapping region highlights all scenes with overlapping ranges.
 
 **Auto-structuring result:**
 
@@ -589,8 +589,8 @@ When a project is first created, the timeline appears pre-populated. An inline h
 
 **Connection lines:**
 
-- Sequential connections (within track): thin solid line between scenes.
-- Branch/merge connections (across tracks): curved bezier lines, slightly thicker.
+- Within-track flow: sequential order is implicit from clip positioning (start_position). No explicit connection lines needed.
+- Branch/merge connections (across tracks): curved bezier lines.
 - Foreshadowing connections [Phase 2]: dashed colored line with arrow, distinct from structural connections.
 
 ### 5.5 Workspace — Scene Detail Panel [Phase 1]
@@ -890,11 +890,11 @@ Modal dialog accessed from workspace toolbar. Format selection (DOCX, EPUB, plai
 |-------|----------------|----------|
 | Grab | Scene lifts slightly (scale 1.05), shadow appears | 100ms |
 | Drag | Ghost of scene follows cursor. Valid drop zones highlight. Invalid zones dim. | Continuous |
-| Over valid target | Target position shows insertion indicator (line or gap). Adjacent scenes shift. | 200ms transition |
-| Drop | Scene animates to final position. Snackbar: "Scene moved" with [Undo]. | 300ms ease-out |
-| Cancel | Press Escape during drag -> scene returns to original position. | 200ms |
+| Over valid target | Target start_position shows insertion indicator (line or gap). Adjacent scenes shift. | 200ms transition |
+| Drop | Scene animates to final start_position. Snackbar: "Scene moved" with [Undo]. | 300ms ease-out |
+| Cancel | Press Escape during drag -> scene returns to original start_position. | 200ms |
 
-**Accessibility:** Drag-and-drop has a keyboard alternative. Select scene -> use Ctrl+Arrow keys to move position. Confirmation via Enter.
+**Accessibility:** Drag-and-drop has a keyboard alternative. Select scene -> use Ctrl+Arrow keys to move start_position. Confirmation via Enter.
 
 ### 6.2 Auto-Save
 
@@ -1112,7 +1112,7 @@ The multi-track timeline with branch/merge points, character maps, and AI genera
 | First workspace load | "This is a starting point — drag, add, or delete scenes to match your vision." (above timeline) | First timeline interaction |
 | First scene selection | "Add a plot summary to get the best AI draft." (in scene detail if plot summary is empty) | Plot summary is filled |
 | First draft generated | "Select any text and click 'Edit with AI' to refine specific passages." (below editor toolbar) | First use of Edit with AI |
-| First track added | "Each track represents a parallel storyline. Scenes aligned vertically happen at the same time." (above new track) | Dismissed on click or after 10 seconds |
+| First track added | "Each track represents a parallel storyline. Scenes with overlapping timeline ranges happen at the same time." (above new track) | Dismissed on click or after 10 seconds |
 
 Hints appear as subtle banners (not modals, not blocking). They do not reappear after dismissal. Stored in local preference.
 

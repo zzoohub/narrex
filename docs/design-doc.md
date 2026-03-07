@@ -118,7 +118,7 @@ The API server is organized into domain modules:
 |--------|---------------|---------------|
 | **auth** | OAuth2 flow, JWT issuance/validation, session management | Login, every authenticated request |
 | **project** | Project CRUD, config management, file import parsing | Project creation, config updates |
-| **timeline** | Scene CRUD, track management, ordering, branch/merge connections, vertical alignment | Scene manipulation, drag-and-drop |
+| **timeline** | Scene CRUD, track management, NLE clip positioning (start_position + duration), branch/merge cross-track connections | Scene manipulation, drag-and-drop |
 | **character** | Character CRUD, relationship management, character cards | Character map interactions |
 | **generation** | Context assembly, LLM prompt construction, provider adapter orchestration, streaming, summary generation | AI draft generation (core value) |
 | **editor** | Draft storage, direction-based edit orchestration, text versioning | Editor interactions |
@@ -148,7 +148,7 @@ User input (text or file)
   -> API: writes to DB in single transaction
     -> project record (config values)
     -> track records
-    -> scene records (with positions, track assignments)
+    -> scene records (with start_position, duration, track assignments)
     -> character records
     -> relationship records
   -> Response: complete workspace state
@@ -165,7 +165,7 @@ User clicks "Generate" on scene
     -> Read: scene details (DB)
     -> Read: character cards + relationships for assigned characters (DB, cached)
     -> Read: compressed summaries of preceding scenes (DB/cache)
-    -> Read: simultaneous scenes on other tracks (DB)
+    -> Read: simultaneous scenes on other tracks (scenes whose timeline ranges overlap with the current scene on other tracks) (DB)
     -> Read: next scene title + summary (DB)
   -> Assemble structured prompt (template + all context)
   -> LLM provider adapter: streaming request
@@ -553,11 +553,11 @@ Context Assembly Pipeline
 
 4. Narrative Context (budget: ~11K tokens, flexible)
    compressed summaries of preceding scenes
-   ordered by timeline position
+   ordered by start_position
 
 5. Parallel Context (budget: ~1K tokens)
    simultaneous events on other tracks
-   (vertically aligned scenes)
+   (scenes with overlapping timeline ranges)
 
 6. Forward Context (budget: ~500 tokens)
    next scene title + summary (if exists)

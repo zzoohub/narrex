@@ -680,44 +680,47 @@ WHERE s.project_id = $1
   AND (s.start_position + s.duration) > $3;
 
 -- Step 6: Next scene preview (~500 tokens)
+-- $3 = current scene's start_position, $4 = current scene's duration
 SELECT title, plot_summary
 FROM scene
 WHERE project_id = $1
   AND track_id = $2
-  AND position > $3
-ORDER BY position ASC
+  AND start_position >= ($3 + $4)
+ORDER BY start_position ASC
 LIMIT 1;
 ```
 
 **Performance notes:**
 - Steps 1-3 are cached in Redis (15min TTL, invalidated on config/character update)
-- Steps 4-6 hit the database but use indexed lookups (project_id + position)
+- Steps 4-6 hit the database but use indexed lookups (project_id + start_position)
 - Total: 3-6 queries, all index-backed, well within 500ms budget
 - Application batches independent queries in parallel
 
 ### 5.2 Scene Reordering (Fractional Insert)
 
 ```sql
--- Insert scene between positions 2048.0 and 3072.0
--- New position = (2048.0 + 3072.0) / 2 = 2560.0
-UPDATE scene SET position = 2560.0, track_id = $new_track_id WHERE id = $scene_id;
+-- Insert scene between start_positions 2048.0 and 3072.0
+-- New start_position = (2048.0 + 3072.0) / 2 = 2560.0
+-- Duration is preserved during reorder unless explicitly changed.
+UPDATE scene SET start_position = 2560.0, track_id = $new_track_id WHERE id = $scene_id;
 
--- Move scene to start of track (before first scene at position 1024.0)
-UPDATE scene SET position = 512.0, track_id = $new_track_id WHERE id = $scene_id;
+-- Move scene to start of track (before first scene at start_position 1024.0)
+UPDATE scene SET start_position = 512.0, track_id = $new_track_id WHERE id = $scene_id;
 
--- Move scene to end of track (after last scene at position 15360.0)
-UPDATE scene SET position = 16384.0, track_id = $new_track_id WHERE id = $scene_id;
+-- Move scene to end of track (after last scene at start_position 15360.0)
+UPDATE scene SET start_position = 16384.0, track_id = $new_track_id WHERE id = $scene_id;
 
 -- Renormalize when gaps get too small (batch operation, rare)
+-- Duration is preserved during renormalization.
 WITH ranked AS (
-    SELECT id, ROW_NUMBER() OVER (ORDER BY position) * 1024.0 AS new_position
+    SELECT id, ROW_NUMBER() OVER (ORDER BY start_position) * 1024.0 AS new_start_position
     FROM scene
     WHERE track_id = $track_id
 )
 UPDATE scene s
-SET position = r.new_position
+SET start_position = r.new_start_position
 FROM ranked r
-WHERE s.id = r.id AND s.position != r.new_position;
+WHERE s.id = r.id AND s.start_position != r.new_start_position;
 ```
 
 ### 5.3 Current Draft for a Scene
@@ -795,10 +798,10 @@ VALUES ($project_id, 'Main', 1024.0),
 RETURNING id, label;
 
 -- 3. Insert scenes (across tracks)
-INSERT INTO scene (track_id, project_id, title, plot_summary, position, status)
-VALUES ($track_1_id, $project_id, 'Scene 1', 'Summary...', 1024.0, 'empty'),
-       ($track_1_id, $project_id, 'Scene 2', 'Summary...', 2048.0, 'empty'),
-       ($track_2_id, $project_id, 'Scene 1B', 'Summary...', 1024.0, 'empty')
+INSERT INTO scene (track_id, project_id, title, plot_summary, start_position, duration, status)
+VALUES ($track_1_id, $project_id, 'Scene 1', 'Summary...', 0.0, 1.0, 'empty'),
+       ($track_1_id, $project_id, 'Scene 2', 'Summary...', 1.0, 1.0, 'empty'),
+       ($track_2_id, $project_id, 'Scene 1B', 'Summary...', 0.0, 1.0, 'empty')
 RETURNING id, title;
 
 -- 4. Insert characters
@@ -818,7 +821,7 @@ VALUES ($scene_1_id, $char_a_id),
 
 -- 7. Insert scene connections
 INSERT INTO scene_connection (project_id, source_scene_id, target_scene_id, connection_type)
-VALUES ($project_id, $scene_1_id, $scene_2_id, 'sequential');
+VALUES ($project_id, $scene_1_id, $scene_2_id, 'branch');
 
 COMMIT;
 ```
@@ -1019,10 +1022,12 @@ CREATE TABLE character_relationship_state (
 | Operation | Position Calculation | Example |
 |-----------|---------------------|---------|
 | Initial creation | `index * 1024.0` | 1024, 2048, 3072, ... |
-| Insert between A and B | `(A.position + B.position) / 2` | Between 2048 and 3072 → 2560 |
-| Insert at start | `first.position / 2` | Before 1024 → 512 |
-| Insert at end | `last.position + 1024.0` | After 3072 → 4096 |
-| Renormalize trigger | `gap < 0.001` | Redistribute all positions in track |
+| Insert between A and B | `(A.start_position + B.start_position) / 2` | Between 2048 and 3072 → 2560 |
+| Insert at start | `first.start_position / 2` | Before 1024 → 512 |
+| Insert at end | `last.start_position + 1024.0` | After 3072 → 4096 |
+| Renormalize trigger | `gap < 0.001` | Redistribute all start_positions in track |
+
+Duration is preserved during reorder operations unless explicitly changed.
 
 ### B. `cost_usd` Precision
 
