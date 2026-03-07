@@ -154,7 +154,7 @@ User selects scene → clicks Generate
   → Assemble prompt (~4-8K tokens)
   → llm crate: generate_stream via LlmGateway
   → Stream tokens to client via SSE
-  → On completion: persist draft to scene.content, generate + store scene summary
+  → On completion: insert versioned draft row (draft table), update scene.status, generate + store scene summary
 ```
 
 **Flow 3: Direction-Based Edit**
@@ -165,7 +165,7 @@ User selects text → enters direction ("more tension")
   → Same context assembly as Flow 2 + selected text + surrounding text
   → llm crate: generate_stream via LlmGateway
   → Stream replacement to client
-  → On completion: update scene.content in Postgres
+  → On completion: insert new draft version (draft table), update scene.status
 ```
 
 ### 4.3 Caching
@@ -311,7 +311,7 @@ key plot events, character actions and emotional states,
 any foreshadowing or setup, location changes."
 ```
 
-Summaries are stored in a `scene_summaries` table in Postgres (durable) and cached in Redis (fast reads). When generating a later scene, all preceding summaries are included instead of full scene text. This keeps context manageable across 20+ scene projects.
+Summaries are stored in a `scene_summary` table in Postgres (durable) and cached in Redis (fast reads). When generating a later scene, all preceding summaries are included instead of full scene text. This keeps context manageable across 20+ scene projects.
 
 At 15 scenes with 250-token summaries ≈ 3750 tokens — well within limits. Quality validation needed at 20+ scenes per PRD risk matrix.
 
@@ -325,7 +325,7 @@ At 15 scenes with 250-token summaries ≈ 3750 tokens — well within limits. Qu
 
 ### 9.6 Guardrails
 
-- **Input validation**: Plot summaries and edit directions length-limited (10K chars). Sanitized at API boundary.
+- **Input validation**: Plot summaries length-limited (5K chars), edit directions (500 chars), character profile fields (2K chars each). Sanitized at API boundary.
 - **Output validation**: Reject if <100 chars or >10K chars (likely failure). Check for degenerate repetition.
 - **Prompt injection**: System instructions and user content are separated by clear structural delimiters. User text (plot summaries, character descriptions) is placed in designated `<context>` sections, never in the instruction block.
 - **No PII concerns**: All content is fictional creative writing authored by the user.
