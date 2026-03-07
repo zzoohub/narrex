@@ -273,3 +273,207 @@ impl LlmProvider for GeminiFlashProvider {
         "gemini_flash"
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_provider() -> GeminiFlashProvider {
+        GeminiFlashProvider::new("test-api-key".into())
+    }
+
+    #[test]
+    fn default_model() {
+        let p = make_provider();
+        assert_eq!(p.model, "gemini-2.0-flash");
+    }
+
+    #[test]
+    fn with_model_overrides_default() {
+        let p = make_provider().with_model("gemini-pro".into());
+        assert_eq!(p.model, "gemini-pro");
+    }
+
+    #[test]
+    fn endpoint_non_streaming() {
+        let p = make_provider();
+        let ep = p.endpoint(false);
+        assert!(ep.contains("gemini-2.0-flash"));
+        assert!(ep.contains("generateContent"));
+        assert!(!ep.contains("stream"));
+    }
+
+    #[test]
+    fn endpoint_streaming() {
+        let p = make_provider();
+        let ep = p.endpoint(true);
+        assert!(ep.contains("gemini-2.0-flash"));
+        assert!(ep.contains("streamGenerateContent"));
+        assert!(ep.contains("alt=sse"));
+    }
+
+    #[test]
+    fn endpoint_with_custom_model() {
+        let p = make_provider().with_model("gemini-pro".into());
+        let ep = p.endpoint(false);
+        assert!(ep.contains("gemini-pro"));
+        assert!(!ep.contains("gemini-2.0-flash"));
+    }
+
+    #[test]
+    fn build_request_with_system_prompt() {
+        let p = make_provider();
+        let req = GenerateRequest {
+            system_prompt: "system instruction".into(),
+            user_prompt: "user message".into(),
+            max_tokens: Some(512),
+            temperature: Some(0.9),
+        };
+        let gemini_req = p.build_request(&req);
+        assert!(gemini_req.system_instruction.is_some());
+        let sys = gemini_req.system_instruction.unwrap();
+        assert!(sys.role.is_none());
+        assert_eq!(sys.parts[0].text, "system instruction");
+
+        assert_eq!(gemini_req.contents.len(), 1);
+        assert_eq!(gemini_req.contents[0].role.as_deref(), Some("user"));
+        assert_eq!(gemini_req.contents[0].parts[0].text, "user message");
+
+        assert_eq!(gemini_req.generation_config.max_output_tokens, Some(512));
+        assert_eq!(gemini_req.generation_config.temperature, Some(0.9));
+    }
+
+    #[test]
+    fn build_request_without_system_prompt() {
+        let p = make_provider();
+        let req = GenerateRequest {
+            system_prompt: String::new(),
+            user_prompt: "hello".into(),
+            max_tokens: None,
+            temperature: None,
+        };
+        let gemini_req = p.build_request(&req);
+        assert!(gemini_req.system_instruction.is_none());
+        assert!(gemini_req.generation_config.max_output_tokens.is_none());
+        assert!(gemini_req.generation_config.temperature.is_none());
+    }
+
+    #[test]
+    fn extract_text_success() {
+        let resp = GeminiResponse {
+            candidates: Some(vec![GeminiCandidate {
+                content: Some(GeminiContent {
+                    role: Some("model".into()),
+                    parts: vec![GeminiPart {
+                        text: "generated text".into(),
+                    }],
+                }),
+            }]),
+            usage_metadata: None,
+        };
+        assert_eq!(
+            GeminiFlashProvider::extract_text(&resp),
+            Some("generated text".into())
+        );
+    }
+
+    #[test]
+    fn extract_text_no_candidates() {
+        let resp = GeminiResponse {
+            candidates: None,
+            usage_metadata: None,
+        };
+        assert_eq!(GeminiFlashProvider::extract_text(&resp), None);
+    }
+
+    #[test]
+    fn extract_text_empty_candidates() {
+        let resp = GeminiResponse {
+            candidates: Some(vec![]),
+            usage_metadata: None,
+        };
+        assert_eq!(GeminiFlashProvider::extract_text(&resp), None);
+    }
+
+    #[test]
+    fn extract_text_no_content() {
+        let resp = GeminiResponse {
+            candidates: Some(vec![GeminiCandidate { content: None }]),
+            usage_metadata: None,
+        };
+        assert_eq!(GeminiFlashProvider::extract_text(&resp), None);
+    }
+
+    #[test]
+    fn extract_text_empty_parts() {
+        let resp = GeminiResponse {
+            candidates: Some(vec![GeminiCandidate {
+                content: Some(GeminiContent {
+                    role: Some("model".into()),
+                    parts: vec![],
+                }),
+            }]),
+            usage_metadata: None,
+        };
+        assert_eq!(GeminiFlashProvider::extract_text(&resp), None);
+    }
+
+    #[test]
+    fn name_returns_gemini_flash() {
+        let p = make_provider();
+        assert_eq!(p.name(), "gemini_flash");
+    }
+
+    #[test]
+    fn gemini_request_serialization() {
+        let req = GeminiRequest {
+            system_instruction: None,
+            contents: vec![GeminiContent {
+                role: Some("user".into()),
+                parts: vec![GeminiPart {
+                    text: "hello".into(),
+                }],
+            }],
+            generation_config: GeminiGenerationConfig {
+                max_output_tokens: Some(100),
+                temperature: None,
+            },
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        // camelCase serialization
+        assert!(json.contains("generationConfig"));
+        assert!(json.contains("maxOutputTokens"));
+        // systemInstruction should be omitted when None
+        assert!(!json.contains("systemInstruction"));
+        // temperature should be omitted when None
+        assert!(!json.contains("temperature"));
+    }
+
+    #[test]
+    fn gemini_response_deserialization() {
+        let json = r#"{"candidates":[{"content":{"role":"model","parts":[{"text":"response text"}]}}],"usageMetadata":{"promptTokenCount":15,"candidatesTokenCount":30}}"#;
+        let resp: GeminiResponse = serde_json::from_str(json).unwrap();
+        assert!(resp.candidates.is_some());
+        let candidates = resp.candidates.unwrap();
+        assert_eq!(candidates.len(), 1);
+        let text = candidates[0]
+            .content
+            .as_ref()
+            .unwrap()
+            .parts[0]
+            .text
+            .clone();
+        assert_eq!(text, "response text");
+        let usage = resp.usage_metadata.unwrap();
+        assert_eq!(usage.prompt_token_count, Some(15));
+        assert_eq!(usage.candidates_token_count, Some(30));
+    }
+
+    #[test]
+    fn gemini_response_deserialization_minimal() {
+        let json = r#"{"candidates":null,"usageMetadata":null}"#;
+        let resp: GeminiResponse = serde_json::from_str(json).unwrap();
+        assert!(resp.candidates.is_none());
+        assert!(resp.usage_metadata.is_none());
+    }
+}

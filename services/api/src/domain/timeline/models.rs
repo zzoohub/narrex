@@ -171,3 +171,96 @@ pub struct CreateConnection {
     pub target_scene_id: Uuid,
     pub connection_type: ConnectionType,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -- SceneStatus Display/FromStr --
+
+    #[test]
+    fn scene_status_display() {
+        assert_eq!(SceneStatus::Empty.to_string(), "empty");
+        assert_eq!(SceneStatus::AiDraft.to_string(), "ai_draft");
+        assert_eq!(SceneStatus::Edited.to_string(), "edited");
+        assert_eq!(SceneStatus::NeedsRevision.to_string(), "needs_revision");
+    }
+
+    #[test]
+    fn scene_status_from_str_valid() {
+        assert_eq!("empty".parse::<SceneStatus>().unwrap(), SceneStatus::Empty);
+        assert_eq!("ai_draft".parse::<SceneStatus>().unwrap(), SceneStatus::AiDraft);
+        assert_eq!("edited".parse::<SceneStatus>().unwrap(), SceneStatus::Edited);
+        assert_eq!("needs_revision".parse::<SceneStatus>().unwrap(), SceneStatus::NeedsRevision);
+    }
+
+    #[test]
+    fn scene_status_from_str_invalid() {
+        let result = "invalid".parse::<SceneStatus>();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("unknown scene status"));
+    }
+
+    #[test]
+    fn scene_status_roundtrip() {
+        for s in [SceneStatus::Empty, SceneStatus::AiDraft, SceneStatus::Edited, SceneStatus::NeedsRevision] {
+            let str_val = s.to_string();
+            let parsed: SceneStatus = str_val.parse().unwrap();
+            assert_eq!(parsed, s);
+        }
+    }
+
+    // -- ConnectionType Display/FromStr --
+
+    #[test]
+    fn connection_type_display() {
+        assert_eq!(ConnectionType::Branch.to_string(), "branch");
+        assert_eq!(ConnectionType::Merge.to_string(), "merge");
+    }
+
+    #[test]
+    fn connection_type_from_str_valid() {
+        assert_eq!("branch".parse::<ConnectionType>().unwrap(), ConnectionType::Branch);
+        assert_eq!("merge".parse::<ConnectionType>().unwrap(), ConnectionType::Merge);
+    }
+
+    #[test]
+    fn connection_type_from_str_invalid() {
+        let result = "sequential".parse::<ConnectionType>();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("unknown connection type"));
+    }
+
+    #[test]
+    fn connection_type_roundtrip() {
+        for ct in [ConnectionType::Branch, ConnectionType::Merge] {
+            let s = ct.to_string();
+            let parsed: ConnectionType = s.parse().unwrap();
+            assert_eq!(parsed, ct);
+        }
+    }
+
+    // -- UpdateTrack Default --
+
+    #[test]
+    fn update_track_default() {
+        let ut = UpdateTrack::default();
+        assert!(ut.label.is_none());
+        assert!(ut.position.is_none());
+    }
+
+    // -- UpdateScene Default --
+
+    #[test]
+    fn update_scene_default() {
+        let us = UpdateScene::default();
+        assert!(us.track_id.is_none());
+        assert!(us.title.is_none());
+        assert!(us.start_position.is_none());
+        assert!(us.duration.is_none());
+        assert!(us.plot_summary.is_none());
+        assert!(us.location.is_none());
+        assert!(us.mood_tags.is_none());
+        assert!(us.character_ids.is_none());
+    }
+}

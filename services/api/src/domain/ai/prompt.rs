@@ -207,3 +207,241 @@ impl PromptBuilder {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::ai::models::SceneSummary;
+    use crate::domain::character::models::{
+        Character, CharacterRelationship, RelationshipDirection, RelationshipVisual,
+    };
+    use crate::domain::project::models::{PovType, Project};
+    use crate::domain::timeline::models::{Scene, SceneStatus};
+    use chrono::Utc;
+    use uuid::Uuid;
+
+    fn make_project(pov: Option<PovType>) -> Project {
+        Project {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
+            title: "테스트 소설".into(),
+            genre: Some("판타지".into()),
+            theme: Some("성장".into()),
+            era_location: Some("중세 유럽".into()),
+            pov,
+            tone: Some("어두운".into()),
+            source_type: None,
+            source_input: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    fn make_scene(title: &str) -> Scene {
+        Scene {
+            id: Uuid::new_v4(),
+            track_id: Uuid::new_v4(),
+            project_id: Uuid::new_v4(),
+            start_position: 0.0,
+            duration: 1.0,
+            status: SceneStatus::Empty,
+            title: title.into(),
+            plot_summary: Some("주인공이 마을을 떠난다".into()),
+            location: Some("마을 광장".into()),
+            mood_tags: vec!["긴장".into(), "결의".into()],
+            character_ids: vec![],
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    fn make_ctx(pov: Option<PovType>) -> GenerationContext {
+        GenerationContext {
+            project: make_project(pov),
+            scene: make_scene("출발"),
+            characters: vec![],
+            relationships: vec![],
+            preceding_summaries: vec![],
+            simultaneous_scenes: vec![],
+            next_scene: None,
+        }
+    }
+
+    // ---- system_prompt tests ----
+
+    #[test]
+    fn system_prompt_contains_role() {
+        let ctx = make_ctx(None);
+        let prompt = PromptBuilder::system_prompt(&ctx);
+        assert!(prompt.contains("한국 웹소설 전문 작가"));
+    }
+
+    #[test]
+    fn system_prompt_first_person_pov() {
+        let ctx = make_ctx(Some(PovType::FirstPerson));
+        let prompt = PromptBuilder::system_prompt(&ctx);
+        assert!(prompt.contains("1인칭 시점"));
+    }
+
+    #[test]
+    fn system_prompt_third_limited_pov() {
+        let ctx = make_ctx(Some(PovType::ThirdLimited));
+        let prompt = PromptBuilder::system_prompt(&ctx);
+        assert!(prompt.contains("3인칭 제한 시점"));
+    }
+
+    #[test]
+    fn system_prompt_third_omniscient_pov() {
+        let ctx = make_ctx(Some(PovType::ThirdOmniscient));
+        let prompt = PromptBuilder::system_prompt(&ctx);
+        assert!(prompt.contains("3인칭 전지 시점"));
+    }
+
+    #[test]
+    fn system_prompt_no_pov_omits_instruction() {
+        let ctx = make_ctx(None);
+        let prompt = PromptBuilder::system_prompt(&ctx);
+        assert!(!prompt.contains("시점:"));
+    }
+
+    // ---- user_prompt tests ----
+
+    #[test]
+    fn user_prompt_contains_project_info() {
+        let ctx = make_ctx(None);
+        let prompt = PromptBuilder::user_prompt(&ctx);
+        assert!(prompt.contains("테스트 소설"));
+        assert!(prompt.contains("판타지"));
+        assert!(prompt.contains("성장"));
+        assert!(prompt.contains("중세 유럽"));
+        assert!(prompt.contains("어두운"));
+    }
+
+    #[test]
+    fn user_prompt_contains_scene_info() {
+        let ctx = make_ctx(None);
+        let prompt = PromptBuilder::user_prompt(&ctx);
+        assert!(prompt.contains("출발"));
+        assert!(prompt.contains("주인공이 마을을 떠난다"));
+        assert!(prompt.contains("마을 광장"));
+        assert!(prompt.contains("긴장, 결의"));
+    }
+
+    #[test]
+    fn user_prompt_with_characters() {
+        let id_a = Uuid::new_v4();
+        let mut ctx = make_ctx(None);
+        ctx.characters = vec![
+            Character {
+                id: id_a, project_id: Uuid::new_v4(), name: "이수현".into(),
+                personality: Some("용감한".into()), appearance: Some("키가 큰".into()),
+                secrets: Some("과거의 죄".into()), motivation: Some("복수".into()),
+                profile_image_url: None, graph_x: None, graph_y: None,
+                created_at: Utc::now(), updated_at: Utc::now(),
+            },
+        ];
+        let prompt = PromptBuilder::user_prompt(&ctx);
+        assert!(prompt.contains("이수현"));
+        assert!(prompt.contains("용감한"));
+        assert!(prompt.contains("키가 큰"));
+        assert!(prompt.contains("복수"));
+        assert!(prompt.contains("과거의 죄"));
+    }
+
+    #[test]
+    fn user_prompt_with_relationships() {
+        let id_a = Uuid::new_v4();
+        let id_b = Uuid::new_v4();
+        let mut ctx = make_ctx(None);
+        ctx.characters = vec![
+            Character { id: id_a, project_id: Uuid::new_v4(), name: "A".into(), personality: None, appearance: None, secrets: None, motivation: None, profile_image_url: None, graph_x: None, graph_y: None, created_at: Utc::now(), updated_at: Utc::now() },
+            Character { id: id_b, project_id: Uuid::new_v4(), name: "B".into(), personality: None, appearance: None, secrets: None, motivation: None, profile_image_url: None, graph_x: None, graph_y: None, created_at: Utc::now(), updated_at: Utc::now() },
+        ];
+        ctx.relationships = vec![
+            CharacterRelationship { id: Uuid::new_v4(), project_id: Uuid::new_v4(), character_a_id: id_a, character_b_id: id_b, label: "라이벌".into(), visual_type: RelationshipVisual::Dashed, direction: RelationshipDirection::Bidirectional, created_at: Utc::now(), updated_at: Utc::now() },
+        ];
+        let prompt = PromptBuilder::user_prompt(&ctx);
+        assert!(prompt.contains("A <-> B: 라이벌"));
+    }
+
+    #[test]
+    fn user_prompt_with_preceding_summaries() {
+        let mut ctx = make_ctx(None);
+        ctx.preceding_summaries = vec![
+            SceneSummary { scene_id: Uuid::new_v4(), draft_version: 1, summary_text: "첫 번째 요약".into(), model: None, created_at: Utc::now(), updated_at: Utc::now() },
+            SceneSummary { scene_id: Uuid::new_v4(), draft_version: 1, summary_text: "두 번째 요약".into(), model: None, created_at: Utc::now(), updated_at: Utc::now() },
+        ];
+        let prompt = PromptBuilder::user_prompt(&ctx);
+        assert!(prompt.contains("1. 첫 번째 요약"));
+        assert!(prompt.contains("2. 두 번째 요약"));
+    }
+
+    #[test]
+    fn user_prompt_with_simultaneous_scenes() {
+        let mut ctx = make_ctx(None);
+        ctx.simultaneous_scenes = vec![
+            Scene {
+                id: Uuid::new_v4(), track_id: Uuid::new_v4(), project_id: Uuid::new_v4(),
+                start_position: 0.0, duration: 1.0, status: SceneStatus::Empty,
+                title: "병렬 장면".into(), plot_summary: Some("다른 곳에서 벌어지는 일".into()),
+                location: None, mood_tags: vec![], character_ids: vec![],
+                created_at: Utc::now(), updated_at: Utc::now(),
+            },
+        ];
+        let prompt = PromptBuilder::user_prompt(&ctx);
+        assert!(prompt.contains("병렬 장면: 다른 곳에서 벌어지는 일"));
+    }
+
+    #[test]
+    fn user_prompt_with_next_scene() {
+        let mut ctx = make_ctx(None);
+        ctx.next_scene = Some(Scene {
+            id: Uuid::new_v4(), track_id: Uuid::new_v4(), project_id: Uuid::new_v4(),
+            start_position: 0.0, duration: 1.0, status: SceneStatus::Empty,
+            title: "다음".into(), plot_summary: None,
+            location: None, mood_tags: vec![], character_ids: vec![],
+            created_at: Utc::now(), updated_at: Utc::now(),
+        });
+        let prompt = PromptBuilder::user_prompt(&ctx);
+        assert!(prompt.contains("다음: (줄거리 없음)"));
+    }
+
+    // ---- edit prompts ----
+
+    #[test]
+    fn edit_system_prompt_contains_editor_role() {
+        let prompt = PromptBuilder::edit_system_prompt();
+        assert!(prompt.contains("편집 전문가"));
+    }
+
+    #[test]
+    fn edit_user_prompt_without_selection() {
+        let prompt = PromptBuilder::edit_user_prompt("본문 내용", None, "더 긴장감 있게");
+        assert!(prompt.contains("본문 내용"));
+        assert!(prompt.contains("더 긴장감 있게"));
+        assert!(!prompt.contains("선택된 텍스트"));
+    }
+
+    #[test]
+    fn edit_user_prompt_with_selection() {
+        let prompt = PromptBuilder::edit_user_prompt("본문", Some("선택 부분"), "수정해줘");
+        assert!(prompt.contains("선택 부분"));
+        assert!(prompt.contains("수정해줘"));
+    }
+
+    // ---- summary prompts ----
+
+    #[test]
+    fn summary_system_prompt_contains_role() {
+        let prompt = PromptBuilder::summary_system_prompt();
+        assert!(prompt.contains("요약 전문가"));
+    }
+
+    #[test]
+    fn summary_user_prompt_contains_title_and_content() {
+        let prompt = PromptBuilder::summary_user_prompt("1화", "긴 본문...");
+        assert!(prompt.contains("1화"));
+        assert!(prompt.contains("긴 본문..."));
+        assert!(prompt.contains("2-3문장으로 요약"));
+    }
+}

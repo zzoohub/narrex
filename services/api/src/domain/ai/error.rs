@@ -31,3 +31,52 @@ impl std::error::Error for AiError {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::error::Error;
+
+    #[test]
+    fn display_scene_not_found() {
+        assert_eq!(AiError::SceneNotFound.to_string(), "scene not found");
+    }
+
+    #[test]
+    fn display_project_not_found() {
+        assert_eq!(AiError::ProjectNotFound.to_string(), "project not found");
+    }
+
+    #[test]
+    fn display_draft_not_found() {
+        assert_eq!(AiError::DraftNotFound.to_string(), "draft not found");
+    }
+
+    #[test]
+    fn display_generation_failed() {
+        let err = AiError::GenerationFailed("timeout".into());
+        assert_eq!(err.to_string(), "generation failed: timeout");
+    }
+
+    #[test]
+    fn display_rate_limited() {
+        assert_eq!(AiError::RateLimited.to_string(), "rate limited");
+    }
+
+    #[test]
+    fn display_unknown() {
+        let err = AiError::Unknown(anyhow::anyhow!("db"));
+        assert_eq!(err.to_string(), "unknown AI error: db");
+    }
+
+    #[test]
+    fn source_unknown_returns_some() {
+        let err = AiError::Unknown(anyhow::anyhow!("inner"));
+        assert!(err.source().is_some());
+    }
+
+    #[test]
+    fn source_draft_not_found_returns_none() {
+        assert!(AiError::DraftNotFound.source().is_none());
+    }
+}

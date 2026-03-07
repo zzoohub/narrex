@@ -29,3 +29,52 @@ impl std::error::Error for AuthError {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn display_invalid_token() {
+        let err = AuthError::InvalidToken("bad jwt".into());
+        assert_eq!(err.to_string(), "invalid token: bad jwt");
+    }
+
+    #[test]
+    fn display_token_expired() {
+        let err = AuthError::TokenExpired;
+        assert_eq!(err.to_string(), "token expired");
+    }
+
+    #[test]
+    fn display_user_not_found() {
+        let err = AuthError::UserNotFound;
+        assert_eq!(err.to_string(), "user not found");
+    }
+
+    #[test]
+    fn display_oauth_failed() {
+        let err = AuthError::OAuthFailed("invalid code".into());
+        assert_eq!(err.to_string(), "oauth failed: invalid code");
+    }
+
+    #[test]
+    fn display_unknown() {
+        let err = AuthError::Unknown(anyhow::anyhow!("something broke"));
+        assert_eq!(err.to_string(), "unknown auth error: something broke");
+    }
+
+    #[test]
+    fn source_returns_none_for_non_unknown() {
+        use std::error::Error;
+        let err = AuthError::InvalidToken("x".into());
+        assert!(err.source().is_none());
+    }
+
+    #[test]
+    fn source_returns_some_for_unknown() {
+        use std::error::Error;
+        let err = AuthError::Unknown(anyhow::anyhow!("inner"));
+        assert!(err.source().is_some());
+    }
+}

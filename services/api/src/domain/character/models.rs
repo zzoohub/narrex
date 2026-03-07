@@ -148,3 +148,91 @@ pub struct UpdateRelationship {
     pub visual_type: Option<RelationshipVisual>,
     pub direction: Option<RelationshipDirection>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- RelationshipVisual ---
+
+    #[test]
+    fn relationship_visual_display() {
+        assert_eq!(RelationshipVisual::Solid.to_string(), "solid");
+        assert_eq!(RelationshipVisual::Dashed.to_string(), "dashed");
+        assert_eq!(RelationshipVisual::Arrowed.to_string(), "arrowed");
+    }
+
+    #[test]
+    fn relationship_visual_from_str() {
+        assert_eq!("solid".parse::<RelationshipVisual>().unwrap(), RelationshipVisual::Solid);
+        assert_eq!("dashed".parse::<RelationshipVisual>().unwrap(), RelationshipVisual::Dashed);
+        assert_eq!("arrowed".parse::<RelationshipVisual>().unwrap(), RelationshipVisual::Arrowed);
+    }
+
+    #[test]
+    fn relationship_visual_from_str_unknown() {
+        let err = "nope".parse::<RelationshipVisual>().unwrap_err();
+        assert!(err.contains("unknown relationship visual"));
+    }
+
+    #[test]
+    fn relationship_visual_roundtrip() {
+        for v in [RelationshipVisual::Solid, RelationshipVisual::Dashed, RelationshipVisual::Arrowed] {
+            assert_eq!(v.to_string().parse::<RelationshipVisual>().unwrap(), v);
+        }
+    }
+
+    // --- RelationshipDirection ---
+
+    #[test]
+    fn relationship_direction_display() {
+        assert_eq!(RelationshipDirection::Bidirectional.to_string(), "bidirectional");
+        assert_eq!(RelationshipDirection::AToB.to_string(), "a_to_b");
+        assert_eq!(RelationshipDirection::BToA.to_string(), "b_to_a");
+    }
+
+    #[test]
+    fn relationship_direction_from_str() {
+        assert_eq!("bidirectional".parse::<RelationshipDirection>().unwrap(), RelationshipDirection::Bidirectional);
+        assert_eq!("a_to_b".parse::<RelationshipDirection>().unwrap(), RelationshipDirection::AToB);
+        assert_eq!("b_to_a".parse::<RelationshipDirection>().unwrap(), RelationshipDirection::BToA);
+    }
+
+    #[test]
+    fn relationship_direction_from_str_unknown() {
+        let err = "nope".parse::<RelationshipDirection>().unwrap_err();
+        assert!(err.contains("unknown relationship direction"));
+    }
+
+    #[test]
+    fn relationship_direction_roundtrip() {
+        for d in [RelationshipDirection::Bidirectional, RelationshipDirection::AToB, RelationshipDirection::BToA] {
+            assert_eq!(d.to_string().parse::<RelationshipDirection>().unwrap(), d);
+        }
+    }
+
+    // --- UpdateCharacter default ---
+
+    #[test]
+    fn update_character_default_all_none() {
+        let u = UpdateCharacter::default();
+        assert!(u.name.is_none());
+        assert!(u.personality.is_none());
+        assert!(u.appearance.is_none());
+        assert!(u.secrets.is_none());
+        assert!(u.motivation.is_none());
+        assert!(u.profile_image_url.is_none());
+        assert!(u.graph_x.is_none());
+        assert!(u.graph_y.is_none());
+    }
+
+    // --- UpdateRelationship default ---
+
+    #[test]
+    fn update_relationship_default_all_none() {
+        let u = UpdateRelationship::default();
+        assert!(u.label.is_none());
+        assert!(u.visual_type.is_none());
+        assert!(u.direction.is_none());
+    }
+}

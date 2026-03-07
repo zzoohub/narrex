@@ -162,3 +162,106 @@ pub struct PaginatedResult<T> {
     pub next_cursor: Option<String>,
     pub has_more: bool,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -- PovType Display/FromStr --
+
+    #[test]
+    fn pov_type_display() {
+        assert_eq!(PovType::FirstPerson.to_string(), "first_person");
+        assert_eq!(PovType::ThirdLimited.to_string(), "third_limited");
+        assert_eq!(PovType::ThirdOmniscient.to_string(), "third_omniscient");
+    }
+
+    #[test]
+    fn pov_type_from_str_valid() {
+        assert_eq!("first_person".parse::<PovType>().unwrap(), PovType::FirstPerson);
+        assert_eq!("third_limited".parse::<PovType>().unwrap(), PovType::ThirdLimited);
+        assert_eq!("third_omniscient".parse::<PovType>().unwrap(), PovType::ThirdOmniscient);
+    }
+
+    #[test]
+    fn pov_type_from_str_invalid() {
+        let result = "invalid_pov".parse::<PovType>();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("unknown pov type"));
+    }
+
+    #[test]
+    fn pov_type_roundtrip() {
+        for pov in [PovType::FirstPerson, PovType::ThirdLimited, PovType::ThirdOmniscient] {
+            let s = pov.to_string();
+            let parsed: PovType = s.parse().unwrap();
+            assert_eq!(parsed, pov);
+        }
+    }
+
+    // -- SourceType Display/FromStr --
+
+    #[test]
+    fn source_type_display() {
+        assert_eq!(SourceType::FreeText.to_string(), "free_text");
+        assert_eq!(SourceType::FileImport.to_string(), "file_import");
+        assert_eq!(SourceType::Template.to_string(), "template");
+    }
+
+    #[test]
+    fn source_type_from_str_valid() {
+        assert_eq!("free_text".parse::<SourceType>().unwrap(), SourceType::FreeText);
+        assert_eq!("file_import".parse::<SourceType>().unwrap(), SourceType::FileImport);
+        assert_eq!("template".parse::<SourceType>().unwrap(), SourceType::Template);
+    }
+
+    #[test]
+    fn source_type_from_str_invalid() {
+        let result = "invalid_source".parse::<SourceType>();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("unknown source type"));
+    }
+
+    #[test]
+    fn source_type_roundtrip() {
+        for st in [SourceType::FreeText, SourceType::FileImport, SourceType::Template] {
+            let s = st.to_string();
+            let parsed: SourceType = s.parse().unwrap();
+            assert_eq!(parsed, st);
+        }
+    }
+
+    // -- UpdateProject Default --
+
+    #[test]
+    fn update_project_default_is_all_none() {
+        let up = UpdateProject::default();
+        assert!(up.title.is_none());
+        assert!(up.genre.is_none());
+        assert!(up.theme.is_none());
+        assert!(up.era_location.is_none());
+        assert!(up.pov.is_none());
+        assert!(up.tone.is_none());
+    }
+
+    // -- PaginationParams --
+
+    #[test]
+    fn pagination_params_with_cursor() {
+        let pp = PaginationParams {
+            cursor: Some("abc".into()),
+            limit: 20,
+        };
+        assert_eq!(pp.cursor.as_deref(), Some("abc"));
+        assert_eq!(pp.limit, 20);
+    }
+
+    #[test]
+    fn pagination_params_without_cursor() {
+        let pp = PaginationParams {
+            cursor: None,
+            limit: 10,
+        };
+        assert!(pp.cursor.is_none());
+    }
+}

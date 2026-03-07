@@ -205,3 +205,97 @@ pub struct GenerationLog {
     pub error_message: Option<String>,
     pub created_at: DateTime<Utc>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- DraftSource ---
+
+    #[test]
+    fn draft_source_display() {
+        assert_eq!(DraftSource::AiGeneration.to_string(), "ai_generation");
+        assert_eq!(DraftSource::AiEdit.to_string(), "ai_edit");
+        assert_eq!(DraftSource::Manual.to_string(), "manual");
+    }
+
+    #[test]
+    fn draft_source_from_str() {
+        assert_eq!("ai_generation".parse::<DraftSource>().unwrap(), DraftSource::AiGeneration);
+        assert_eq!("ai_edit".parse::<DraftSource>().unwrap(), DraftSource::AiEdit);
+        assert_eq!("manual".parse::<DraftSource>().unwrap(), DraftSource::Manual);
+    }
+
+    #[test]
+    fn draft_source_from_str_unknown() {
+        let err = "nope".parse::<DraftSource>().unwrap_err();
+        assert!(err.contains("unknown draft source"));
+    }
+
+    #[test]
+    fn draft_source_roundtrip() {
+        for v in [DraftSource::AiGeneration, DraftSource::AiEdit, DraftSource::Manual] {
+            assert_eq!(v.to_string().parse::<DraftSource>().unwrap(), v);
+        }
+    }
+
+    // --- GenerationType ---
+
+    #[test]
+    fn generation_type_display() {
+        assert_eq!(GenerationType::Scene.to_string(), "scene");
+        assert_eq!(GenerationType::Summary.to_string(), "summary");
+        assert_eq!(GenerationType::Structuring.to_string(), "structuring");
+        assert_eq!(GenerationType::Edit.to_string(), "edit");
+    }
+
+    #[test]
+    fn generation_type_from_str() {
+        assert_eq!("scene".parse::<GenerationType>().unwrap(), GenerationType::Scene);
+        assert_eq!("summary".parse::<GenerationType>().unwrap(), GenerationType::Summary);
+        assert_eq!("structuring".parse::<GenerationType>().unwrap(), GenerationType::Structuring);
+        assert_eq!("edit".parse::<GenerationType>().unwrap(), GenerationType::Edit);
+    }
+
+    #[test]
+    fn generation_type_from_str_unknown() {
+        let err = "nope".parse::<GenerationType>().unwrap_err();
+        assert!(err.contains("unknown generation type"));
+    }
+
+    #[test]
+    fn generation_type_roundtrip() {
+        for v in [GenerationType::Scene, GenerationType::Summary, GenerationType::Structuring, GenerationType::Edit] {
+            assert_eq!(v.to_string().parse::<GenerationType>().unwrap(), v);
+        }
+    }
+
+    // --- GenerationStatus ---
+
+    #[test]
+    fn generation_status_display() {
+        assert_eq!(GenerationStatus::Success.to_string(), "success");
+        assert_eq!(GenerationStatus::Failure.to_string(), "failure");
+        assert_eq!(GenerationStatus::Partial.to_string(), "partial");
+    }
+
+    #[test]
+    fn generation_status_from_str() {
+        assert_eq!("success".parse::<GenerationStatus>().unwrap(), GenerationStatus::Success);
+        assert_eq!("failure".parse::<GenerationStatus>().unwrap(), GenerationStatus::Failure);
+        assert_eq!("partial".parse::<GenerationStatus>().unwrap(), GenerationStatus::Partial);
+    }
+
+    #[test]
+    fn generation_status_from_str_unknown() {
+        let err = "nope".parse::<GenerationStatus>().unwrap_err();
+        assert!(err.contains("unknown generation status"));
+    }
+
+    #[test]
+    fn generation_status_roundtrip() {
+        for v in [GenerationStatus::Success, GenerationStatus::Failure, GenerationStatus::Partial] {
+            assert_eq!(v.to_string().parse::<GenerationStatus>().unwrap(), v);
+        }
+    }
+}

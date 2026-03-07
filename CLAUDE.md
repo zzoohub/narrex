@@ -39,11 +39,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Principles & Constraints
 ### MUST
-1. After implementation, run post-check sub-agents (skip for docs-only or copy-only changes):
-   - Run in parallel: **z-security-reviewer** (if auth/data/API changed) and **z-tester** (write & run tests)
-   - Then sequentially: **z-verifier** (after z-tester passes)
+1. **TDD**: Apply TDD to all source code changes. Write failing tests first → implement → green.
+   - Axum: `nextest`
+   - FastAPI: `pytest` + `httpx` + `anyio`
+   - Next.js: `vitest` + `@testing-library/react`
+   - TanStack/SolidJS: `vitest` + `@solidjs/testing-library`
+2. After implementation, run post-check sub-agents in parallel (skip for docs-only changes):
+   - **z-security-reviewer** (if auth/data/API changed)
+   - **z-verifier** (e2e + browser verification)
    > Sub-agents report only. Fix → re-run → pass, then next step.
-2. Any change to requirements, product scope, architecture, data model, UX/UI design, or project structure must be reflected in `docs/`.
+3. Any change to requirements, product scope, architecture, data model, UX/UI design, or project structure must be reflected in `docs/`.
 
 ### MUST NOT
 - (project-specific anti-patterns here)

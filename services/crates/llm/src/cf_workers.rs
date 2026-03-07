@@ -267,3 +267,171 @@ impl LlmProvider for CfWorkersAiProvider {
         "cf_workers_ai"
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_provider() -> CfWorkersAiProvider {
+        CfWorkersAiProvider::new("test-account-id".into(), "test-api-token".into())
+    }
+
+    #[test]
+    fn default_model() {
+        let p = make_provider();
+        assert_eq!(p.model, "@cf/meta/llama-3.1-70b-instruct");
+    }
+
+    #[test]
+    fn with_model_overrides_default() {
+        let p = make_provider().with_model("custom-model".into());
+        assert_eq!(p.model, "custom-model");
+    }
+
+    #[test]
+    fn endpoint_contains_account_id_and_model() {
+        let p = make_provider();
+        let ep = p.endpoint();
+        assert!(ep.contains("test-account-id"));
+        assert!(ep.contains("@cf/meta/llama-3.1-70b-instruct"));
+        assert!(ep.starts_with("https://api.cloudflare.com/client/v4/accounts/"));
+    }
+
+    #[test]
+    fn endpoint_with_custom_model() {
+        let p = make_provider().with_model("my-model".into());
+        let ep = p.endpoint();
+        assert!(ep.contains("my-model"));
+        assert!(!ep.contains("llama"));
+    }
+
+    #[test]
+    fn build_request_with_system_prompt() {
+        let p = make_provider();
+        let req = GenerateRequest {
+            system_prompt: "you are helpful".into(),
+            user_prompt: "hello".into(),
+            max_tokens: Some(100),
+            temperature: Some(0.7),
+        };
+        let cf_req = p.build_request(&req, false);
+        assert_eq!(cf_req.messages.len(), 2);
+        assert_eq!(cf_req.messages[0].role, "system");
+        assert_eq!(cf_req.messages[0].content, "you are helpful");
+        assert_eq!(cf_req.messages[1].role, "user");
+        assert_eq!(cf_req.messages[1].content, "hello");
+        assert_eq!(cf_req.max_tokens, Some(100));
+        assert_eq!(cf_req.temperature, Some(0.7));
+        assert!(!cf_req.stream);
+    }
+
+    #[test]
+    fn build_request_without_system_prompt() {
+        let p = make_provider();
+        let req = GenerateRequest {
+            system_prompt: String::new(),
+            user_prompt: "hello".into(),
+            max_tokens: None,
+            temperature: None,
+        };
+        let cf_req = p.build_request(&req, false);
+        assert_eq!(cf_req.messages.len(), 1);
+        assert_eq!(cf_req.messages[0].role, "user");
+        assert!(cf_req.max_tokens.is_none());
+        assert!(cf_req.temperature.is_none());
+    }
+
+    #[test]
+    fn build_request_streaming_flag() {
+        let p = make_provider();
+        let req = GenerateRequest {
+            system_prompt: String::new(),
+            user_prompt: "hello".into(),
+            max_tokens: None,
+            temperature: None,
+        };
+        let cf_req_stream = p.build_request(&req, true);
+        assert!(cf_req_stream.stream);
+
+        let cf_req_no_stream = p.build_request(&req, false);
+        assert!(!cf_req_no_stream.stream);
+    }
+
+    #[test]
+    fn name_returns_cf_workers_ai() {
+        let p = make_provider();
+        assert_eq!(p.name(), "cf_workers_ai");
+    }
+
+    #[test]
+    fn cf_request_serialization_skips_none() {
+        let req = CfRequest {
+            messages: vec![CfMessage {
+                role: "user".into(),
+                content: "hi".into(),
+            }],
+            max_tokens: None,
+            temperature: None,
+            stream: false,
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(!json.contains("max_tokens"));
+        assert!(!json.contains("temperature"));
+    }
+
+    #[test]
+    fn cf_request_serialization_includes_values() {
+        let req = CfRequest {
+            messages: vec![CfMessage {
+                role: "user".into(),
+                content: "hi".into(),
+            }],
+            max_tokens: Some(256),
+            temperature: Some(0.5),
+            stream: true,
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"max_tokens\":256"));
+        assert!(json.contains("\"temperature\":0.5"));
+        assert!(json.contains("\"stream\":true"));
+    }
+
+    #[test]
+    fn cf_response_deserialization_success() {
+        let json = r#"{"result":{"response":"hello world","usage":{"prompt_tokens":10,"completion_tokens":5}},"success":true,"errors":[]}"#;
+        let resp: CfResponse = serde_json::from_str(json).unwrap();
+        assert!(resp.success);
+        assert!(resp.errors.is_empty());
+        let result = resp.result.unwrap();
+        assert_eq!(result.response.unwrap(), "hello world");
+        let usage = result.usage.unwrap();
+        assert_eq!(usage.prompt_tokens.unwrap(), 10);
+        assert_eq!(usage.completion_tokens.unwrap(), 5);
+    }
+
+    #[test]
+    fn cf_response_deserialization_error() {
+        let json = r#"{"result":null,"success":false,"errors":[{"message":"rate limited"}]}"#;
+        let resp: CfResponse = serde_json::from_str(json).unwrap();
+        assert!(!resp.success);
+        assert_eq!(resp.errors.len(), 1);
+        assert_eq!(resp.errors[0].message, "rate limited");
+        assert!(resp.result.is_none());
+    }
+
+    #[test]
+    fn cf_response_missing_usage() {
+        let json = r#"{"result":{"response":"text","usage":null},"success":true,"errors":[]}"#;
+        let resp: CfResponse = serde_json::from_str(json).unwrap();
+        assert!(resp.success);
+        let result = resp.result.unwrap();
+        assert!(result.usage.is_none());
+    }
+
+    #[test]
+    fn cf_stream_data_deserialization() {
+        let json = r#"{"response":"chunk text","usage":null}"#;
+        let data: CfStreamData = serde_json::from_str(json).unwrap();
+        assert_eq!(data.response.unwrap(), "chunk text");
+    }
+}

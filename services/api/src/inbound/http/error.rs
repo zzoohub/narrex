@@ -209,3 +209,211 @@ impl From<AiError> for ApiError {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::to_bytes;
+
+    // ---- ProblemDetail status & type ----
+
+    fn assert_problem(err: ApiError, expected_status: u16, expected_slug: &str) {
+        let (status, pd) = err.to_problem_detail();
+        assert_eq!(status.as_u16(), expected_status);
+        assert_eq!(pd.status, expected_status);
+        assert_eq!(pd.type_uri, format!("https://api.narrex.app/errors/{expected_slug}"));
+    }
+
+    #[test]
+    fn problem_detail_bad_request() {
+        assert_problem(ApiError::BadRequest("x".into()), 400, "bad-request");
+    }
+
+    #[test]
+    fn problem_detail_unauthorized() {
+        assert_problem(ApiError::Unauthorized("x".into()), 401, "unauthorized");
+    }
+
+    #[test]
+    fn problem_detail_forbidden() {
+        assert_problem(ApiError::Forbidden, 403, "forbidden");
+    }
+
+    #[test]
+    fn problem_detail_not_found() {
+        assert_problem(ApiError::NotFound("x".into()), 404, "not-found");
+    }
+
+    #[test]
+    fn problem_detail_conflict() {
+        assert_problem(ApiError::Conflict("x".into()), 409, "conflict");
+    }
+
+    #[test]
+    fn problem_detail_unprocessable() {
+        assert_problem(ApiError::UnprocessableEntity("x".into()), 422, "validation-failed");
+    }
+
+    #[test]
+    fn problem_detail_too_many_requests() {
+        assert_problem(ApiError::TooManyRequests, 429, "rate-limited");
+    }
+
+    #[test]
+    fn problem_detail_internal() {
+        assert_problem(ApiError::Internal("x".into()), 500, "internal-error");
+    }
+
+    #[test]
+    fn problem_detail_internal_hides_message() {
+        let (_, pd) = ApiError::Internal("secret db error".into()).to_problem_detail();
+        assert!(pd.detail.is_none());
+    }
+
+    #[test]
+    fn problem_detail_bad_request_shows_message() {
+        let (_, pd) = ApiError::BadRequest("missing field".into()).to_problem_detail();
+        assert_eq!(pd.detail.as_deref(), Some("missing field"));
+    }
+
+    #[test]
+    fn problem_detail_forbidden_no_detail() {
+        let (_, pd) = ApiError::Forbidden.to_problem_detail();
+        assert!(pd.detail.is_none());
+    }
+
+    // ---- IntoResponse content type ----
+
+    #[tokio::test]
+    async fn into_response_sets_problem_json_content_type() {
+        let resp = ApiError::NotFound("x".into()).into_response();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+        let ct = resp.headers().get("content-type").unwrap().to_str().unwrap();
+        assert_eq!(ct, "application/problem+json");
+    }
+
+    #[tokio::test]
+    async fn into_response_body_is_valid_json() {
+        let resp = ApiError::BadRequest("test".into()).into_response();
+        let body = to_bytes(resp.into_body(), 10240).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["title"], "Bad Request");
+        assert_eq!(json["status"], 400);
+        assert_eq!(json["detail"], "test");
+        assert_eq!(json["type"], "https://api.narrex.app/errors/bad-request");
+    }
+
+    // ---- From<AuthError> ----
+
+    #[test]
+    fn from_auth_invalid_token() {
+        let err: ApiError = AuthError::InvalidToken("bad".into()).into();
+        assert!(matches!(err, ApiError::Unauthorized(_)));
+    }
+
+    #[test]
+    fn from_auth_token_expired() {
+        let err: ApiError = AuthError::TokenExpired.into();
+        assert!(matches!(err, ApiError::Unauthorized(_)));
+    }
+
+    #[test]
+    fn from_auth_user_not_found() {
+        let err: ApiError = AuthError::UserNotFound.into();
+        assert!(matches!(err, ApiError::NotFound(_)));
+    }
+
+    #[test]
+    fn from_auth_oauth_failed() {
+        let err: ApiError = AuthError::OAuthFailed("nope".into()).into();
+        assert!(matches!(err, ApiError::BadRequest(_)));
+    }
+
+    // ---- From<ProjectError> ----
+
+    #[test]
+    fn from_project_not_found() {
+        let err: ApiError = ProjectError::NotFound.into();
+        assert!(matches!(err, ApiError::NotFound(_)));
+    }
+
+    #[test]
+    fn from_project_forbidden() {
+        let err: ApiError = ProjectError::Forbidden.into();
+        assert!(matches!(err, ApiError::Forbidden));
+    }
+
+    // ---- From<TimelineError> ----
+
+    #[test]
+    fn from_timeline_track_not_found() {
+        let err: ApiError = TimelineError::TrackNotFound.into();
+        assert!(matches!(err, ApiError::NotFound(_)));
+    }
+
+    #[test]
+    fn from_timeline_track_has_scenes() {
+        let err: ApiError = TimelineError::TrackHasScenes.into();
+        assert!(matches!(err, ApiError::Conflict(_)));
+    }
+
+    #[test]
+    fn from_timeline_connection_exists() {
+        let err: ApiError = TimelineError::ConnectionExists.into();
+        assert!(matches!(err, ApiError::Conflict(_)));
+    }
+
+    #[test]
+    fn from_timeline_invalid_position() {
+        let err: ApiError = TimelineError::InvalidPosition("bad".into()).into();
+        assert!(matches!(err, ApiError::UnprocessableEntity(_)));
+    }
+
+    // ---- From<CharacterError> ----
+
+    #[test]
+    fn from_character_not_found() {
+        let err: ApiError = CharacterError::NotFound.into();
+        assert!(matches!(err, ApiError::NotFound(_)));
+    }
+
+    #[test]
+    fn from_character_relationship_exists() {
+        let err: ApiError = CharacterError::RelationshipExists.into();
+        assert!(matches!(err, ApiError::Conflict(_)));
+    }
+
+    // ---- From<AiError> ----
+
+    #[test]
+    fn from_ai_rate_limited() {
+        let err: ApiError = AiError::RateLimited.into();
+        assert!(matches!(err, ApiError::TooManyRequests));
+    }
+
+    #[test]
+    fn from_ai_generation_failed() {
+        let err: ApiError = AiError::GenerationFailed("timeout".into()).into();
+        assert!(matches!(err, ApiError::Internal(_)));
+    }
+
+    #[test]
+    fn from_ai_draft_not_found() {
+        let err: ApiError = AiError::DraftNotFound.into();
+        assert!(matches!(err, ApiError::NotFound(_)));
+    }
+
+    // ---- Display ----
+
+    #[test]
+    fn display_all_variants() {
+        assert_eq!(ApiError::BadRequest("x".into()).to_string(), "bad request: x");
+        assert_eq!(ApiError::Unauthorized("x".into()).to_string(), "unauthorized: x");
+        assert_eq!(ApiError::Forbidden.to_string(), "forbidden");
+        assert_eq!(ApiError::NotFound("x".into()).to_string(), "not found: x");
+        assert_eq!(ApiError::Conflict("x".into()).to_string(), "conflict: x");
+        assert_eq!(ApiError::UnprocessableEntity("x".into()).to_string(), "unprocessable entity: x");
+        assert_eq!(ApiError::TooManyRequests.to_string(), "too many requests");
+        assert_eq!(ApiError::Internal("x".into()).to_string(), "internal server error: x");
+    }
+}
