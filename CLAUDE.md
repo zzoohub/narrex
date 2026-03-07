@@ -68,7 +68,7 @@ All commands in `justfile`. Run `just --list` to see all recipes.
 - Design system: **z-design-system**
 - UI: **frontend-design**
 - Web source code: **z-solidjs**  
-- Interactions: **z-interactive**
+- Motion: **z-motion**
 
 ### FSD Import Rules
 - `app(routing) → views → widgets → features → entities → shared` (never import upward)
