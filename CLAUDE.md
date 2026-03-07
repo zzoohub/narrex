@@ -12,9 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ├── services/
 │   ├── api/              # Backend API
 │   └── worker/           # Queue, cron, pub/sub handlers
-├── clients/
-│   ├── web/
-│   └── mobile/           # Expo React Native
+├── web/
 ├── db/
 │   ├── migrations/
 │   └── seeds/
