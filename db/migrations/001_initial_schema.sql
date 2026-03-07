@@ -47,7 +47,8 @@ CREATE TABLE user_account (
     profile_image_url TEXT,
     CONSTRAINT uq_user_google_id UNIQUE (google_id),
     CONSTRAINT uq_user_email UNIQUE (email),
-    CONSTRAINT chk_user_email_length CHECK (char_length(email) <= 255)
+    CONSTRAINT chk_user_email_length CHECK (char_length(email) <= 255),
+    CONSTRAINT chk_user_profile_url_length CHECK (char_length(profile_image_url) <= 2048)
 );
 
 COMMENT ON TABLE user_account IS 'Google OAuth2 users. Ownership-based authorization.';
@@ -72,7 +73,8 @@ CREATE TABLE project (
     source_type     TEXT        CHECK (source_type IN ('free_text', 'file_import', 'template')),
     source_input    TEXT,
     source_file_key TEXT,
-    CONSTRAINT chk_project_title_length CHECK (char_length(title) <= 200)
+    CONSTRAINT chk_project_title_length CHECK (char_length(title) <= 200),
+    CONSTRAINT chk_project_file_key_length CHECK (char_length(source_file_key) <= 1024)
 );
 
 COMMENT ON TABLE project IS 'Story workspace with global config settings for AI generation.';
@@ -120,7 +122,8 @@ CREATE TABLE scene (
     mood_tags       TEXT[]           DEFAULT '{}',
     CONSTRAINT chk_scene_start_position CHECK (start_position >= 0),
     CONSTRAINT chk_scene_duration CHECK (duration > 0),
-    CONSTRAINT chk_scene_title_length CHECK (char_length(title) <= 500)
+    CONSTRAINT chk_scene_title_length CHECK (char_length(title) <= 500),
+    CONSTRAINT chk_scene_plot_summary_length CHECK (char_length(plot_summary) <= 5000)
 );
 
 COMMENT ON TABLE scene IS 'Scene on the timeline. Central entity for AI context assembly.';
@@ -167,10 +170,19 @@ CREATE TABLE character (
     secrets           TEXT,
     motivation        TEXT,
     profile_image_url TEXT,
-    CONSTRAINT chk_character_name_length CHECK (char_length(name) <= 200)
+    graph_x           DOUBLE PRECISION,
+    graph_y           DOUBLE PRECISION,
+    CONSTRAINT chk_character_name_length CHECK (char_length(name) <= 200),
+    CONSTRAINT chk_character_personality_length CHECK (char_length(personality) <= 2000),
+    CONSTRAINT chk_character_appearance_length CHECK (char_length(appearance) <= 2000),
+    CONSTRAINT chk_character_secrets_length CHECK (char_length(secrets) <= 2000),
+    CONSTRAINT chk_character_motivation_length CHECK (char_length(motivation) <= 2000),
+    CONSTRAINT chk_character_profile_url_length CHECK (char_length(profile_image_url) <= 2048)
 );
 
 COMMENT ON TABLE character IS 'Story characters with attributes used as AI generation context.';
+COMMENT ON COLUMN character.graph_x IS 'Manual node position in character map. NULL = force-directed layout.';
+COMMENT ON COLUMN character.graph_y IS 'Manual node position in character map. NULL = force-directed layout.';
 
 CREATE INDEX idx_character_project_id ON character (project_id);
 
@@ -202,6 +214,7 @@ CREATE TABLE character_relationship (
     visual_type     relationship_visual    NOT NULL DEFAULT 'solid',
     direction       relationship_direction NOT NULL DEFAULT 'bidirectional',
     CONSTRAINT chk_different_characters CHECK (character_a_id != character_b_id),
+    CONSTRAINT chk_char_pair_order CHECK (character_a_id < character_b_id),
     CONSTRAINT uq_character_pair UNIQUE (character_a_id, character_b_id)
 );
 
@@ -229,10 +242,11 @@ CREATE TABLE draft (
     char_count         INTEGER     GENERATED ALWAYS AS (char_length(content)) STORED,
     source             TEXT        NOT NULL CHECK (source IN ('ai_generation', 'ai_edit', 'manual')),
     edit_direction     TEXT,
-    model              TEXT,
-    provider           TEXT,
+    model              TEXT        CHECK (char_length(model) <= 200),
+    provider           TEXT        CHECK (char_length(provider) <= 100),
     cost_usd           NUMERIC(10, 6),
-    CONSTRAINT uq_draft_scene_version UNIQUE (scene_id, version)
+    CONSTRAINT uq_draft_scene_version UNIQUE (scene_id, version),
+    CONSTRAINT chk_draft_edit_direction_length CHECK (char_length(edit_direction) <= 500)
 );
 
 COMMENT ON TABLE draft IS 'Versioned prose content for scenes. Latest version = current draft.';
@@ -275,7 +289,8 @@ CREATE TABLE generation_log (
     model              TEXT              NOT NULL,
     provider           TEXT              NOT NULL,
     cost_usd           NUMERIC(10, 6)    NOT NULL,
-    error_message      TEXT
+    error_message      TEXT,
+    CONSTRAINT chk_genlog_error_length CHECK (char_length(error_message) <= 2000)
 );
 
 COMMENT ON TABLE generation_log IS 'Every LLM API call. Append-only. For cost monitoring and analytics.';
@@ -285,4 +300,5 @@ COMMENT ON COLUMN generation_log.scene_id IS 'SET NULL on scene delete to preser
 CREATE INDEX idx_genlog_user_created ON generation_log (user_id, created_at DESC);
 CREATE INDEX idx_genlog_project_created ON generation_log (project_id, created_at DESC)
     WHERE project_id IS NOT NULL;
+CREATE INDEX idx_genlog_scene ON generation_log (scene_id) WHERE scene_id IS NOT NULL;
 CREATE INDEX idx_genlog_created_at ON generation_log USING BRIN (created_at);
