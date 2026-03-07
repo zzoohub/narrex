@@ -9,6 +9,9 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-app}
     volumes:
       - pgdata:/var/lib/postgresql # correct for postgres:18
-
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
 volumes:
   pgdata:
