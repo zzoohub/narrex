@@ -1,0 +1,160 @@
+direction: down
+
+writer: Writer {
+  icon: https://icons.terrastruct.com/essentials%2F359-users.svg
+  shape: person
+  style: {
+    stroke: "#D4A574"
+    font-color: "#D4A574"
+  }
+}
+
+cloudflare: Cloudflare Edge {
+  style: {
+    stroke: "#666"
+    fill: "#111"
+    font-color: "#AAA"
+    border-radius: 8
+    stroke-dash: 5
+  }
+
+  web: Web App (TanStack Start + SolidJS) {
+    icon: https://icons.terrastruct.com/dev%2Fnodejs.svg
+    style: {
+      stroke: "#D4A574"
+      fill: "#1A1A1A"
+      font-color: "#F5F0E8"
+    }
+  }
+
+  cdn: CDN + WAF {
+    style: {
+      stroke: "#666"
+      fill: "#1A1A1A"
+      font-color: "#AAA"
+    }
+  }
+}
+
+gcp: GCP Cloud Run {
+  style: {
+    stroke: "#666"
+    fill: "#111"
+    font-color: "#AAA"
+    border-radius: 8
+    stroke-dash: 5
+  }
+
+  api: API Server (Axum) {
+    icon: https://icons.terrastruct.com/tech%2F022-server.svg
+    style: {
+      stroke: "#D4A574"
+      fill: "#1A1A1A"
+      font-color: "#F5F0E8"
+    }
+  }
+
+  llm-gw: LLM Gateway (Rust Trait) {
+    style: {
+      stroke: "#8B7355"
+      fill: "#1A1A1A"
+      font-color: "#D4A574"
+    }
+  }
+
+  context: Context Assembler {
+    style: {
+      stroke: "#8B7355"
+      fill: "#1A1A1A"
+      font-color: "#D4A574"
+    }
+  }
+}
+
+data: Data Layer {
+  style: {
+    stroke: "#666"
+    fill: "#111"
+    font-color: "#AAA"
+    border-radius: 8
+    stroke-dash: 5
+  }
+
+  neon: Neon PostgreSQL {
+    icon: https://icons.terrastruct.com/dev%2Fpostgresql.svg
+    shape: cylinder
+    style: {
+      stroke: "#8B7355"
+      fill: "#1A1A1A"
+      font-color: "#F5F0E8"
+    }
+  }
+
+  r2: Cloudflare R2 {
+    shape: cylinder
+    style: {
+      stroke: "#8B7355"
+      fill: "#1A1A1A"
+      font-color: "#F5F0E8"
+    }
+  }
+
+  redis: Upstash Redis {
+    icon: https://icons.terrastruct.com/dev%2Fredis.svg
+    shape: cylinder
+    style: {
+      stroke: "#8B7355"
+      fill: "#1A1A1A"
+      font-color: "#F5F0E8"
+    }
+  }
+}
+
+external: External Services {
+  style: {
+    stroke: "#666"
+    fill: "#111"
+    font-color: "#AAA"
+    border-radius: 8
+    stroke-dash: 5
+  }
+
+  llm: LLM Providers (OpenAI / Anthropic / Google) {
+    shape: cloud
+    style: {
+      stroke: "#8B7355"
+      font-color: "#8B7355"
+    }
+  }
+
+  google: Google OAuth {
+    shape: cloud
+    style: {
+      stroke: "#8B7355"
+      font-color: "#8B7355"
+    }
+  }
+
+  stripe: Stripe Payments {
+    shape: cloud
+    style: {
+      stroke: "#8B7355"
+      font-color: "#8B7355"
+    }
+  }
+}
+
+writer -> cloudflare.web: "HTTPS" {style.stroke: "#D4A574"}
+cloudflare.cdn -> gcp.api: "Proxy API requests" {style.stroke: "#666"}
+cloudflare.web -> gcp.api: "REST API + SSE" {style.stroke: "#D4A574"}
+gcp.api -> gcp.context: "Assemble prompt" {style.stroke: "#8B7355"}
+gcp.context -> gcp.llm-gw: "Structured prompt" {style.stroke: "#8B7355"}
+gcp.llm-gw -> external.llm: "SSE stream" {style.stroke: "#8B7355"}
+gcp.api -> data.neon: "SQLx (pooler)" {style.stroke: "#8B7355"}
+gcp.api -> data.r2: "Presigned URLs" {style.stroke: "#8B7355"}
+gcp.api -> data.redis: "Session, rate limit" {style.stroke: "#8B7355"}
+gcp.api -> external.google: "OAuth2 flow" {style.stroke: "#8B7355"}
+gcp.api -> external.stripe: "Subscriptions [Phase 2]" {
+  style.stroke: "#555"
+  style.stroke-dash: 5
+}

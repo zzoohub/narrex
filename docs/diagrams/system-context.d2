@@ -1,0 +1,69 @@
+direction: right
+
+writer: Writer {
+  icon: https://icons.terrastruct.com/essentials%2F359-users.svg
+  shape: person
+  style: {
+    stroke: "#D4A574"
+    font-color: "#D4A574"
+  }
+}
+
+narrex: Narrex {
+  icon: https://icons.terrastruct.com/tech%2F022-server.svg
+  style: {
+    stroke: "#D4A574"
+    fill: "#1A1A1A"
+    font-color: "#F5F0E8"
+    border-radius: 8
+  }
+}
+
+llm: LLM Providers {
+  shape: cloud
+  style: {
+    stroke: "#8B7355"
+    font-color: "#8B7355"
+  }
+}
+
+google-auth: Google OAuth {
+  shape: cloud
+  style: {
+    stroke: "#8B7355"
+    font-color: "#8B7355"
+  }
+}
+
+neon: Neon PostgreSQL {
+  icon: https://icons.terrastruct.com/dev%2Fpostgresql.svg
+  shape: cylinder
+  style: {
+    stroke: "#8B7355"
+    font-color: "#8B7355"
+  }
+}
+
+r2: Cloudflare R2 {
+  shape: cylinder
+  style: {
+    stroke: "#8B7355"
+    font-color: "#8B7355"
+  }
+}
+
+writer -> narrex: "Story ideas, scene edits,\ncharacter management" {
+  style.stroke: "#D4A574"
+}
+narrex -> llm: "Auto-structuring, scene\ngeneration, direction edits" {
+  style.stroke: "#8B7355"
+}
+narrex -> google-auth: "OAuth2 authentication" {
+  style.stroke: "#8B7355"
+}
+narrex -> neon: "Project, scene, character,\ndraft data" {
+  style.stroke: "#8B7355"
+}
+narrex -> r2: "File imports,\nprofile images" {
+  style.stroke: "#8B7355"
+}
