@@ -626,6 +626,18 @@ describe('WorkspaceStore', () => {
         dispose()
       })
     })
+
+    it('finishGeneration without prior startGeneration still resets state', () => {
+      renderWorkspace((ctx, dispose) => {
+        // No startGeneration called, so generatingSceneId is null
+        ctx.finishGeneration('Some content')
+
+        expect(ctx.isGenerating()).toBe(false)
+        expect(ctx.generatingSceneId()).toBeNull()
+        expect(ctx.streamedContent()).toBe('')
+        dispose()
+      })
+    })
   })
 
   // ---- Save status ----
@@ -1215,6 +1227,33 @@ describe('WorkspaceStore', () => {
   // ---- Async .then() success handlers (server ID replacement) ----
 
   describe('server ID replacement on create success', () => {
+    // These tests use a never-resolving getWorkspace mock so that onMount's
+    // loadWorkspace call doesn't race with the create operation's .then handler.
+    function renderIsolated(
+      callback: (ctx: WorkspaceContextValue, dispose: () => void) => void,
+    ) {
+      vi.mocked(projectApi.getWorkspace).mockReturnValue(new Promise(() => {}))
+
+      createRoot((dispose) => {
+        let ctx: WorkspaceContextValue | undefined
+        const Wrapper = () => {
+          return WorkspaceProvider({
+            get projectId() { return 'p1' },
+            get children() {
+              const Consumer = () => {
+                ctx = useWorkspace()
+                return null
+              }
+              return Consumer()
+            },
+          })
+        }
+        Wrapper()
+        if (!ctx) throw new Error('Context not captured')
+        callback(ctx, dispose)
+      })
+    }
+
     it('addScene replaces temp ID with server ID on success', async () => {
       const serverScene = {
         id: 'server-s-new',
@@ -1236,23 +1275,20 @@ describe('WorkspaceStore', () => {
       let ctxRef: WorkspaceContextValue | undefined
       let disposeFn: (() => void) | undefined
 
-      renderWorkspace((ctx, dispose) => {
+      renderIsolated((ctx, dispose) => {
         ctxRef = ctx
         disposeFn = dispose
       })
 
       ctxRef!.addScene('t1', 5)
 
-      // Optimistic scene has temp ID
       const tempScene = ctxRef!.state.scenes.find(s => s.startPosition === 5)
       expect(tempScene!.id).toMatch(/^temp_/)
       const tempId = tempScene!.id
 
-      // Flush the resolved promise (.then handler)
       await Promise.resolve()
       await Promise.resolve()
 
-      // Server ID should replace temp ID
       expect(ctxRef!.state.scenes.find(s => s.id === tempId)).toBeUndefined()
       expect(ctxRef!.state.scenes.find(s => s.id === 'server-s-new')).toBeDefined()
       expect(ctxRef!.selectedSceneId()).toBe('server-s-new')
@@ -1266,19 +1302,17 @@ describe('WorkspaceStore', () => {
       let ctxRef: WorkspaceContextValue | undefined
       let disposeFn: (() => void) | undefined
 
-      renderWorkspace((ctx, dispose) => {
+      renderIsolated((ctx, dispose) => {
         ctxRef = ctx
         disposeFn = dispose
       })
 
       ctxRef!.addScene('t1', 5)
-      const tempScene = ctxRef!.state.scenes.find(s => s.startPosition === 5)
-      expect(tempScene).toBeDefined()
+      expect(ctxRef!.state.scenes.find(s => s.startPosition === 5)).toBeDefined()
 
       await Promise.resolve()
       await Promise.resolve()
 
-      // Scene should be removed on failure
       expect(ctxRef!.state.scenes.find(s => s.startPosition === 5)).toBeUndefined()
       expect(ctxRef!.saveStatus()).toBe('error')
 
@@ -1299,7 +1333,7 @@ describe('WorkspaceStore', () => {
       let ctxRef: WorkspaceContextValue | undefined
       let disposeFn: (() => void) | undefined
 
-      renderWorkspace((ctx, dispose) => {
+      renderIsolated((ctx, dispose) => {
         ctxRef = ctx
         disposeFn = dispose
       })
@@ -1324,7 +1358,7 @@ describe('WorkspaceStore', () => {
       let ctxRef: WorkspaceContextValue | undefined
       let disposeFn: (() => void) | undefined
 
-      renderWorkspace((ctx, dispose) => {
+      renderIsolated((ctx, dispose) => {
         ctxRef = ctx
         disposeFn = dispose
       })
@@ -1361,7 +1395,7 @@ describe('WorkspaceStore', () => {
       let ctxRef: WorkspaceContextValue | undefined
       let disposeFn: (() => void) | undefined
 
-      renderWorkspace((ctx, dispose) => {
+      renderIsolated((ctx, dispose) => {
         ctxRef = ctx
         disposeFn = dispose
       })
@@ -1387,7 +1421,7 @@ describe('WorkspaceStore', () => {
       let ctxRef: WorkspaceContextValue | undefined
       let disposeFn: (() => void) | undefined
 
-      renderWorkspace((ctx, dispose) => {
+      renderIsolated((ctx, dispose) => {
         ctxRef = ctx
         disposeFn = dispose
       })
@@ -1421,7 +1455,7 @@ describe('WorkspaceStore', () => {
       let ctxRef: WorkspaceContextValue | undefined
       let disposeFn: (() => void) | undefined
 
-      renderWorkspace((ctx, dispose) => {
+      renderIsolated((ctx, dispose) => {
         ctxRef = ctx
         disposeFn = dispose
       })
@@ -1446,7 +1480,7 @@ describe('WorkspaceStore', () => {
       let ctxRef: WorkspaceContextValue | undefined
       let disposeFn: (() => void) | undefined
 
-      renderWorkspace((ctx, dispose) => {
+      renderIsolated((ctx, dispose) => {
         ctxRef = ctx
         disposeFn = dispose
       })
@@ -1477,7 +1511,7 @@ describe('WorkspaceStore', () => {
       let ctxRef: WorkspaceContextValue | undefined
       let disposeFn: (() => void) | undefined
 
-      renderWorkspace((ctx, dispose) => {
+      renderIsolated((ctx, dispose) => {
         ctxRef = ctx
         disposeFn = dispose
       })
@@ -1502,7 +1536,7 @@ describe('WorkspaceStore', () => {
       let ctxRef: WorkspaceContextValue | undefined
       let disposeFn: (() => void) | undefined
 
-      renderWorkspace((ctx, dispose) => {
+      renderIsolated((ctx, dispose) => {
         ctxRef = ctx
         disposeFn = dispose
       })

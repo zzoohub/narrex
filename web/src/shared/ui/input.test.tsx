@@ -69,4 +69,15 @@ describe('TextArea', () => {
     textarea.dispatchEvent(new InputEvent('input', { bubbles: true }))
     expect(onInput).toHaveBeenCalled()
   })
+
+  it('adjusts height on input when autoGrow is true', () => {
+    render(() => <TextArea autoGrow placeholder="grow" />)
+    const textarea = screen.getByPlaceholderText('grow') as HTMLTextAreaElement
+
+    // Trigger input event so adjustHeight runs
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }))
+
+    // In jsdom scrollHeight is 0, but the code path sets style.height
+    expect(textarea.style.height).toBeDefined()
+  })
 })

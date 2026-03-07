@@ -1,0 +1,9 @@
+{
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@playwright/test": "^1.52.0",
+    "@types/node": "^25.3.5",
+    "typescript": "^5.9.3"
+  }
+}

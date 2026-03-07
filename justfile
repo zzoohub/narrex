@@ -1,10 +1,12 @@
 set dotenv-load := false
 
-# ─── Path resolution ─────────────────────────────────────────────────────────
-svc_dir     := "services"
-api_dir     := "services/api"
-worker_dir  := "services/worker"
-web_dir     := "web"
+# ─── Dynamic path resolution ─────────────────────────────────────────────────
+# Supports both monorepo (services/api, clients/web) and flat (api, web) layouts
+
+api_dir := if path_exists("services/api") == "true" { "services/api" } else { "api" }
+worker_dir := if path_exists("services/worker") == "true" { "services/worker" } else { "worker" }
+web_dir := if path_exists("clients/web") == "true" { "clients/web" } else { "web" }
+mobile_dir := if path_exists("clients/mobile") == "true" { "clients/mobile" } else { "mobile" }
 
 default:
     @just --list
@@ -27,25 +29,29 @@ db-seed:
 
 db-reset: db-migrate db-seed
 
-# ─── API (Rust / Axum) ───────────────────────────────────────────────────────
+# ─── API ──────────────────────────────────────────────────────────────────────
+# NOTE: Adjust for your backend (Axum: cargo run, FastAPI: uvicorn)
+
+api-install:
+    cd {{ api_dir }} && uv sync
 
 api-dev:
-    cd {{ svc_dir }} && cargo watch -x 'run --bin narrex-api'
+    cd {{ api_dir }} && PYTHONPATH=src uv run uvicorn app.main:create_app --factory --reload --host 0.0.0.0 --port 8080
 
-api-build:
-    cd {{ svc_dir }} && cargo build --release --bin narrex-api
-
-api-check:
-    cd {{ svc_dir }} && cargo check
+api-start:
+    cd {{ api_dir }} && PYTHONPATH=src uv run python -m app.main
 
 api-test *args:
-    cd {{ svc_dir }} && cargo test {{ args }}
+    cd {{ api_dir }} && PYTHONPATH=src uv run pytest {{ args }}
+
+api-test-cov:
+    cd {{ api_dir }} && PYTHONPATH=src uv run pytest --cov=src --cov-report=term-missing
 
 api-lint:
-    cd {{ svc_dir }} && cargo clippy -- -D warnings
+    cd {{ api_dir }} && uv run ruff check .
 
 api-clean:
-    cd {{ svc_dir }} && cargo clean
+    rm -rf {{ api_dir }}/.venv {{ api_dir }}/__pycache__
 
 # ─── Worker ───────────────────────────────────────────────────────────────────
 # NOTE: Adjust commands for your framework (Celery, BullMQ, Temporal, etc.)
@@ -71,7 +77,7 @@ worker-lint:
 worker-clean:
     cd {{ worker_dir }} && echo "TODO: clean worker artifacts"
 
-# ─── Web (TanStack Start / SolidJS) ──────────────────────────────────────────
+# ─── Web ───────────────────────────────────────────────────────────────────
 
 web-install:
     cd {{ web_dir }} && bun install
@@ -101,13 +107,58 @@ web-test-cov:
     cd {{ web_dir }} && bun vitest run --coverage
 
 web-clean:
-    rm -rf {{ web_dir }}/.output {{ web_dir }}/coverage
+    rm -rf {{ web_dir }}/.next {{ web_dir }}/coverage
+
+# ─── Mobile (Expo React Native) ───────────────────────────────────────────
+
+mobile-install:
+    cd {{ mobile_dir }} && bun install
+
+mobile-dev:
+    cd {{ mobile_dir }} && bunx expo start --dev-client
+
+mobile-ios:
+    cd {{ mobile_dir }} && bunx expo run:ios
+
+mobile-android:
+    cd {{ mobile_dir }} && bunx expo run:android
+
+mobile-lint:
+    cd {{ mobile_dir }} && bun run lint
+
+mobile-typecheck:
+    cd {{ mobile_dir }} && bun tsc --noEmit
+
+mobile-test *args:
+    cd {{ mobile_dir }} && bun vitest run {{ args }}
+
+mobile-clean:
+    rm -rf {{ mobile_dir }}/.expo {{ mobile_dir }}/node_modules
+
+# ─── E2E (Playwright) ────────────────────────────────────────────────────────
+# Runs from project root against e2e/ directory.
+# Expects playwright.config.ts at root.
+
+e2e-install:
+    cd e2e && bun install && bun playwright install --with-deps chromium
+
+e2e *args:
+    cd e2e && bun playwright test --project=chromium {{ args }}
+
+e2e-smoke:
+    cd e2e && bun playwright test --project=chromium --grep @smoke
+
+e2e-ui:
+    cd e2e && bun playwright test --ui
+
+e2e-report:
+    cd e2e && bun playwright show-report
 
 # ─── Quality ──────────────────────────────────────────────────────────────────
 
-lint: api-lint web-lint
+lint: api-lint worker-lint web-lint mobile-lint
 
-test: api-test web-test
+test: api-test worker-test web-test mobile-test
 
 check: lint test
 
