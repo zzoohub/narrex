@@ -1,0 +1,1907 @@
+openapi: '3.1.0'
+
+info:
+  title: Narrex API
+  version: '0.1.0'
+  description: |
+    API for Narrex — a visual novel editor with AI scene generation.
+
+    Phase 1 covers the core loop: project creation with auto-structuring,
+    multi-track timeline, character map, and scene-level AI draft generation.
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+tags:
+  - name: auth
+    description: Authentication via Google OAuth2 and JWT tokens
+  - name: projects
+    description: Project CRUD, story configuration, and workspace loading
+  - name: tracks
+    description: Timeline tracks (parallel storylines)
+  - name: scenes
+    description: Timeline scenes — NLE clips with position and duration
+  - name: connections
+    description: Scene connections (branch and merge points)
+  - name: characters
+    description: Character management and graph positioning
+  - name: relationships
+    description: Character relationships (visual type, direction, label)
+  - name: generation
+    description: AI draft generation and direction-based editing (SSE)
+  - name: drafts
+    description: Scene draft version history and manual saves
+  - name: health
+    description: Service health
+
+# ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
+paths:
+
+  # ---- Auth ---------------------------------------------------------------
+
+  /v1/auth/google:
+    get:
+      operationId: initiateGoogleAuth
+      tags: [auth]
+      summary: Redirect to Google OAuth consent screen
+      security: []
+      parameters:
+        - name: redirect_uri
+          in: query
+          required: false
+          description: URL to redirect after authentication completes
+          schema:
+            type: string
+            format: uri
+      responses:
+        '302':
+          description: Redirect to Google OAuth
+          headers:
+            Location:
+              schema:
+                type: string
+              description: Google OAuth consent URL
+
+  /v1/auth/google/callback:
+    get:
+      operationId: handleGoogleCallback
+      tags: [auth]
+      summary: Handle Google OAuth callback
+      security: []
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '302':
+          description: Redirect to web app with tokens set
+          headers:
+            Location:
+              schema:
+                type: string
+              description: Web app URL
+            Set-Cookie:
+              schema:
+                type: string
+              description: httpOnly refresh token cookie (30 days)
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /v1/auth/refresh:
+    post:
+      operationId: refreshToken
+      tags: [auth]
+      summary: Refresh access token
+      description: Uses httpOnly refresh token cookie. No request body needed.
+      security: []
+      responses:
+        '200':
+          description: New access token
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AuthTokens'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout and clear refresh token
+      responses:
+        '204':
+          description: Logged out
+
+  /v1/auth/me:
+    get:
+      operationId: getCurrentUser
+      tags: [auth]
+      summary: Get current authenticated user
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ---- Projects -----------------------------------------------------------
+
+  /v1/projects:
+    get:
+      operationId: listProjects
+      tags: [projects]
+      summary: List user's projects
+      parameters:
+        - $ref: '#/components/parameters/CursorParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Project list sorted by updatedAt descending
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProjectSummary'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      operationId: createProject
+      tags: [projects]
+      summary: Create project with AI auto-structuring
+      description: |
+        Streams structuring progress via SSE. Accepts text input (JSON) or file
+        upload (multipart).
+
+        SSE event types:
+        - `progress` — `{"message": "Analyzing input..."}` — status updates
+        - `clarification` — `{"questions": [...]}` — input too vague; stream
+          ends. Resubmit with `clarificationAnswers`.
+        - `completed` — `{"data": {...workspace...}}` — project created with
+          full workspace data (same shape as Workspace schema)
+        - `error` — `{"message": "..."}` — structuring failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectText'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CreateProjectFile'
+      responses:
+        '200':
+          description: SSE stream of structuring progress
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-Sent Events stream
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /v1/projects/{projectId}:
+    get:
+      operationId: getProject
+      tags: [projects]
+      summary: Get project config
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+      responses:
+        '200':
+          description: Project details
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Project'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      operationId: updateProject
+      tags: [projects]
+      summary: Update project config
+      description: |
+        Updates story configuration fields. Scenes with existing AI-generated or
+        edited drafts are automatically marked `needs_revision` when config
+        changes affect generation context (genre, tone, pov, etc.).
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProject'
+      responses:
+        '200':
+          description: Updated project
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Project'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+    delete:
+      operationId: deleteProject
+      tags: [projects]
+      summary: Soft-delete a project
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+      responses:
+        '204':
+          description: Project deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/projects/{projectId}/workspace:
+    get:
+      operationId: getWorkspace
+      tags: [projects]
+      summary: Get full workspace data
+      description: |
+        Returns project config, all tracks, scenes (with character assignments
+        but without draft content), characters, relationships, and connections
+        in a single response. Use getScene for individual scene draft content.
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+      responses:
+        '200':
+          description: Full workspace
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Workspace'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---- Tracks -------------------------------------------------------------
+
+  /v1/projects/{projectId}/tracks:
+    post:
+      operationId: createTrack
+      tags: [tracks]
+      summary: Create a timeline track
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTrack'
+      responses:
+        '201':
+          description: Track created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Track'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /v1/projects/{projectId}/tracks/{trackId}:
+    patch:
+      operationId: updateTrack
+      tags: [tracks]
+      summary: Update track label or position
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+        - $ref: '#/components/parameters/TrackIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTrack'
+      responses:
+        '200':
+          description: Track updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Track'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      operationId: deleteTrack
+      tags: [tracks]
+      summary: Delete a track
+      description: Returns 409 if track contains scenes. Delete or move scenes first.
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+        - $ref: '#/components/parameters/TrackIdParam'
+      responses:
+        '204':
+          description: Track deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  # ---- Scenes -------------------------------------------------------------
+
+  /v1/projects/{projectId}/scenes:
+    post:
+      operationId: createScene
+      tags: [scenes]
+      summary: Create a scene on a track
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateScene'
+      responses:
+        '201':
+          description: Scene created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Scene'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /v1/projects/{projectId}/scenes/{sceneId}:
+    get:
+      operationId: getScene
+      tags: [scenes]
+      summary: Get scene with latest draft
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+        - $ref: '#/components/parameters/SceneIdParam'
+      responses:
+        '200':
+          description: Scene with latest draft content
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/SceneDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      operationId: updateScene
+      tags: [scenes]
+      summary: Update scene metadata or position
+      description: |
+        Updates scene fields including title, plot summary, location, mood tags,
+        character assignments, timeline position, and track assignment.
+        Setting `trackId` moves the scene to a different track. Setting
+        `characterIds` replaces all character assignments for the scene.
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+        - $ref: '#/components/parameters/SceneIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateScene'
+      responses:
+        '200':
+          description: Scene updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Scene'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+    delete:
+      operationId: deleteScene
+      tags: [scenes]
+      summary: Delete a scene
+      description: Cascades to drafts, summary, connections, and character assignments.
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+        - $ref: '#/components/parameters/SceneIdParam'
+      responses:
+        '204':
+          description: Scene deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---- Connections --------------------------------------------------------
+
+  /v1/projects/{projectId}/connections:
+    post:
+      operationId: createConnection
+      tags: [connections]
+      summary: Create a branch or merge connection between scenes
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateConnection'
+      responses:
+        '201':
+          description: Connection created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/SceneConnection'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /v1/projects/{projectId}/connections/{connectionId}:
+    delete:
+      operationId: deleteConnection
+      tags: [connections]
+      summary: Delete a scene connection
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+        - $ref: '#/components/parameters/ConnectionIdParam'
+      responses:
+        '204':
+          description: Connection deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---- Characters ---------------------------------------------------------
+
+  /v1/projects/{projectId}/characters:
+    post:
+      operationId: createCharacter
+      tags: [characters]
+      summary: Create a character
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCharacter'
+      responses:
+        '201':
+          description: Character created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Character'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /v1/projects/{projectId}/characters/{characterId}:
+    get:
+      operationId: getCharacter
+      tags: [characters]
+      summary: Get character details
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+        - $ref: '#/components/parameters/CharacterIdParam'
+      responses:
+        '200':
+          description: Character details
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Character'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      operationId: updateCharacter
+      tags: [characters]
+      summary: Update character profile or graph position
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+        - $ref: '#/components/parameters/CharacterIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCharacter'
+      responses:
+        '200':
+          description: Character updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Character'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+    delete:
+      operationId: deleteCharacter
+      tags: [characters]
+      summary: Delete a character
+      description: |
+        Removes character from all scene assignments and deletes related
+        relationships via CASCADE.
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+        - $ref: '#/components/parameters/CharacterIdParam'
+      responses:
+        '204':
+          description: Character deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---- Relationships ------------------------------------------------------
+
+  /v1/projects/{projectId}/relationships:
+    post:
+      operationId: createRelationship
+      tags: [relationships]
+      summary: Create a character relationship
+      description: |
+        Creates a relationship between two characters. One relationship per
+        character pair. Character IDs are sorted internally (a < b) to
+        prevent duplicates.
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRelationship'
+      responses:
+        '201':
+          description: Relationship created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/CharacterRelationship'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /v1/projects/{projectId}/relationships/{relationshipId}:
+    patch:
+      operationId: updateRelationship
+      tags: [relationships]
+      summary: Update a character relationship
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+        - $ref: '#/components/parameters/RelationshipIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRelationship'
+      responses:
+        '200':
+          description: Relationship updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/CharacterRelationship'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+    delete:
+      operationId: deleteRelationship
+      tags: [relationships]
+      summary: Delete a character relationship
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+        - $ref: '#/components/parameters/RelationshipIdParam'
+      responses:
+        '204':
+          description: Relationship deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---- AI Generation (SSE) -----------------------------------------------
+
+  /v1/projects/{projectId}/scenes/{sceneId}/generate:
+    post:
+      operationId: generateSceneDraft
+      tags: [generation]
+      summary: Generate AI prose draft for a scene
+      description: |
+        Streams generated prose tokens via SSE. Auto-assembles prompt context
+        from: project config, scene details, involved characters and
+        relationships, compressed summaries of preceding scenes, simultaneous
+        events on other tracks, and next scene preview.
+
+        On completion, creates a new draft version and updates scene status.
+
+        SSE event types:
+        - `token` — `{"text": "..."}` — incremental prose token
+        - `completed` — `{"draft": {...}}` — generation complete with full Draft
+        - `error` — `{"message": "..."}` — generation failed
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+        - $ref: '#/components/parameters/SceneIdParam'
+      responses:
+        '200':
+          description: SSE stream of prose tokens
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-Sent Events stream
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /v1/projects/{projectId}/scenes/{sceneId}/edit:
+    post:
+      operationId: editSceneDraft
+      tags: [generation]
+      summary: Direction-based partial edit of a scene draft
+      description: |
+        Regenerates selected text based on a natural-language direction.
+        Streams replacement tokens via SSE. On completion, creates a new draft
+        version with source `ai_edit`.
+
+        If `selectedText` is null, the direction applies to the entire content.
+
+        SSE event types:
+        - `token` — `{"text": "..."}` — incremental replacement token
+        - `completed` — `{"draft": {...}}` — edit complete with full Draft
+        - `error` — `{"message": "..."}` — editing failed
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+        - $ref: '#/components/parameters/SceneIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EditDraftRequest'
+      responses:
+        '200':
+          description: SSE stream of replacement text
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-Sent Events stream
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  # ---- Drafts -------------------------------------------------------------
+
+  /v1/projects/{projectId}/scenes/{sceneId}/drafts:
+    get:
+      operationId: listDrafts
+      tags: [drafts]
+      summary: List draft versions for a scene
+      description: |
+        Returns draft metadata ordered by version descending. Content is
+        excluded — use getDraft for full content.
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+        - $ref: '#/components/parameters/SceneIdParam'
+      responses:
+        '200':
+          description: Draft version list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DraftSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      operationId: saveDraft
+      tags: [drafts]
+      summary: Save a manual draft
+      description: |
+        Creates a new draft version from user-edited content. Source is set to
+        `manual`. Scene status updates to `edited`.
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+        - $ref: '#/components/parameters/SceneIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDraft'
+      responses:
+        '201':
+          description: Draft saved
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Draft'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /v1/projects/{projectId}/scenes/{sceneId}/drafts/{version}:
+    get:
+      operationId: getDraft
+      tags: [drafts]
+      summary: Get a specific draft version with full content
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+        - $ref: '#/components/parameters/SceneIdParam'
+        - $ref: '#/components/parameters/VersionParam'
+      responses:
+        '200':
+          description: Draft version
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Draft'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---- Health -------------------------------------------------------------
+
+  /health:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Service health check
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    enum: [ok]
+                  database:
+                    type: string
+                    enum: [connected, disconnected]
+                  cache:
+                    type: string
+                    enum: [connected, disconnected]
+
+# ---------------------------------------------------------------------------
+# Components
+# ---------------------------------------------------------------------------
+components:
+
+  # ---- Security Schemes ---------------------------------------------------
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Self-issued JWT access token (15 min lifetime)
+
+  # ---- Reusable Parameters ------------------------------------------------
+
+  parameters:
+    ProjectIdParam:
+      name: projectId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    TrackIdParam:
+      name: trackId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    SceneIdParam:
+      name: sceneId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    CharacterIdParam:
+      name: characterId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    ConnectionIdParam:
+      name: connectionId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    RelationshipIdParam:
+      name: relationshipId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    VersionParam:
+      name: version
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+
+    CursorParam:
+      name: cursor
+      in: query
+      required: false
+      description: Pagination cursor from previous response
+      schema:
+        type: string
+
+    LimitParam:
+      name: limit
+      in: query
+      required: false
+      description: Number of items to return (1-100)
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+  # ---- Reusable Error Responses -------------------------------------------
+
+  responses:
+    BadRequest:
+      description: Malformed request syntax
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+
+    Forbidden:
+      description: Insufficient permissions
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+
+    Conflict:
+      description: Resource already exists or state conflict
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+
+    UnprocessableEntity:
+      description: Validation failed
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+
+    TooManyRequests:
+      description: Rate limit exceeded
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Seconds until rate limit resets
+        X-RateLimit-Limit:
+          schema:
+            type: integer
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+
+  # ---- Schemas ------------------------------------------------------------
+
+  schemas:
+
+    # ---- Errors (RFC 9457) ------------------------------------------------
+
+    ProblemDetail:
+      type: object
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+          example: 'https://api.narrex.app/errors/validation-failed'
+        title:
+          type: string
+          example: Validation Failed
+        status:
+          type: integer
+          example: 422
+        detail:
+          type: string
+        instance:
+          type: string
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldError'
+        requestId:
+          type: string
+
+    FieldError:
+      type: object
+      required: [field, code]
+      properties:
+        field:
+          type: string
+          example: title
+        code:
+          type: string
+          example: required
+        message:
+          type: string
+          example: Title is required
+
+    PaginationMeta:
+      type: object
+      properties:
+        limit:
+          type: integer
+        nextCursor:
+          type:
+            - string
+            - 'null'
+        hasMore:
+          type: boolean
+
+    # ---- Auth -------------------------------------------------------------
+
+    User:
+      type: object
+      required: [id, email, displayName, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        email:
+          type: string
+          format: email
+          readOnly: true
+        displayName:
+          type: string
+        profileImageUrl:
+          type:
+            - string
+            - 'null'
+          format: uri
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+
+    AuthTokens:
+      type: object
+      required: [accessToken, expiresIn]
+      properties:
+        accessToken:
+          type: string
+        expiresIn:
+          type: integer
+          description: Token lifetime in seconds
+          example: 900
+
+    # ---- Project ----------------------------------------------------------
+
+    Project:
+      type: object
+      required: [id, title, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        title:
+          type: string
+        genre:
+          type:
+            - string
+            - 'null'
+        theme:
+          type:
+            - string
+            - 'null'
+        eraLocation:
+          type:
+            - string
+            - 'null'
+        pov:
+          oneOf:
+            - $ref: '#/components/schemas/PovType'
+            - type: 'null'
+        tone:
+          type:
+            - string
+            - 'null'
+        sourceType:
+          type:
+            - string
+            - 'null'
+          enum: [text, file, null]
+          readOnly: true
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+
+    ProjectSummary:
+      type: object
+      required: [id, title, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        genre:
+          type:
+            - string
+            - 'null'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateProjectText:
+      type: object
+      required: [sourceInput]
+      properties:
+        sourceInput:
+          type: string
+          description: Free-form text describing the story idea
+          minLength: 1
+        clarificationAnswers:
+          type: array
+          items:
+            type: string
+          description: Answers to clarification questions from a previous attempt
+
+    CreateProjectFile:
+      type: object
+      required: [file]
+      properties:
+        file:
+          type: string
+          format: binary
+          description: Story input file (.md, .txt, or Notion .zip export)
+
+    UpdateProject:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 300
+        genre:
+          type:
+            - string
+            - 'null'
+          maxLength: 100
+        theme:
+          type:
+            - string
+            - 'null'
+          maxLength: 500
+        eraLocation:
+          type:
+            - string
+            - 'null'
+          maxLength: 500
+        pov:
+          oneOf:
+            - $ref: '#/components/schemas/PovType'
+            - type: 'null'
+        tone:
+          type:
+            - string
+            - 'null'
+          maxLength: 500
+
+    # ---- Workspace --------------------------------------------------------
+
+    Workspace:
+      type: object
+      required: [project, tracks, scenes, characters, relationships, connections]
+      properties:
+        project:
+          $ref: '#/components/schemas/Project'
+        tracks:
+          type: array
+          items:
+            $ref: '#/components/schemas/Track'
+        scenes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Scene'
+        characters:
+          type: array
+          items:
+            $ref: '#/components/schemas/Character'
+        relationships:
+          type: array
+          items:
+            $ref: '#/components/schemas/CharacterRelationship'
+        connections:
+          type: array
+          items:
+            $ref: '#/components/schemas/SceneConnection'
+
+    # ---- Track ------------------------------------------------------------
+
+    Track:
+      type: object
+      required: [id, projectId, position, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        projectId:
+          type: string
+          format: uuid
+          readOnly: true
+        position:
+          type: number
+          format: double
+          description: Vertical ordering position
+        label:
+          type:
+            - string
+            - 'null'
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+
+    CreateTrack:
+      type: object
+      properties:
+        label:
+          type: string
+          maxLength: 200
+        position:
+          type: number
+          format: double
+          description: Vertical ordering position. Auto-assigned if omitted.
+
+    UpdateTrack:
+      type: object
+      properties:
+        label:
+          type:
+            - string
+            - 'null'
+          maxLength: 200
+        position:
+          type: number
+          format: double
+
+    # ---- Scene ------------------------------------------------------------
+
+    Scene:
+      type: object
+      required: [id, trackId, projectId, startPosition, duration, status, title, characterIds, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        trackId:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+          readOnly: true
+        startPosition:
+          type: number
+          format: double
+          description: Horizontal timeline position
+        duration:
+          type: number
+          format: double
+          description: Scene extent on the timeline
+        status:
+          $ref: '#/components/schemas/SceneStatus'
+        title:
+          type: string
+        plotSummary:
+          type:
+            - string
+            - 'null'
+        location:
+          type:
+            - string
+            - 'null'
+        moodTags:
+          type: array
+          items:
+            type: string
+          default: []
+        characterIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: IDs of characters assigned to this scene
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+
+    SceneDetail:
+      description: Scene with its latest draft content
+      allOf:
+        - $ref: '#/components/schemas/Scene'
+        - type: object
+          properties:
+            latestDraft:
+              oneOf:
+                - $ref: '#/components/schemas/Draft'
+                - type: 'null'
+
+    CreateScene:
+      type: object
+      required: [trackId, title]
+      properties:
+        trackId:
+          type: string
+          format: uuid
+        title:
+          type: string
+          maxLength: 300
+        startPosition:
+          type: number
+          format: double
+          description: Auto-assigned to end of track if omitted
+        duration:
+          type: number
+          format: double
+          default: 1.0
+          minimum: 0.1
+        plotSummary:
+          type: string
+          maxLength: 5000
+        location:
+          type: string
+          maxLength: 500
+        moodTags:
+          type: array
+          items:
+            type: string
+            maxLength: 50
+          maxItems: 10
+        characterIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    UpdateScene:
+      type: object
+      properties:
+        trackId:
+          type: string
+          format: uuid
+        title:
+          type: string
+          maxLength: 300
+        startPosition:
+          type: number
+          format: double
+        duration:
+          type: number
+          format: double
+          minimum: 0.1
+        plotSummary:
+          type:
+            - string
+            - 'null'
+          maxLength: 5000
+        location:
+          type:
+            - string
+            - 'null'
+          maxLength: 500
+        moodTags:
+          type: array
+          items:
+            type: string
+            maxLength: 50
+          maxItems: 10
+        characterIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    # ---- Scene Connection -------------------------------------------------
+
+    SceneConnection:
+      type: object
+      required: [id, projectId, sourceSceneId, targetSceneId, connectionType, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        projectId:
+          type: string
+          format: uuid
+          readOnly: true
+        sourceSceneId:
+          type: string
+          format: uuid
+        targetSceneId:
+          type: string
+          format: uuid
+        connectionType:
+          $ref: '#/components/schemas/ConnectionType'
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+
+    CreateConnection:
+      type: object
+      required: [sourceSceneId, targetSceneId, connectionType]
+      properties:
+        sourceSceneId:
+          type: string
+          format: uuid
+        targetSceneId:
+          type: string
+          format: uuid
+        connectionType:
+          $ref: '#/components/schemas/ConnectionType'
+
+    # ---- Character --------------------------------------------------------
+
+    Character:
+      type: object
+      required: [id, projectId, name, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        projectId:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+        personality:
+          type:
+            - string
+            - 'null'
+        appearance:
+          type:
+            - string
+            - 'null'
+        secrets:
+          type:
+            - string
+            - 'null'
+        motivation:
+          type:
+            - string
+            - 'null'
+        profileImageUrl:
+          type:
+            - string
+            - 'null'
+          format: uri
+        graphX:
+          type:
+            - number
+            - 'null'
+          format: double
+        graphY:
+          type:
+            - number
+            - 'null'
+          format: double
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+
+    CreateCharacter:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        personality:
+          type: string
+          maxLength: 2000
+        appearance:
+          type: string
+          maxLength: 2000
+        secrets:
+          type: string
+          maxLength: 2000
+        motivation:
+          type: string
+          maxLength: 2000
+        profileImageUrl:
+          type: string
+          format: uri
+        graphX:
+          type: number
+          format: double
+        graphY:
+          type: number
+          format: double
+
+    UpdateCharacter:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        personality:
+          type:
+            - string
+            - 'null'
+          maxLength: 2000
+        appearance:
+          type:
+            - string
+            - 'null'
+          maxLength: 2000
+        secrets:
+          type:
+            - string
+            - 'null'
+          maxLength: 2000
+        motivation:
+          type:
+            - string
+            - 'null'
+          maxLength: 2000
+        profileImageUrl:
+          type:
+            - string
+            - 'null'
+          format: uri
+        graphX:
+          type:
+            - number
+            - 'null'
+          format: double
+        graphY:
+          type:
+            - number
+            - 'null'
+          format: double
+
+    # ---- Character Relationship -------------------------------------------
+
+    CharacterRelationship:
+      type: object
+      required: [id, projectId, characterAId, characterBId, label, visualType, direction, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        projectId:
+          type: string
+          format: uuid
+          readOnly: true
+        characterAId:
+          type: string
+          format: uuid
+        characterBId:
+          type: string
+          format: uuid
+        label:
+          type: string
+        visualType:
+          $ref: '#/components/schemas/RelationshipVisual'
+        direction:
+          $ref: '#/components/schemas/RelationshipDirection'
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+
+    CreateRelationship:
+      type: object
+      required: [characterAId, characterBId, label, visualType, direction]
+      properties:
+        characterAId:
+          type: string
+          format: uuid
+        characterBId:
+          type: string
+          format: uuid
+        label:
+          type: string
+          maxLength: 200
+        visualType:
+          $ref: '#/components/schemas/RelationshipVisual'
+        direction:
+          $ref: '#/components/schemas/RelationshipDirection'
+
+    UpdateRelationship:
+      type: object
+      properties:
+        label:
+          type: string
+          maxLength: 200
+        visualType:
+          $ref: '#/components/schemas/RelationshipVisual'
+        direction:
+          $ref: '#/components/schemas/RelationshipDirection'
+
+    # ---- Draft ------------------------------------------------------------
+
+    Draft:
+      type: object
+      required: [id, sceneId, version, content, charCount, source, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        sceneId:
+          type: string
+          format: uuid
+          readOnly: true
+        version:
+          type: integer
+          readOnly: true
+        content:
+          type: string
+        charCount:
+          type: integer
+          readOnly: true
+          description: Korean character count (char_length)
+        source:
+          type: string
+          enum: [ai_generation, ai_edit, manual]
+          readOnly: true
+        editDirection:
+          type:
+            - string
+            - 'null'
+          readOnly: true
+          description: Direction used for ai_edit drafts
+        model:
+          type:
+            - string
+            - 'null'
+          readOnly: true
+        provider:
+          type:
+            - string
+            - 'null'
+          readOnly: true
+        tokenCountInput:
+          type:
+            - integer
+            - 'null'
+          readOnly: true
+        tokenCountOutput:
+          type:
+            - integer
+            - 'null'
+          readOnly: true
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+
+    DraftSummary:
+      type: object
+      required: [id, version, charCount, source, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        version:
+          type: integer
+        charCount:
+          type: integer
+        source:
+          type: string
+          enum: [ai_generation, ai_edit, manual]
+        editDirection:
+          type:
+            - string
+            - 'null'
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateDraft:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+          description: User-edited prose content
+          minLength: 1
+
+    # ---- Generation -------------------------------------------------------
+
+    EditDraftRequest:
+      type: object
+      required: [direction, content]
+      properties:
+        content:
+          type: string
+          description: Current draft content (may include unsaved edits)
+        selectedText:
+          type:
+            - string
+            - 'null'
+          description: Text passage to edit. If null, direction applies to entire content.
+        direction:
+          type: string
+          description: Natural-language editing direction (e.g. "more tension", "add dialogue")
+          minLength: 1
+          maxLength: 500
+
+    # ---- Enums ------------------------------------------------------------
+
+    SceneStatus:
+      type: string
+      enum: [empty, ai_draft, edited, needs_revision]
+
+    ConnectionType:
+      type: string
+      enum: [branch, merge]
+
+    RelationshipVisual:
+      type: string
+      enum: [solid, dashed, arrowed]
+
+    RelationshipDirection:
+      type: string
+      enum: [bidirectional, a_to_b, b_to_a]
+
+    PovType:
+      type: string
+      enum: [first_person, third_limited, third_omniscient]
+
+# ---------------------------------------------------------------------------
+# Global Security
+# ---------------------------------------------------------------------------
+security:
+  - bearerAuth: []
