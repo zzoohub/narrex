@@ -1,5 +1,5 @@
-import { createSignal, Show, For } from 'solid-js'
-import { Link } from '@tanstack/solid-router'
+import { createSignal, Show, For, onCleanup } from 'solid-js'
+import { Link, useNavigate } from '@tanstack/solid-router'
 import { useI18n } from '@/shared/lib/i18n'
 import {
   Button,
@@ -10,6 +10,8 @@ import {
   IconCheck,
   IconSparkles,
 } from '@/shared/ui'
+import { streamStructure, type StructureRequest } from '@/features/structuring'
+import type { SSEClarificationEvent, SSECompletedEvent, SSEErrorEvent, SSEProgressEvent } from '@/shared/api/sse'
 
 type CreationState = 'input' | 'clarify' | 'processing' | 'error'
 
@@ -21,13 +23,27 @@ const processingSteps = [
 
 export function ProjectCreationView() {
   const { t } = useI18n()
+  const navigate = useNavigate()
   const [state, setState] = createSignal<CreationState>('input')
   const [text, setText] = createSignal('')
   const [file, setFile] = createSignal<File | null>(null)
+  const [fileContent, setFileContent] = createSignal<string | null>(null)
   const [isDragging, setIsDragging] = createSignal(false)
   const [completedSteps, setCompletedSteps] = createSignal(0)
+  const [clarificationQuestions, setClarificationQuestions] = createSignal<
+    Array<{ question: string; field: string }>
+  >([])
+  const [clarificationAnswers, setClarificationAnswers] = createSignal<Record<string, string>>({})
+
+  let abortStream: (() => void) | null = null
+
+  onCleanup(() => {
+    if (abortStream) abortStream()
+  })
 
   const canSubmit = () => text().trim().length > 0 || file() !== null
+
+  // ---- File handling ----
 
   function handleDragOver(e: DragEvent) {
     e.preventDefault()
@@ -40,25 +56,106 @@ export function ProjectCreationView() {
     e.preventDefault()
     setIsDragging(false)
     const dropped = e.dataTransfer?.files[0]
-    if (dropped) setFile(dropped)
+    if (dropped) {
+      setFile(dropped)
+      readFileContent(dropped)
+    }
   }
   function handleFileInput(e: Event) {
     const input = e.target as HTMLInputElement
-    if (input.files?.[0]) setFile(input.files[0])
+    if (input.files?.[0]) {
+      setFile(input.files[0])
+      readFileContent(input.files[0])
+    }
   }
 
-  function handleSubmit() {
+  function readFileContent(f: File) {
+    const reader = new FileReader()
+    reader.onload = () => {
+      setFileContent(reader.result as string)
+    }
+    reader.onerror = () => {
+      setFileContent(null)
+    }
+    reader.readAsText(f)
+  }
+
+  function removeFile() {
+    setFile(null)
+    setFileContent(null)
+  }
+
+  // ---- Submit & SSE streaming ----
+
+  async function handleSubmit() {
     setState('processing')
-    // Simulate staged processing
-    let step = 0
-    const interval = setInterval(() => {
-      step++
-      setCompletedSteps(step)
-      if (step >= processingSteps.length) {
-        clearInterval(interval)
-        // Would navigate to workspace
+    setCompletedSteps(0)
+
+    const sourceInput = fileContent() ?? text()
+    const answers = Object.values(clarificationAnswers()).filter(Boolean)
+
+    const req: StructureRequest = { sourceInput }
+    if (answers.length > 0) req.clarificationAnswers = answers
+    const { stream, abort } = streamStructure(req)
+    abortStream = abort
+
+    try {
+      for await (const event of stream) {
+        switch (event.event) {
+          case 'progress': {
+            const progressData = event.data as SSEProgressEvent
+            // Map progress messages to step completion
+            const msg = progressData.message?.toLowerCase() ?? ''
+            if (msg.includes('character') || msg.includes('등장인물')) {
+              setCompletedSteps((s) => Math.max(s, 1))
+            } else if (msg.includes('timeline') || msg.includes('타임라인') || msg.includes('plot')) {
+              setCompletedSteps((s) => Math.max(s, 2))
+            } else if (msg.includes('world') || msg.includes('세계')) {
+              setCompletedSteps((s) => Math.max(s, 3))
+            }
+            break
+          }
+          case 'clarification': {
+            const clarData = event.data as SSEClarificationEvent
+            setClarificationQuestions(clarData.questions)
+            setState('clarify')
+            return
+          }
+          case 'completed': {
+            setCompletedSteps(processingSteps.length)
+            const completedData = event.data as SSECompletedEvent
+            const workspace = completedData.data as { project?: { id: string } } | undefined
+            const projectId = workspace?.project?.id
+            if (projectId) {
+              // Small delay so user sees the completion state
+              setTimeout(() => {
+                navigate({ to: '/project/$id', params: { id: projectId } })
+              }, 600)
+            }
+            return
+          }
+          case 'error': {
+            const errorData = event.data as SSEErrorEvent
+            console.error('SSE error:', errorData.message)
+            setState('error')
+            return
+          }
+        }
       }
-    }, 2000)
+    } catch (err) {
+      console.error('Stream error:', err)
+      setState('error')
+    } finally {
+      abortStream = null
+    }
+  }
+
+  function handleClarifySubmit() {
+    handleSubmit()
+  }
+
+  function updateClarificationAnswer(field: string, value: string) {
+    setClarificationAnswers((prev) => ({ ...prev, [field]: value }))
   }
 
   return (
@@ -107,7 +204,7 @@ export function ProjectCreationView() {
                     </span>
                     <button
                       type="button"
-                      onClick={() => setFile(null)}
+                      onClick={removeFile}
                       class="p-1 rounded-md text-fg-muted hover:text-fg transition-colors cursor-pointer"
                     >
                       <IconX size={16} />
@@ -169,26 +266,50 @@ export function ProjectCreationView() {
             </h2>
 
             <div class="space-y-5 max-w-lg mx-auto">
-              {[
-                'creation.clarify.genre',
-                'creation.clarify.character',
-                'creation.clarify.conflict',
-              ].map((key) => (
-                <label class="flex flex-col gap-2">
-                  <span class="text-sm text-fg-secondary">{t(key)}</span>
-                  <input
-                    type="text"
-                    class="h-10 px-4 rounded-xl text-sm bg-surface border border-border-default text-fg placeholder:text-fg-muted hover:border-accent/30 focus:border-accent focus:outline-none focus:ring-2 focus:ring-focus-ring transition-colors"
-                  />
-                </label>
-              ))}
+              <Show
+                when={clarificationQuestions().length > 0}
+                fallback={
+                  <>
+                    {(['creation.clarify.genre', 'creation.clarify.character', 'creation.clarify.conflict'] as const).map((key, idx) => (
+                      <label class="flex flex-col gap-2">
+                        <span class="text-sm text-fg-secondary">{t(key)}</span>
+                        <input
+                          type="text"
+                          onInput={(e) =>
+                            updateClarificationAnswer(
+                              `default_${idx}`,
+                              e.currentTarget.value,
+                            )
+                          }
+                          class="h-10 px-4 rounded-xl text-sm bg-surface border border-border-default text-fg placeholder:text-fg-muted hover:border-accent/30 focus:border-accent focus:outline-none focus:ring-2 focus:ring-focus-ring transition-colors"
+                        />
+                      </label>
+                    ))}
+                  </>
+                }
+              >
+                <For each={clarificationQuestions()}>
+                  {(q) => (
+                    <label class="flex flex-col gap-2">
+                      <span class="text-sm text-fg-secondary">{q.question}</span>
+                      <input
+                        type="text"
+                        onInput={(e) =>
+                          updateClarificationAnswer(q.field, e.currentTarget.value)
+                        }
+                        class="h-10 px-4 rounded-xl text-sm bg-surface border border-border-default text-fg placeholder:text-fg-muted hover:border-accent/30 focus:border-accent focus:outline-none focus:ring-2 focus:ring-focus-ring transition-colors"
+                      />
+                    </label>
+                  )}
+                </For>
+              </Show>
 
               <div class="flex justify-center pt-4">
                 <Button
                   variant="primary"
                   size="lg"
                   icon={<IconSparkles size={18} />}
-                  onClick={handleSubmit}
+                  onClick={handleClarifySubmit}
                 >
                   {t('creation.submit')}
                 </Button>

@@ -1,7 +1,10 @@
-import { createSignal, Show } from 'solid-js'
+import { createSignal, createEffect, Show, onCleanup } from 'solid-js'
 import { useI18n } from '@/shared/lib/i18n'
+import { useWorkspace } from '@/features/workspace'
+import { streamGeneration, streamEdit } from '@/features/generation'
 import {
   Button,
+  Dialog,
   IconChevronLeft,
   IconChevronRight,
   IconSparkles,
@@ -9,30 +12,201 @@ import {
   IconItalic,
   IconStop,
 } from '@/shared/ui'
-import type { Scene } from '@/shared/types'
 
-interface EditorPanelProps {
-  selectedScene: Scene | null
-  prevSceneTitle?: string
-  nextSceneTitle?: string
-  onSelectPrev?: () => void
-  onSelectNext?: () => void
-}
-
-export function EditorPanel(props: EditorPanelProps) {
+export function EditorPanel() {
   const { t } = useI18n()
-  const [isGenerating, setIsGenerating] = createSignal(false)
-  const [showAiInput, setShowAiInput] = createSignal(false)
+  const ws = useWorkspace()
 
-  const charCount = () => props.selectedScene?.content.length ?? 0
-  const hasDraft = () => (props.selectedScene?.content.length ?? 0) > 0
+  // ---- Local state ----------------------------------------------------------
+
+  let abortRef: (() => void) | null = null
+  let editorEl: HTMLDivElement | undefined
+
+  const [showToolbar, setShowToolbar] = createSignal(false)
+  const [toolbarPos, setToolbarPos] = createSignal({ x: 0, y: 0 })
+  const [showAiInput, setShowAiInput] = createSignal(false)
+  const [aiDirection, setAiDirection] = createSignal('')
+  const [showRegenDialog, setShowRegenDialog] = createSignal(false)
+
+  // ---- Derived --------------------------------------------------------------
+
+  const scene = () => ws.selectedScene()
+  const hasDraft = () => {
+    const s = scene()
+    return s ? ws.draftContent(s.id).length > 0 : false
+  }
+  const charCount = () => {
+    const s = scene()
+    if (!s) return 0
+    if (ws.isGenerating() && ws.generatingSceneId() === s.id) {
+      return ws.streamedContent().length
+    }
+    return ws.draftContent(s.id).length
+  }
+
+  // ---- Selection-change listener for floating toolbar -----------------------
+
+  function handleSelectionChange() {
+    if (ws.isGenerating()) {
+      setShowToolbar(false)
+      return
+    }
+    const sel = window.getSelection()
+    if (!sel || sel.isCollapsed || !sel.rangeCount) {
+      setShowToolbar(false)
+      setShowAiInput(false)
+      return
+    }
+    // Only show toolbar if selection is within our editor
+    if (editorEl && !editorEl.contains(sel.anchorNode)) {
+      setShowToolbar(false)
+      setShowAiInput(false)
+      return
+    }
+    const range = sel.getRangeAt(0)
+    const rect = range.getBoundingClientRect()
+    setToolbarPos({ x: rect.left + rect.width / 2, y: rect.top })
+    setShowToolbar(true)
+  }
+
+  document.addEventListener('selectionchange', handleSelectionChange)
+  onCleanup(() => {
+    document.removeEventListener('selectionchange', handleSelectionChange)
+  })
+
+  // ---- Sync editor content when scene changes ------------------------------
+
+  createEffect(() => {
+    const s = scene()
+    if (!editorEl || !s) return
+    const content = ws.draftContent(s.id)
+    // Only update DOM if it doesn't match (avoids clobbering cursor position)
+    if (editorEl.textContent !== content) {
+      editorEl.textContent = content
+    }
+  })
+
+  // ---- AI generation --------------------------------------------------------
+
+  async function handleGenerate() {
+    const s = scene()
+    if (!s) return
+    ws.startGeneration(s.id)
+    const { stream, abort } = streamGeneration(ws.projectId, s.id)
+    abortRef = abort
+    try {
+      for await (const event of stream) {
+        if (event.event === 'token') {
+          ws.appendStreamContent((event.data as { text: string }).text)
+        } else if (event.event === 'completed') {
+          ws.finishGeneration(ws.streamedContent())
+          break
+        }
+      }
+    } catch {
+      ws.cancelGeneration()
+    } finally {
+      abortRef = null
+    }
+  }
+
+  function handleStop() {
+    abortRef?.()
+    abortRef = null
+    ws.cancelGeneration()
+  }
+
+  function handleRegenerate() {
+    setShowRegenDialog(true)
+  }
+
+  function confirmRegenerate() {
+    const s = scene()
+    if (!s) return
+    ws.setDraftContent(s.id, '')
+    handleGenerate()
+  }
+
+  // ---- AI edit (floating toolbar) -------------------------------------------
+
+  async function handleAiEdit() {
+    const s = scene()
+    if (!s) return
+    const sel = window.getSelection()
+    const selectedText = sel?.toString() ?? ''
+    const direction = aiDirection()
+    if (!direction.trim()) return
+
+    setShowAiInput(false)
+    setShowToolbar(false)
+    setAiDirection('')
+
+    ws.startGeneration(s.id)
+    const { stream, abort } = streamEdit(ws.projectId, s.id, {
+      content: ws.draftContent(s.id),
+      selectedText: selectedText || null,
+      direction,
+    })
+    abortRef = abort
+    try {
+      for await (const event of stream) {
+        if (event.event === 'token') {
+          ws.appendStreamContent((event.data as { text: string }).text)
+        } else if (event.event === 'completed') {
+          ws.finishGeneration(ws.streamedContent())
+          break
+        }
+      }
+    } catch {
+      ws.cancelGeneration()
+    } finally {
+      abortRef = null
+    }
+  }
+
+  // ---- Formatting commands --------------------------------------------------
+
+  function execBold() {
+    document.execCommand('bold')
+  }
+
+  function execItalic() {
+    document.execCommand('italic')
+  }
+
+  // ---- Navigation -----------------------------------------------------------
+
+  function handlePrev() {
+    const prev = ws.prevScene()
+    if (prev) ws.selectScene(prev.id)
+  }
+
+  function handleNext() {
+    const next = ws.nextScene()
+    if (next) ws.selectScene(next.id)
+  }
+
+  // ---- Editor input handler -------------------------------------------------
+
+  function handleEditorInput() {
+    const s = scene()
+    if (!s || !editorEl) return
+    const text = editorEl.textContent ?? ''
+    ws.setDraftContent(s.id, text)
+    // Mark as edited on first manual edit after AI draft
+    if (s.status === 'ai_draft') {
+      ws.updateScene(s.id, { title: s.title } as any)
+    }
+  }
+
+  // ---- Render ---------------------------------------------------------------
 
   return (
     <div class="flex flex-col h-full bg-canvas">
       <Show
-        when={props.selectedScene}
+        when={scene()}
         fallback={
-          /* ── No scene selected ────────────────────────────────── */
+          /* -- No scene selected ----------------------------------------- */
           <div class="flex-1 flex flex-col items-center justify-center px-8 text-center">
             <div class="w-20 h-20 rounded-2xl bg-surface border border-border-default flex items-center justify-center mb-6">
               <svg
@@ -53,28 +227,28 @@ export function EditorPanel(props: EditorPanelProps) {
           </div>
         }
       >
-        {(scene) => (
+        {(s) => (
           <>
-            {/* ── Editor header ──────────────────────────────────── */}
+            {/* -- Header -------------------------------------------------- */}
             <div class="flex items-center justify-between px-4 h-11 border-b border-border-subtle flex-shrink-0">
               {/* Prev / title / next */}
               <div class="flex items-center gap-2 min-w-0">
                 <button
                   type="button"
-                  onClick={props.onSelectPrev}
-                  disabled={!props.prevSceneTitle}
+                  onClick={handlePrev}
+                  disabled={!ws.prevScene()}
                   class="p-1 rounded-md text-fg-muted hover:text-fg hover:bg-surface-raised disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
                   aria-label="Previous scene"
                 >
                   <IconChevronLeft size={16} />
                 </button>
                 <span class="text-sm font-medium text-fg truncate">
-                  {scene().title}
+                  {s().title}
                 </span>
                 <button
                   type="button"
-                  onClick={props.onSelectNext}
-                  disabled={!props.nextSceneTitle}
+                  onClick={handleNext}
+                  disabled={!ws.nextScene()}
                   class="p-1 rounded-md text-fg-muted hover:text-fg hover:bg-surface-raised disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
                   aria-label="Next scene"
                 >
@@ -84,17 +258,28 @@ export function EditorPanel(props: EditorPanelProps) {
 
               {/* Actions */}
               <div class="flex items-center gap-2">
-                <Show when={hasDraft()}>
-                  <Button variant="ghost" size="sm">
+                <Show when={hasDraft() && !ws.isGenerating()}>
+                  <Button variant="ghost" size="sm" onClick={handleRegenerate}>
                     {t('editor.regenerate')}
                   </Button>
                 </Show>
-                <Show when={!isGenerating()}>
+                <Show when={ws.isGenerating() && ws.generatingSceneId() === s().id}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={<IconStop size={14} />}
+                    onClick={handleStop}
+                  >
+                    {t('editor.stop')}
+                  </Button>
+                </Show>
+                <Show when={!ws.isGenerating()}>
                   <Button
                     variant="primary"
                     size="sm"
                     icon={<IconSparkles size={14} />}
-                    onClick={() => setIsGenerating(true)}
+                    onClick={handleGenerate}
+                    disabled={!s().plotSummary}
                   >
                     {t('editor.generate')}
                   </Button>
@@ -102,12 +287,12 @@ export function EditorPanel(props: EditorPanelProps) {
               </div>
             </div>
 
-            {/* ── Editor body ────────────────────────────────────── */}
+            {/* -- Body ---------------------------------------------------- */}
             <div class="flex-1 overflow-y-auto relative">
               <Show
-                when={hasDraft() || isGenerating()}
+                when={hasDraft() || (ws.isGenerating() && ws.generatingSceneId() === s().id)}
                 fallback={
-                  /* ── Empty: scene selected, no draft ─────────── */
+                  /* -- Empty: scene selected, no draft -------------------- */
                   <div class="flex flex-col items-center justify-center h-full px-8 text-center">
                     <p class="text-lg font-display text-fg mb-2">
                       {t('editor.readyTitle')}
@@ -119,11 +304,12 @@ export function EditorPanel(props: EditorPanelProps) {
                       variant="primary"
                       size="lg"
                       icon={<IconSparkles size={18} />}
-                      disabled={!scene().plotSummary}
+                      disabled={!s().plotSummary}
+                      onClick={handleGenerate}
                     >
                       {t('editor.generate')}
                     </Button>
-                    <Show when={!scene().plotSummary}>
+                    <Show when={!s().plotSummary}>
                       <p class="text-xs text-fg-muted mt-3">
                         {t('sceneDetail.plotPlaceholder')}
                       </p>
@@ -131,29 +317,32 @@ export function EditorPanel(props: EditorPanelProps) {
                   </div>
                 }
               >
-                {/* ── Prose editor ─────────────────────────────── */}
+                {/* -- Prose editor ---------------------------------------- */}
                 <div class="p-6 max-w-2xl mx-auto">
                   <Show
-                    when={!isGenerating()}
+                    when={!(ws.isGenerating() && ws.generatingSceneId() === s().id)}
                     fallback={
                       /* Streaming generation state */
                       <div class="animate-fade-in">
                         <div
-                          class="prose prose-sm text-fg leading-relaxed font-body stream-cursor"
-                          style={{ "white-space": "pre-wrap" }}
+                          class="text-fg text-[15px] leading-[1.85] stream-cursor"
+                          style={{ 'white-space': 'pre-wrap' }}
                         >
-                          {scene().content || ''}
+                          {ws.streamedContent()}
                         </div>
                         <div class="flex items-center gap-3 mt-6">
                           <div class="flex items-center gap-2 text-accent text-sm">
-                            <span class="inline-block w-2 h-2 rounded-full bg-accent" style={{ animation: 'pulse-dot 1.2s ease-in-out infinite' }} />
+                            <span
+                              class="inline-block w-2 h-2 rounded-full bg-accent"
+                              style={{ animation: 'pulse-dot 1.2s ease-in-out infinite' }}
+                            />
                             {t('editor.generating')}
                           </div>
                           <Button
                             variant="ghost"
                             size="sm"
                             icon={<IconStop size={14} />}
-                            onClick={() => setIsGenerating(false)}
+                            onClick={handleStop}
                           >
                             {t('editor.stop')}
                           </Button>
@@ -163,28 +352,37 @@ export function EditorPanel(props: EditorPanelProps) {
                   >
                     {/* Editable content */}
                     <div
+                      ref={editorEl}
                       contentEditable
-                      class="outline-none text-fg leading-[1.85] text-[15px] min-h-[50vh]"
-                      style={{ "white-space": "pre-wrap" }}
+                      class="outline-none text-fg text-[15px] leading-[1.85] min-h-[50vh]"
+                      style={{ 'white-space': 'pre-wrap' }}
                       spellcheck={false}
-                    >
-                      {scene().content}
-                    </div>
+                      onInput={handleEditorInput}
+                    />
                   </Show>
                 </div>
 
-                {/* ── Floating toolbar (shown when text selected) ─ */}
-                <Show when={!isGenerating()}>
-                  <div class="fixed bottom-24 left-1/2 -translate-x-1/2 flex items-center gap-1 px-2 py-1.5 bg-surface border border-border-default rounded-xl shadow-xl shadow-canvas/50 z-30 animate-scale-in">
+                {/* -- Floating toolbar (shown when text selected) --------- */}
+                <Show when={showToolbar() && !ws.isGenerating()}>
+                  <div
+                    class="fixed flex items-center gap-1 px-2 py-1.5 bg-surface border border-border-default rounded-xl shadow-xl shadow-canvas/50 z-30 animate-scale-in"
+                    style={{
+                      left: `${toolbarPos().x}px`,
+                      top: `${toolbarPos().y - 48}px`,
+                      transform: 'translateX(-50%)',
+                    }}
+                  >
                     <button
                       type="button"
                       class="p-2 rounded-lg text-fg-secondary hover:text-fg hover:bg-surface-raised transition-colors cursor-pointer"
+                      onClick={execBold}
                     >
                       <IconBold size={16} />
                     </button>
                     <button
                       type="button"
                       class="p-2 rounded-lg text-fg-secondary hover:text-fg hover:bg-surface-raised transition-colors cursor-pointer"
+                      onClick={execItalic}
                     >
                       <IconItalic size={16} />
                     </button>
@@ -200,19 +398,31 @@ export function EditorPanel(props: EditorPanelProps) {
                   </div>
                 </Show>
 
-                {/* ── AI direction input ──────────────────────── */}
+                {/* -- AI direction input ---------------------------------- */}
                 <Show when={showAiInput()}>
-                  <div class="fixed bottom-36 left-1/2 -translate-x-1/2 w-96 p-3 bg-surface border border-accent/30 rounded-xl shadow-2xl shadow-accent/10 z-30 animate-scale-in">
+                  <div
+                    class="fixed w-96 p-3 bg-surface border border-accent/30 rounded-xl shadow-2xl shadow-accent/10 z-30 animate-scale-in"
+                    style={{
+                      left: `${toolbarPos().x}px`,
+                      top: `${toolbarPos().y - 100}px`,
+                      transform: 'translateX(-50%)',
+                    }}
+                  >
                     <label class="text-xs text-fg-secondary font-medium mb-2 block">
                       {t('editor.aiDirection')}
                     </label>
                     <div class="flex gap-2">
                       <input
                         type="text"
+                        value={aiDirection()}
+                        onInput={(e) => setAiDirection(e.currentTarget.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleAiEdit()
+                        }}
                         placeholder={t('editor.aiDirection')}
                         class="flex-1 h-9 px-3 rounded-lg text-sm bg-canvas border border-border-default text-fg placeholder:text-fg-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-focus-ring transition-colors"
                       />
-                      <Button variant="primary" size="sm">
+                      <Button variant="primary" size="sm" onClick={handleAiEdit}>
                         {t('editor.apply')}
                       </Button>
                     </div>
@@ -221,13 +431,24 @@ export function EditorPanel(props: EditorPanelProps) {
               </Show>
             </div>
 
-            {/* ── Footer ────────────────────────────────────────── */}
+            {/* -- Footer -------------------------------------------------- */}
             <div class="flex items-center justify-between px-4 h-8 border-t border-border-subtle text-xs text-fg-muted flex-shrink-0">
               <span>
                 {charCount().toLocaleString()} {t('editor.characters')}
               </span>
               <span>{t('common.saved')}</span>
             </div>
+
+            {/* -- Regenerate confirmation dialog -------------------------- */}
+            <Dialog
+              open={showRegenDialog()}
+              onClose={() => setShowRegenDialog(false)}
+              title={t('editor.regenerateConfirmTitle')}
+              description={t('editor.regenerateConfirmDescription')}
+              confirmLabel={t('editor.regenerateConfirm')}
+              confirmVariant="danger"
+              onConfirm={confirmRegenerate}
+            />
           </>
         )}
       </Show>

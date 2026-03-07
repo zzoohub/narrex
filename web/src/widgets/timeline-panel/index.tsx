@@ -1,4 +1,13 @@
-import { For, Show, createSignal } from 'solid-js'
+import {
+  For,
+  Show,
+  createSignal,
+  createMemo,
+  createEffect,
+  onCleanup,
+  batch,
+} from 'solid-js'
+import type { JSX } from 'solid-js'
 import { useI18n } from '@/shared/lib/i18n'
 import {
   Button,
@@ -9,89 +18,360 @@ import {
   IconCheck,
   IconPen,
   IconAlertTriangle,
+  IconSparkles,
+  IconTrash,
+  ContextMenu,
+  Separator,
+  type ContextMenuItem,
+  Dialog,
 } from '@/shared/ui'
-import type { Track } from '@/shared/types'
+import { useWorkspace } from '@/features/workspace'
+import type { Scene } from '@/entities/scene'
+import type { SceneConnection } from '@/entities/connection'
 
-interface TimelinePanelProps {
-  tracks: Track[]
-  selectedSceneId: string | null
-  onSelectScene: (id: string) => void
-}
+// ---- Constants ---------------------------------------------------------------
 
-const TRACK_HEIGHT = 48
+const TRACK_HEIGHT = 56
 const TRACK_LABEL_WIDTH = 112
 const MIN_SCALE = 60
 const MAX_SCALE = 240
 const DEFAULT_SCALE = 120
-const RULER_HEIGHT = 24
+const SCALE_STEP = 30
+const RULER_HEIGHT = 28
 
-function sceneStatusIcon(status: string) {
+// ---- Helpers -----------------------------------------------------------------
+
+/** Convert API underscore status to CSS dash format for data attributes. */
+function statusToCss(status: string): string {
+  return status.replace(/_/g, '-')
+}
+
+function sceneStatusIcon(status: string): JSX.Element | null {
   switch (status) {
-    case 'ai-draft':
+    case 'ai_draft':
       return <IconPen size={12} class="text-accent flex-shrink-0" />
     case 'edited':
       return <IconCheck size={12} class="text-success flex-shrink-0" />
-    case 'needs-revision':
+    case 'needs_revision':
       return <IconAlertTriangle size={12} class="text-warning flex-shrink-0" />
     default:
       return null
   }
 }
 
-function sceneTooltip(t: (k: string) => string, status: string) {
+function sceneTooltip(t: (k: string) => string, status: string): string {
   switch (status) {
     case 'empty':
       return t('status.empty')
-    case 'ai-draft':
+    case 'ai_draft':
       return t('status.aiDraft')
     case 'edited':
       return t('status.edited')
-    case 'needs-revision':
+    case 'needs_revision':
       return t('status.needsRevision')
     default:
       return ''
   }
 }
 
-export function TimelinePanel(props: TimelinePanelProps) {
+/** Compute the end position of the last scene across all tracks. */
+function computeTimelineEnd(tracks: Array<{ scenes: Scene[] }>): number {
+  let max = 0
+  for (const track of tracks) {
+    for (const scene of track.scenes) {
+      const end = scene.startPosition + scene.duration
+      if (end > max) max = end
+    }
+  }
+  return Math.ceil(max) + 2
+}
+
+/** Find a scene by id in a flat lookup built from trackScenes. */
+function buildSceneLookup(tracks: Array<{ scenes: Scene[] }>): Map<string, { scene: Scene; trackIndex: number }> {
+  const map = new Map<string, { scene: Scene; trackIndex: number }>()
+  for (let ti = 0; ti < tracks.length; ti++) {
+    const track = tracks[ti]!
+    for (const scene of track.scenes) {
+      map.set(scene.id, { scene, trackIndex: ti })
+    }
+  }
+  return map
+}
+
+// ---- Component ---------------------------------------------------------------
+
+export function TimelinePanel() {
   const { t } = useI18n()
+  const ws = useWorkspace()
+
+  // ---- Signals ----
+
   const [showHint, setShowHint] = createSignal(true)
   const [scale, setScale] = createSignal(DEFAULT_SCALE)
 
+  // Track add inline input
+  const [addingTrack, setAddingTrack] = createSignal(false)
+  const [newTrackLabel, setNewTrackLabel] = createSignal('')
+
+  // Delete confirmation dialogs
+  const [deleteSceneId, setDeleteSceneId] = createSignal<string | null>(null)
+  const [deleteTrackId, setDeleteTrackId] = createSignal<string | null>(null)
+
+  // Rename track inline
+  const [renamingTrackId, setRenamingTrackId] = createSignal<string | null>(null)
+  const [renameTrackLabel, setRenameTrackLabel] = createSignal('')
+
+  // Drag state
+  const [dragging, setDragging] = createSignal<{
+    sceneId: string
+    originTrackId: string
+    originStartPosition: number
+    offsetX: number
+    offsetY: number
+    pointerId: number
+  } | null>(null)
+  const [ghostPos, setGhostPos] = createSignal({ x: 0, y: 0 })
+
+  let timelineBodyRef: HTMLDivElement | undefined
+
+  // ---- Zoom ----
+
   function zoomIn() {
-    setScale((s) => Math.min(MAX_SCALE, s + 30))
+    setScale((s) => Math.min(MAX_SCALE, s + SCALE_STEP))
   }
   function zoomOut() {
-    setScale((s) => Math.max(MIN_SCALE, s - 30))
+    setScale((s) => Math.max(MIN_SCALE, s - SCALE_STEP))
   }
   function zoomFit() {
     setScale(DEFAULT_SCALE)
   }
 
-  const timelineEnd = () => {
-    let max = 0
-    for (const track of props.tracks) {
-      for (const scene of track.scenes) {
-        const end = scene.startPosition + scene.duration
-        if (end > max) max = end
-      }
-    }
-    return Math.ceil(max) + 1
-  }
+  // ---- Computed ----
 
-  const timelineWidth = () => timelineEnd() * scale()
+  const timelineEnd = createMemo(() => computeTimelineEnd(ws.trackScenes()))
+  const timelineWidth = createMemo(() => timelineEnd() * scale())
 
-  const rulerTicks = () => {
+  const rulerTicks = createMemo(() => {
     const ticks: number[] = []
     for (let i = 0; i <= timelineEnd(); i++) {
       ticks.push(i)
     }
     return ticks
+  })
+
+  const sceneLookup = createMemo(() => buildSceneLookup(ws.trackScenes()))
+
+  // ---- Connection line helpers ----
+
+  /** Get center-bottom of a scene clip (relative to the timeline body). */
+  function sceneBottomCenter(scene: Scene, trackIndex: number): { x: number; y: number } {
+    const x = scene.startPosition * scale() + (scene.duration * scale()) / 2 + TRACK_LABEL_WIDTH
+    const y = RULER_HEIGHT + trackIndex * TRACK_HEIGHT + TRACK_HEIGHT - 4
+    return { x, y }
   }
 
+  /** Get center-top of a scene clip. */
+  function sceneTopCenter(scene: Scene, trackIndex: number): { x: number; y: number } {
+    const x = scene.startPosition * scale() + (scene.duration * scale()) / 2 + TRACK_LABEL_WIDTH
+    const y = RULER_HEIGHT + trackIndex * TRACK_HEIGHT + 4
+    return { x, y }
+  }
+
+  // ---- Drag & Drop ----
+
+  function handlePointerDown(e: PointerEvent, sceneId: string, trackId: string, startPosition: number) {
+    // Only left button
+    if (e.button !== 0) return
+
+    const target = e.currentTarget as HTMLElement
+    const rect = target.getBoundingClientRect()
+    const offsetX = e.clientX - rect.left
+    const offsetY = e.clientY - rect.top
+
+    target.setPointerCapture(e.pointerId)
+
+    setDragging({
+      sceneId,
+      originTrackId: trackId,
+      originStartPosition: startPosition,
+      offsetX,
+      offsetY,
+      pointerId: e.pointerId,
+    })
+    setGhostPos({ x: e.clientX - offsetX, y: e.clientY - offsetY })
+  }
+
+  function handlePointerMove(e: PointerEvent) {
+    const drag = dragging()
+    if (!drag) return
+    setGhostPos({ x: e.clientX - drag.offsetX, y: e.clientY - drag.offsetY })
+  }
+
+  function handlePointerUp(e: PointerEvent) {
+    const drag = dragging()
+    if (!drag) return
+
+    const bodyRect = timelineBodyRef?.getBoundingClientRect()
+    if (!bodyRect) {
+      setDragging(null)
+      return
+    }
+
+    // Compute which track the pointer is over
+    const relY = e.clientY - bodyRect.top - RULER_HEIGHT
+    const tracks = ws.trackScenes()
+    let targetTrackIndex = Math.floor(relY / TRACK_HEIGHT)
+    targetTrackIndex = Math.max(0, Math.min(tracks.length - 1, targetTrackIndex))
+    const targetTrack = tracks[targetTrackIndex]
+
+    // Compute new start position
+    const relX = e.clientX - bodyRect.left - TRACK_LABEL_WIDTH + (timelineBodyRef?.scrollLeft ?? 0)
+    let newStartPosition = relX / scale()
+    newStartPosition = Math.max(0, Math.round(newStartPosition * 4) / 4) // snap to 0.25
+
+    if (targetTrack && (targetTrack.id !== drag.originTrackId || Math.abs(newStartPosition - drag.originStartPosition) > 0.1)) {
+      ws.moveScene(drag.sceneId, targetTrack.id, newStartPosition)
+    }
+
+    setDragging(null)
+  }
+
+  // Cancel drag on Escape
+  function handleKeyDown(e: KeyboardEvent) {
+    if (e.key === 'Escape' && dragging()) {
+      setDragging(null)
+      return
+    }
+
+    // Keyboard navigation for scenes
+    const selId = ws.selectedSceneId()
+    if (!selId) return
+
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault()
+      const prev = ws.prevScene()
+      if (prev) ws.selectScene(prev.id)
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault()
+      const next = ws.nextScene()
+      if (next) ws.selectScene(next.id)
+    } else if (e.key === 'Delete' || e.key === 'Backspace') {
+      e.preventDefault()
+      setDeleteSceneId(selId)
+    }
+  }
+
+  createEffect(() => {
+    document.addEventListener('keydown', handleKeyDown)
+    onCleanup(() => document.removeEventListener('keydown', handleKeyDown))
+  })
+
+  // ---- Track add ----
+
+  function submitNewTrack() {
+    const label = newTrackLabel().trim()
+    if (label) {
+      ws.addTrack(label)
+    }
+    batch(() => {
+      setAddingTrack(false)
+      setNewTrackLabel('')
+    })
+  }
+
+  // ---- Track rename ----
+
+  function startRenamingTrack(trackId: string, currentLabel: string | null) {
+    batch(() => {
+      setRenamingTrackId(trackId)
+      setRenameTrackLabel(currentLabel ?? '')
+    })
+  }
+
+  function submitRenameTrack() {
+    const id = renamingTrackId()
+    const label = renameTrackLabel().trim()
+    if (id && label) {
+      ws.updateTrack(id, label)
+    }
+    batch(() => {
+      setRenamingTrackId(null)
+      setRenameTrackLabel('')
+    })
+  }
+
+  // ---- Scene context menu items ----
+
+  function sceneContextItems(sceneId: string): (ContextMenuItem | typeof Separator)[] {
+    return [
+      {
+        label: t('sceneDetail.title'),
+        icon: <IconPen size={14} />,
+        onClick: () => ws.selectScene(sceneId),
+      },
+      {
+        label: t('editor.generate'),
+        icon: <IconSparkles size={14} />,
+        onClick: () => ws.startGeneration(sceneId),
+      },
+      Separator,
+      {
+        label: t('common.delete'),
+        icon: <IconTrash size={14} />,
+        danger: true,
+        onClick: () => setDeleteSceneId(sceneId),
+      },
+    ]
+  }
+
+  // ---- Track context menu items ----
+
+  function trackContextItems(trackId: string, trackLabel: string | null): (ContextMenuItem | typeof Separator)[] {
+    return [
+      {
+        label: t('config.theme') === 'Theme' ? 'Rename Track' : '\uD2B8\uB799 \uC774\uB984 \uBCC0\uACBD',
+        icon: <IconPen size={14} />,
+        onClick: () => startRenamingTrack(trackId, trackLabel),
+      },
+      Separator,
+      {
+        label: t('config.theme') === 'Theme' ? 'Remove Track' : '\uD2B8\uB799 \uC0AD\uC81C',
+        icon: <IconTrash size={14} />,
+        danger: true,
+        onClick: () => setDeleteTrackId(trackId),
+      },
+    ]
+  }
+
+  // ---- End position for a track (to place the [+] button) ----
+
+  function trackEndPosition(scenes: Scene[]): number {
+    if (scenes.length === 0) return 0
+    let max = 0
+    for (const s of scenes) {
+      const end = s.startPosition + s.duration
+      if (end > max) max = end
+    }
+    return max
+  }
+
+  // ---- Dragging scene info for ghost ----
+
+  const draggingScene = createMemo(() => {
+    const drag = dragging()
+    if (!drag) return null
+    const lookup = sceneLookup()
+    return lookup.get(drag.sceneId) ?? null
+  })
+
+  // ---- Render ----
+
   return (
-    <div class="flex flex-col h-full bg-surface border-t border-border-default">
-      {/* ── Header ──────────────────────────────────────────────── */}
+    <div
+      class="flex flex-col h-full bg-surface border-t border-border-default"
+      tabIndex={0}
+    >
+      {/* -- Header --------------------------------------------------------- */}
       <div class="flex items-center justify-between px-4 h-10 border-b border-border-subtle flex-shrink-0">
         <span class="text-xs font-medium text-fg-secondary uppercase tracking-wide">
           {t('timeline.title')}
@@ -105,6 +385,9 @@ export function TimelinePanel(props: TimelinePanelProps) {
           >
             <IconZoomOut size={16} />
           </button>
+          <span class="text-[10px] text-fg-muted tabular-nums min-w-[3ch] text-center select-none">
+            {Math.round((scale() / DEFAULT_SCALE) * 100)}%
+          </span>
           <button
             type="button"
             class="p-1.5 rounded-md text-fg-muted hover:text-fg hover:bg-surface-raised transition-colors cursor-pointer"
@@ -124,7 +407,7 @@ export function TimelinePanel(props: TimelinePanelProps) {
         </div>
       </div>
 
-      {/* ── Hint ────────────────────────────────────────────────── */}
+      {/* -- Hint banner ---------------------------------------------------- */}
       <Show when={showHint()}>
         <div class="flex items-center justify-between px-4 py-2 bg-accent-muted text-accent text-xs border-b border-border-subtle">
           <span>{t('timeline.hint')}</span>
@@ -138,12 +421,61 @@ export function TimelinePanel(props: TimelinePanelProps) {
         </div>
       </Show>
 
-      {/* ── Timeline body ──────────────────────────────────────── */}
-      <div class="flex-1 overflow-auto">
-        <div class="flex flex-col" style={{ "min-width": `${TRACK_LABEL_WIDTH + timelineWidth() + 48}px` }}>
-          {/* ── Ruler ──────────────────────────────────────────── */}
+      {/* -- Timeline body -------------------------------------------------- */}
+      <div
+        ref={timelineBodyRef}
+        class="flex-1 overflow-auto relative"
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+      >
+        {/* SVG connection lines layer */}
+        <svg
+          class="absolute inset-0 pointer-events-none"
+          style={{
+            width: `${TRACK_LABEL_WIDTH + timelineWidth() + 48}px`,
+            height: `${RULER_HEIGHT + ws.trackScenes().length * TRACK_HEIGHT + 48}px`,
+            'z-index': '1',
+          }}
+        >
+          <For each={ws.state.connections}>
+            {(conn: SceneConnection) => {
+              const lookup = sceneLookup()
+              const source = lookup.get(conn.sourceSceneId)
+              const target = lookup.get(conn.targetSceneId)
+              if (!source || !target) return null
+
+              const from = sceneBottomCenter(source.scene, source.trackIndex)
+              const to = sceneTopCenter(target.scene, target.trackIndex)
+              const midY = (from.y + to.y) / 2
+
+              const strokeColor = conn.connectionType === 'branch'
+                ? 'var(--accent)'
+                : 'var(--success)'
+
+              return (
+                <path
+                  d={`M ${from.x} ${from.y} C ${from.x} ${midY}, ${to.x} ${midY}, ${to.x} ${to.y}`}
+                  fill="none"
+                  stroke={strokeColor}
+                  stroke-width="1.5"
+                  stroke-dasharray={conn.connectionType === 'merge' ? '6 3' : 'none'}
+                  opacity="0.6"
+                />
+              )
+            }}
+          </For>
+        </svg>
+
+        <div
+          class="flex flex-col relative"
+          style={{
+            'min-width': `${TRACK_LABEL_WIDTH + timelineWidth() + 48}px`,
+            'z-index': '2',
+          }}
+        >
+          {/* -- Ruler ------------------------------------------------------ */}
           <div class="flex flex-shrink-0" style={{ height: `${RULER_HEIGHT}px` }}>
-            <div class="flex-shrink-0" style={{ width: `${TRACK_LABEL_WIDTH}px` }} />
+            <div class="flex-shrink-0 border-r border-border-subtle" style={{ width: `${TRACK_LABEL_WIDTH}px` }} />
             <div class="relative flex-1">
               <For each={rulerTicks()}>
                 {(tick) => (
@@ -151,65 +483,206 @@ export function TimelinePanel(props: TimelinePanelProps) {
                     class="absolute top-0 flex flex-col items-center"
                     style={{ left: `${tick * scale()}px` }}
                   >
-                    <div class="w-px h-2 bg-border-default" />
-                    <span class="text-[9px] text-fg-muted mt-0.5 select-none">{tick}</span>
+                    <div class="w-px h-3 bg-border-default" />
+                    <span class="text-[9px] text-fg-muted mt-0.5 select-none tabular-nums">
+                      {tick}
+                    </span>
                   </div>
                 )}
               </For>
             </div>
           </div>
 
-          {/* ── Tracks ─────────────────────────────────────────── */}
-          <For each={props.tracks}>
-            {(track) => (
-              <div
-                class="flex border-b border-border-subtle"
-                style={{ height: `${TRACK_HEIGHT}px` }}
-              >
-                {/* Track label */}
-                <div
-                  class="flex-shrink-0 flex items-center justify-end pr-3 border-r border-border-subtle"
-                  style={{ width: `${TRACK_LABEL_WIDTH}px` }}
-                >
-                  <span class="text-xs font-medium text-fg-secondary truncate">
-                    {track.label}
-                  </span>
-                </div>
+          {/* -- Tracks ----------------------------------------------------- */}
+          <For each={ws.trackScenes()}>
+            {(track, trackIndex) => {
+              const endPos = () => trackEndPosition(track.scenes)
 
-                {/* Clips area */}
-                <div class="relative flex-1" style={{ width: `${timelineWidth()}px` }}>
-                  <For each={track.scenes}>
-                    {(scene) => (
+              return (
+                <ContextMenu items={trackContextItems(track.id, track.label)}>
+                  <div
+                    class="flex border-b border-border-subtle"
+                    style={{ height: `${TRACK_HEIGHT}px` }}
+                  >
+                    {/* Track label */}
+                    <div
+                      class="flex-shrink-0 flex items-center justify-end pr-3 border-r border-border-subtle"
+                      style={{ width: `${TRACK_LABEL_WIDTH}px` }}
+                    >
+                      <Show
+                        when={renamingTrackId() === track.id}
+                        fallback={
+                          <span
+                            class="text-xs font-medium text-fg-secondary truncate cursor-default"
+                            onDblClick={() => startRenamingTrack(track.id, track.label)}
+                          >
+                            {track.label ?? `Track ${trackIndex() + 1}`}
+                          </span>
+                        }
+                      >
+                        <input
+                          type="text"
+                          class="h-6 w-full px-1.5 rounded text-xs bg-canvas border border-accent text-fg focus:outline-none"
+                          value={renameTrackLabel()}
+                          onInput={(e) => setRenameTrackLabel(e.currentTarget.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') submitRenameTrack()
+                            if (e.key === 'Escape') {
+                              setRenamingTrackId(null)
+                              setRenameTrackLabel('')
+                            }
+                          }}
+                          onBlur={submitRenameTrack}
+                          autofocus
+                        />
+                      </Show>
+                    </div>
+
+                    {/* Clips area */}
+                    <div class="relative flex-1" style={{ width: `${timelineWidth()}px` }}>
+                      <For each={track.scenes}>
+                        {(scene) => (
+                          <ContextMenu items={sceneContextItems(scene.id)}>
+                            <button
+                              type="button"
+                              class="tl-clip"
+                              style={{
+                                left: `${scene.startPosition * scale()}px`,
+                                width: `${Math.max(scene.duration * scale(), 24)}px`,
+                                opacity: dragging()?.sceneId === scene.id ? '0.3' : '1',
+                              }}
+                              data-status={statusToCss(scene.status)}
+                              data-selected={ws.selectedSceneId() === scene.id}
+                              onClick={(e) => {
+                                // Don't select if we just finished dragging
+                                if (!dragging()) {
+                                  e.stopPropagation()
+                                  ws.selectScene(scene.id)
+                                }
+                              }}
+                              onPointerDown={(e) => handlePointerDown(e, scene.id, track.id, scene.startPosition)}
+                              aria-label={`${scene.title || 'Untitled'}, ${sceneTooltip(t, scene.status)}`}
+                            >
+                              {sceneStatusIcon(scene.status)}
+                              <span class="text-xs text-fg truncate">
+                                {scene.title || '\u2014'}
+                              </span>
+                            </button>
+                          </ContextMenu>
+                        )}
+                      </For>
+
+                      {/* [+] Add scene button at end of track */}
                       <button
                         type="button"
-                        class="tl-clip"
-                        style={{
-                          left: `${scene.startPosition * scale()}px`,
-                          width: `${scene.duration * scale()}px`,
-                        }}
-                        data-status={scene.status}
-                        data-selected={props.selectedSceneId === scene.id}
-                        onClick={() => props.onSelectScene(scene.id)}
-                        aria-label={`${scene.title}, ${sceneTooltip(t, scene.status)}`}
+                        class="absolute top-1/2 -translate-y-1/2 flex items-center justify-center w-7 h-7 rounded-md border border-dashed border-border-default text-fg-muted hover:border-accent hover:text-accent hover:bg-accent-muted transition-colors cursor-pointer"
+                        style={{ left: `${endPos() * scale() + 8}px` }}
+                        aria-label="Add scene"
+                        onClick={() => ws.addScene(track.id, endPos())}
                       >
-                        {sceneStatusIcon(scene.status)}
-                        <span class="text-xs text-fg truncate">{scene.title}</span>
+                        <IconPlus size={14} />
                       </button>
-                    )}
-                  </For>
-                </div>
-              </div>
-            )}
+                    </div>
+                  </div>
+                </ContextMenu>
+              )
+            }}
           </For>
 
-          {/* ── Add track ────────────────────────────────────────── */}
-          <div class="py-2" style={{ "padding-left": `${TRACK_LABEL_WIDTH + 12}px` }}>
-            <Button variant="ghost" size="sm" icon={<IconPlus size={14} />}>
-              {t('timeline.addTrack')}
-            </Button>
+          {/* -- Add track -------------------------------------------------- */}
+          <div class="py-2 px-3" style={{ "padding-left": `${TRACK_LABEL_WIDTH + 12}px` }}>
+            <Show
+              when={addingTrack()}
+              fallback={
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={<IconPlus size={14} />}
+                  onClick={() => setAddingTrack(true)}
+                >
+                  {t('timeline.addTrack')}
+                </Button>
+              }
+            >
+              <div class="flex items-center gap-2">
+                <input
+                  type="text"
+                  class="h-8 px-3 rounded-md text-sm bg-canvas border border-border-default text-fg placeholder:text-fg-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-focus-ring transition-colors"
+                  placeholder={t('timeline.addTrack')}
+                  value={newTrackLabel()}
+                  onInput={(e) => setNewTrackLabel(e.currentTarget.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') submitNewTrack()
+                    if (e.key === 'Escape') {
+                      setAddingTrack(false)
+                      setNewTrackLabel('')
+                    }
+                  }}
+                  onBlur={submitNewTrack}
+                  autofocus
+                />
+              </div>
+            </Show>
           </div>
         </div>
+
+        {/* -- Drag ghost --------------------------------------------------- */}
+        <Show when={dragging() && draggingScene()}>
+          {(_) => {
+            const info = draggingScene()!
+            return (
+              <div
+                class="tl-clip pointer-events-none"
+                style={{
+                  position: 'fixed',
+                  left: `${ghostPos().x}px`,
+                  top: `${ghostPos().y}px`,
+                  width: `${Math.max(info.scene.duration * scale(), 24)}px`,
+                  height: `${TRACK_HEIGHT - 8}px`,
+                  'z-index': '100',
+                  opacity: '0.8',
+                }}
+                data-status={statusToCss(info.scene.status)}
+                data-selected="true"
+              >
+                {sceneStatusIcon(info.scene.status)}
+                <span class="text-xs text-fg truncate">
+                  {info.scene.title || '\u2014'}
+                </span>
+              </div>
+            )
+          }}
+        </Show>
       </div>
+
+      {/* -- Delete scene dialog -------------------------------------------- */}
+      <Dialog
+        open={deleteSceneId() !== null}
+        onClose={() => setDeleteSceneId(null)}
+        title={t('common.delete')}
+        description={t('status.empty')}
+        confirmLabel={t('common.delete')}
+        confirmVariant="danger"
+        onConfirm={() => {
+          const id = deleteSceneId()
+          if (id) ws.removeScene(id)
+          setDeleteSceneId(null)
+        }}
+      />
+
+      {/* -- Delete track dialog ------------------------------------------- */}
+      <Dialog
+        open={deleteTrackId() !== null}
+        onClose={() => setDeleteTrackId(null)}
+        title={t('common.delete')}
+        confirmLabel={t('common.delete')}
+        confirmVariant="danger"
+        onConfirm={() => {
+          const id = deleteTrackId()
+          if (id) ws.removeTrack(id)
+          setDeleteTrackId(null)
+        }}
+      />
     </div>
   )
 }

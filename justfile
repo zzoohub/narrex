@@ -1,11 +1,10 @@
 set dotenv-load := false
 
-# ─── Dynamic path resolution ─────────────────────────────────────────────────
-# Supports both monorepo (services/api, clients/web) and flat (api, web) layouts
-api_dir     := if path_exists("services/api") == "true" { "services/api" } else { "api" }
-worker_dir  := if path_exists("services/worker") == "true" { "services/worker" } else { "worker" }
-web_dir     := if path_exists("clients/web") == "true" { "clients/web" } else { "web" }
-mobile_dir  := if path_exists("clients/mobile") == "true" { "clients/mobile" } else { "mobile" }
+# ─── Path resolution ─────────────────────────────────────────────────────────
+svc_dir     := "services"
+api_dir     := "services/api"
+worker_dir  := "services/worker"
+web_dir     := "web"
 
 default:
     @just --list
@@ -28,29 +27,25 @@ db-seed:
 
 db-reset: db-migrate db-seed
 
-# ─── API ──────────────────────────────────────────────────────────────────────
-# NOTE: Adjust for your backend (Axum: cargo run, FastAPI: uvicorn)
-
-api-install:
-    cd {{ api_dir }} && uv sync
+# ─── API (Rust / Axum) ───────────────────────────────────────────────────────
 
 api-dev:
-    cd {{ api_dir }} && PYTHONPATH=src uv run uvicorn app.main:create_app --factory --reload --host 0.0.0.0 --port 8080
+    cd {{ svc_dir }} && cargo watch -x 'run --bin narrex-api'
 
-api-start:
-    cd {{ api_dir }} && PYTHONPATH=src uv run python -m app.main
+api-build:
+    cd {{ svc_dir }} && cargo build --release --bin narrex-api
+
+api-check:
+    cd {{ svc_dir }} && cargo check
 
 api-test *args:
-    cd {{ api_dir }} && PYTHONPATH=src uv run pytest {{ args }}
-
-api-test-cov:
-    cd {{ api_dir }} && PYTHONPATH=src uv run pytest --cov=src --cov-report=term-missing
+    cd {{ svc_dir }} && cargo test {{ args }}
 
 api-lint:
-    cd {{ api_dir }} && uv run ruff check .
+    cd {{ svc_dir }} && cargo clippy -- -D warnings
 
 api-clean:
-    rm -rf {{ api_dir }}/.venv {{ api_dir }}/__pycache__
+    cd {{ svc_dir }} && cargo clean
 
 # ─── Worker ───────────────────────────────────────────────────────────────────
 # NOTE: Adjust commands for your framework (Celery, BullMQ, Temporal, etc.)
@@ -76,7 +71,7 @@ worker-lint:
 worker-clean:
     cd {{ worker_dir }} && echo "TODO: clean worker artifacts"
 
-# ─── Web (Next.js) ───────────────────────────────────────────────────────────
+# ─── Web (TanStack Start / SolidJS) ──────────────────────────────────────────
 
 web-install:
     cd {{ web_dir }} && bun install
@@ -106,39 +101,13 @@ web-test-cov:
     cd {{ web_dir }} && bun vitest run --coverage
 
 web-clean:
-    rm -rf {{ web_dir }}/.next {{ web_dir }}/coverage
-
-# ─── Mobile (Expo React Native) ───────────────────────────────────────────
-
-mobile-install:
-    cd {{ mobile_dir }} && bun install
-
-mobile-dev:
-    cd {{ mobile_dir }} && bunx expo start --dev-client
-
-mobile-ios:
-    cd {{ mobile_dir }} && bunx expo run:ios
-
-mobile-android:
-    cd {{ mobile_dir }} && bunx expo run:android
-
-mobile-lint:
-    cd {{ mobile_dir }} && bun run lint
-
-mobile-typecheck:
-    cd {{ mobile_dir }} && bun tsc --noEmit
-
-mobile-test *args:
-    cd {{ mobile_dir }} && bun vitest run {{ args }}
-
-mobile-clean:
-    rm -rf {{ mobile_dir }}/.expo {{ mobile_dir }}/node_modules
+    rm -rf {{ web_dir }}/.output {{ web_dir }}/coverage
 
 # ─── Quality ──────────────────────────────────────────────────────────────────
 
-lint: api-lint worker-lint web-lint mobile-lint
+lint: api-lint web-lint
 
-test: api-test worker-test web-test mobile-test
+test: api-test web-test
 
 check: lint test
 

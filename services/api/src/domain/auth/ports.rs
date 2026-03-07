@@ -1,0 +1,18 @@
+use uuid::Uuid;
+
+use super::error::AuthError;
+use super::models::{AuthTokens, GoogleUserInfo, User};
+
+#[async_trait::async_trait]
+pub trait UserRepository: Clone + Send + Sync + 'static {
+    async fn find_by_google_id(&self, google_id: &str) -> Result<Option<User>, AuthError>;
+    async fn upsert_from_google(&self, info: &GoogleUserInfo) -> Result<User, AuthError>;
+}
+
+#[async_trait::async_trait]
+pub trait TokenService: Clone + Send + Sync + 'static {
+    async fn create_tokens(&self, user_id: Uuid) -> Result<AuthTokens, AuthError>;
+    async fn verify_access_token(&self, token: &str) -> Result<Uuid, AuthError>;
+    async fn create_refresh_token(&self, user_id: Uuid) -> Result<String, AuthError>;
+    async fn verify_refresh_token(&self, token: &str) -> Result<Uuid, AuthError>;
+}

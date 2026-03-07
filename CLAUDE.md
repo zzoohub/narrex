@@ -11,6 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```
 ├── services/
 │   ├── api/              # Backend API
+│   ├── crates/           # Rust crates
 │   └── worker/           # Queue, cron, pub/sub handlers
 ├── web/
 ├── db/
@@ -38,12 +39,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Principles & Constraints
 ### MUST
-1. Any change to requirements, product scope, architecture, data model, UX/UI design, or project structure must be reflected in `docs/`.
-2. Any change to tracking, analytics, pricing, growth strategy, marketing, legal terms, or ops processes must be reflected in `biz/`.
-3. All service code changes must use skills, including after plan mode.
-4. After implementation, check if sub-agents are needed and run in parallel:
-   - **z-security-reviewer**: Run when changes affect security-sensitive areas (auth, data access, API endpoints).
-   - **z-verifier**: Run for any code change. Skip only for docs-only or copy-only changes (no code files modified).
+1. After implementation, run post-check sub-agents (skip for docs-only or copy-only changes):
+   - Run in parallel: **z-security-reviewer** (if auth/data/API changed) and **z-tester** (write & run tests)
+   - Then sequentially: **z-verifier** (after z-tester passes)
+2. Any change to requirements, product scope, architecture, data model, UX/UI design, or project structure must be reflected in `docs/`.
 
 ### MUST NOT
 - (project-specific anti-patterns here)
@@ -75,7 +74,7 @@ All commands in `justfile`. Run `just --list` to see all recipes.
 
 ### Web Conventions
 - **Type safety**: Enforce the strictest TypeScript compiler options.
-- **I18n**: All user-facing text must support en, es, pt-BR, id, ja and ko
+- **I18n**: All user-facing text must support en and ko.
 - **Responsive**: Support all screen sizes.
 - **Dark mode**: Support light and dark themes.
 <!-- Add project-specific UI conventions -->

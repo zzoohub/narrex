@@ -1,0 +1,16 @@
+[package]
+name = "narrex-llm"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-stream = "0.3"
+async-trait = "0.1"
+futures = "0.3"
+reqwest = { version = "0.12", features = ["json", "stream"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["time"] }
+tokio-stream = "0.1"
+tracing = "0.1"
