@@ -9,12 +9,12 @@ import {
   IconItalic,
   IconStop,
 } from '@/shared/ui'
-import type { TimelineNode } from '@/shared/types'
+import type { Scene } from '@/shared/types'
 
 interface EditorPanelProps {
-  selectedNode: TimelineNode | null
-  prevNodeTitle?: string
-  nextNodeTitle?: string
+  selectedScene: Scene | null
+  prevSceneTitle?: string
+  nextSceneTitle?: string
   onSelectPrev?: () => void
   onSelectNext?: () => void
 }
@@ -24,15 +24,15 @@ export function EditorPanel(props: EditorPanelProps) {
   const [isGenerating, setIsGenerating] = createSignal(false)
   const [showAiInput, setShowAiInput] = createSignal(false)
 
-  const charCount = () => props.selectedNode?.content.length ?? 0
-  const hasDraft = () => (props.selectedNode?.content.length ?? 0) > 0
+  const charCount = () => props.selectedScene?.content.length ?? 0
+  const hasDraft = () => (props.selectedScene?.content.length ?? 0) > 0
 
   return (
     <div class="flex flex-col h-full bg-canvas">
       <Show
-        when={props.selectedNode}
+        when={props.selectedScene}
         fallback={
-          /* ── No node selected ─────────────────────────────────── */
+          /* ── No scene selected ────────────────────────────────── */
           <div class="flex-1 flex flex-col items-center justify-center px-8 text-center">
             <div class="w-20 h-20 rounded-2xl bg-surface border border-border-default flex items-center justify-center mb-6">
               <svg
@@ -53,7 +53,7 @@ export function EditorPanel(props: EditorPanelProps) {
           </div>
         }
       >
-        {(node) => (
+        {(scene) => (
           <>
             {/* ── Editor header ──────────────────────────────────── */}
             <div class="flex items-center justify-between px-4 h-11 border-b border-border-subtle flex-shrink-0">
@@ -62,19 +62,19 @@ export function EditorPanel(props: EditorPanelProps) {
                 <button
                   type="button"
                   onClick={props.onSelectPrev}
-                  disabled={!props.prevNodeTitle}
+                  disabled={!props.prevSceneTitle}
                   class="p-1 rounded-md text-fg-muted hover:text-fg hover:bg-surface-raised disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
                   aria-label="Previous scene"
                 >
                   <IconChevronLeft size={16} />
                 </button>
                 <span class="text-sm font-medium text-fg truncate">
-                  {node().title}
+                  {scene().title}
                 </span>
                 <button
                   type="button"
                   onClick={props.onSelectNext}
-                  disabled={!props.nextNodeTitle}
+                  disabled={!props.nextSceneTitle}
                   class="p-1 rounded-md text-fg-muted hover:text-fg hover:bg-surface-raised disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
                   aria-label="Next scene"
                 >
@@ -107,7 +107,7 @@ export function EditorPanel(props: EditorPanelProps) {
               <Show
                 when={hasDraft() || isGenerating()}
                 fallback={
-                  /* ── Empty: node selected, no draft ──────────── */
+                  /* ── Empty: scene selected, no draft ─────────── */
                   <div class="flex flex-col items-center justify-center h-full px-8 text-center">
                     <p class="text-lg font-display text-fg mb-2">
                       {t('editor.readyTitle')}
@@ -119,13 +119,13 @@ export function EditorPanel(props: EditorPanelProps) {
                       variant="primary"
                       size="lg"
                       icon={<IconSparkles size={18} />}
-                      disabled={!node().plotSummary}
+                      disabled={!scene().plotSummary}
                     >
                       {t('editor.generate')}
                     </Button>
-                    <Show when={!node().plotSummary}>
+                    <Show when={!scene().plotSummary}>
                       <p class="text-xs text-fg-muted mt-3">
-                        {t('nodeDetail.plotPlaceholder')}
+                        {t('sceneDetail.plotPlaceholder')}
                       </p>
                     </Show>
                   </div>
@@ -142,7 +142,7 @@ export function EditorPanel(props: EditorPanelProps) {
                           class="prose prose-sm text-fg leading-relaxed font-body stream-cursor"
                           style={{ "white-space": "pre-wrap" }}
                         >
-                          {node().content || ''}
+                          {scene().content || ''}
                         </div>
                         <div class="flex items-center gap-3 mt-6">
                           <div class="flex items-center gap-2 text-accent text-sm">
@@ -168,7 +168,7 @@ export function EditorPanel(props: EditorPanelProps) {
                       style={{ "white-space": "pre-wrap" }}
                       spellcheck={false}
                     >
-                      {node().content}
+                      {scene().content}
                     </div>
                   </Show>
                 </div>

@@ -29,9 +29,9 @@ LLM quality has reached a point where scene-level prose generation is viable at 
 
 **High-level approach**
 
-A visual novel editor where the story is a timeline of event nodes — not a blank page. Authors set up characters, relationships, and plot points on an interactive multi-track timeline, then generate AI prose scene by scene. The visual structure (config, character graph, timeline position, foreshadowing links) automatically assembles into the AI prompt, so authors never write prompts — they just arrange their story visually and the AI knows the full narrative context.
+A visual novel editor where the story is a timeline of scenes — not a blank page. Authors set up characters, relationships, and plot points on an interactive multi-track timeline, then generate AI prose scene by scene. The visual structure (config, character graph, timeline position, foreshadowing links) automatically assembles into the AI prompt, so authors never write prompts — they just arrange their story visually and the AI knows the full narrative context.
 
-The key architectural insight is separating event nodes from episodes. Events and episodes are not 1:1 — several small events can merge into one episode, or one large event can span multiple episodes. Episode dividers on the timeline can be dragged to re-partition chapters instantly, and the AI prompt auto-rebuilds. The editing model is "revise, don't write from scratch": AI generates 2-3 draft variations per scene with adjustable tone sliders (description density, dialogue ratio, emotional intensity, pacing), and the author picks, mixes, and refines.
+The key architectural insight is separating scenes from episodes. Events and episodes are not 1:1 — several small events can merge into one episode, or one large event can span multiple episodes. Episode dividers on the timeline can be dragged to re-partition chapters instantly, and the AI prompt auto-rebuilds. The editing model is "revise, don't write from scratch": AI generates 2-3 draft variations per scene with adjustable tone sliders (description density, dialogue ratio, emotional intensity, pacing), and the author picks, mixes, and refines.
 
 **Core insight**
 

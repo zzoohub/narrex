@@ -1,0 +1,147 @@
+erDiagram
+    user_account {
+        uuid id PK
+        text google_id UK
+        text email UK
+        text display_name
+        text profile_image_url
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    project {
+        uuid id PK
+        uuid user_id FK
+        text title
+        text genre
+        text theme
+        text era_location
+        pov_type pov
+        text tone
+        text source_type
+        text source_input
+        text source_file_key
+        timestamptz deleted_at
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    track {
+        uuid id PK
+        uuid project_id FK
+        text label
+        double_precision position
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    scene {
+        uuid id PK
+        uuid track_id FK
+        uuid project_id FK
+        text title
+        text plot_summary
+        text location
+        text_array mood_tags
+        scene_status status
+        double_precision position
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    scene_connection {
+        uuid id PK
+        uuid project_id FK
+        uuid source_scene_id FK
+        uuid target_scene_id FK
+        connection_type type
+        timestamptz created_at
+    }
+
+    character {
+        uuid id PK
+        uuid project_id FK
+        text name
+        text personality
+        text appearance
+        text secrets
+        text motivation
+        text profile_image_url
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    scene_character {
+        uuid scene_id PK
+        uuid character_id PK
+        timestamptz created_at
+    }
+
+    character_relationship {
+        uuid id PK
+        uuid project_id FK
+        uuid character_a_id FK
+        uuid character_b_id FK
+        text label
+        relationship_visual visual_type
+        relationship_direction direction
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    draft {
+        uuid id PK
+        uuid scene_id FK
+        integer version
+        text content
+        integer char_count
+        text source
+        text edit_direction
+        text model
+        text provider
+        integer token_count_input
+        integer token_count_output
+        numeric cost_usd
+        timestamptz created_at
+    }
+
+    scene_summary {
+        uuid scene_id PK
+        text summary_text
+        text model
+        integer draft_version
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    generation_log {
+        uuid id PK
+        uuid user_id FK
+        uuid project_id FK
+        uuid scene_id FK
+        generation_type type
+        text model
+        text provider
+        integer token_count_input
+        integer token_count_output
+        numeric cost_usd
+        integer duration_ms
+        generation_status status
+        text error_message
+        timestamptz created_at
+    }
+
+    user_account ||--o{ project : "owns"
+    project ||--o{ track : "contains"
+    project ||--o{ character : "contains"
+    project ||--o{ scene_connection : "contains"
+    project ||--o{ character_relationship : "contains"
+    track ||--|{ scene : "contains"
+    scene ||--o{ scene_connection : "source"
+    scene ||--o{ scene_connection : "target"
+    scene ||--o{ scene_character : "assigned"
+    character ||--o{ scene_character : "assigned"
+    character ||--o{ character_relationship : "participant"
+    scene ||--o{ draft : "versions"
+    scene ||--o| scene_summary : "summarized"
+    user_account ||--o{ generation_log : "generates"

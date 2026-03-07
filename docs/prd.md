@@ -71,9 +71,9 @@ YouTube content creator who wants to create narrative content (audio drama scrip
 
 1. **Idea to structure (highest priority):** User enters with unstructured ideas (free text, file import, or genre template selection) and gets an organized Config + Timeline + Character Map that they can visually edit and refine.
 
-2. **Scene-by-scene drafting:** User selects a node on the timeline, presses "Generate AI Draft," and receives 2-3 prose variations that are contextually aware of the full narrative (prior events, character states, foreshadowing, episode position).
+2. **Scene-by-scene drafting:** User selects a scene on the timeline, presses "Generate AI Draft," and receives 2-3 prose variations that are contextually aware of the full narrative (prior events, character states, foreshadowing, episode position).
 
-3. **Episode organization:** User maps timeline nodes to episodes, adjusts episode boundaries by dragging dividers, manages per-episode word count targets, and sets episode-end hooks (cliffhanger types).
+3. **Episode organization:** User maps timeline scenes to episodes, adjusts episode boundaries by dragging dividers, manages per-episode word count targets, and sets episode-end hooks (cliffhanger types).
 
 4. **Character and world management:** User maintains a visual character relationship map and world map that evolve with the story. Changes to characters/relationships are automatically reflected in AI generation context.
 
@@ -85,13 +85,13 @@ YouTube content creator who wants to create narrative content (audio drama scrip
 
 ### Elevator Pitch
 
-Narrex is a visual novel editor where your story is a timeline of events, not a blank page. Set up your characters, world, and plot points visually — then generate AI prose scene by scene. The visual structure you build is the AI prompt: no prompt engineering required, just arrange your story and write.
+Narrex is a visual novel editor where your story is a timeline of scenes, not a blank page. Set up your characters, world, and plot points visually — then generate AI prose scene by scene. The visual structure you build is the AI prompt: no prompt engineering required, just arrange your story and write.
 
 ### Core Value Propositions
 
 1. **"Revise, don't write from scratch."** AI generates scene-level drafts (2-3 variations with adjustable tone) from the full narrative context. The author's job shifts from producing prose to directing and refining it — dramatically lowering the barrier to completing a novel. (Solves: the aspiring writer's inability to produce prose)
 
-2. **"Your structure is your prompt."** The visual timeline, character map, and config bar are simultaneously the authoring interface and the AI prompt engine. Editing a character's relationship, moving a node on the timeline, or dragging an episode divider automatically changes what the AI generates. No prompt writing, no context management. (Solves: loss of narrative consistency across chapters)
+2. **"Your structure is your prompt."** The visual timeline, character map, and config bar are simultaneously the authoring interface and the AI prompt engine. Editing a character's relationship, moving a scene on the timeline, or dragging an episode divider automatically changes what the AI generates. No prompt writing, no context management. (Solves: loss of narrative consistency across chapters)
 
 3. **"From idea to structure in minutes."** Any starting point — a text dump, a file import, or a genre template — gets auto-structured into a visual timeline with characters and plot points. The hardest part of novel writing (going from "I have an idea" to "I have a plan") happens in the first session. (Solves: the blank-page paralysis that kills most novel attempts)
 
@@ -99,7 +99,7 @@ Narrex is a visual novel editor where your story is a timeline of events, not a 
 
 Think of Narrex as a video editor for novels. A video editor has a multi-track timeline (video, audio, effects), a preview window, and a media library. Narrex has a multi-track timeline (plot tracks per character/faction/subplot), an editor window (prose preview and editing), and a media library (character map, world map, config). Just as video editors let you arrange clips and the software handles rendering, Narrex lets you arrange story events and the AI handles prose generation.
 
-The critical architectural concept: **events and episodes are separate layers.** Events (nodes on the timeline) represent what happens in the story. Episodes represent how the story is packaged for readers. These are not always 1:1:
+The critical architectural concept: **events and episodes are separate layers.** Scenes on the timeline represent what happens in the story. Episodes represent how the story is packaged for readers. These are not always 1:1:
 - Multiple small events can be grouped into one episode (commute + conversation + clue discovery = Episode 1)
 - One large event can span multiple episodes (final battle = Episodes 38-39)
 
@@ -135,7 +135,7 @@ REQ-003  User can create a new project by selecting a genre template
 
 REQ-004  System auto-structures any input (free text, imported file, or
          template) into an initial Config (genre, theme, era/location, POV,
-         tone), Timeline (event nodes), and Character Map (characters with
+         tone), Timeline (scenes), and Character Map (characters with
          relationships).
 
 REQ-005  System provides a first-project onboarding tutorial that
@@ -162,14 +162,14 @@ REQ-008  Changes to Config settings are reflected in all subsequent AI
          draft generations without manual prompt editing.
 ```
 
-### 5.3 Timeline & Event Nodes
+### 5.3 Timeline & Scenes
 
 ```
 REQ-009  System displays a multi-track timeline with horizontal axis
          representing time progression and vertical axis representing
          simultaneous tracks (per character, faction, or subplot).
 
-REQ-010  User can add, delete, and reorder event nodes on the timeline via
+REQ-010  User can add, delete, and reorder scenes on the timeline via
          drag-and-drop.
 
 REQ-011  User can add and remove tracks on the timeline (e.g., add a track
@@ -178,22 +178,22 @@ REQ-011  User can add and remove tracks on the timeline (e.g., add a track
 REQ-012  User can create merge points and branch points on the timeline
          where tracks converge or diverge.
 
-REQ-013  System supports vertical alignment of nodes across tracks to
+REQ-013  System supports vertical alignment of scenes across tracks to
          represent simultaneous events, with a vertical time cursor for
          reference.
 
-REQ-014  User can open a node overlay panel to edit: event title, episode
+REQ-014  User can open a scene detail panel to edit: event title, episode
          assignment, involved characters, location, plot summary, mood/tone
-         tags, episode-end hook type, foreshadowing links to other nodes,
+         tags, episode-end hook type, foreshadowing links to other scenes,
          and expected word count.
 
-REQ-015  System displays node visual states: empty (no content),
+REQ-015  System displays scene visual states: empty (no content),
          draft (partial fill — AI generated or manually written, not yet
          confirmed), confirmed (full fill — author marked as done), and
          needs review (warning indicator — prior changes may affect
          consistency).
 
-REQ-016  User can create foreshadowing connection lines between nodes to
+REQ-016  User can create foreshadowing connection lines between scenes to
          indicate narrative links (setup/payoff relationships).
 
 REQ-017  AI detects structural gaps in the timeline and suggests additional
@@ -203,11 +203,11 @@ REQ-017  AI detects structural gaps in the timeline and suggests additional
 ### 5.4 Episode Organization
 
 ```
-REQ-018  User can map timeline event nodes to episodes, with support for
-         many-to-one (multiple nodes per episode) and one-to-many (one node
+REQ-018  User can map timeline scenes to episodes, with support for
+         many-to-one (multiple scenes per episode) and one-to-many (one scene
          spanning multiple episodes) relationships.
 
-REQ-019  AI auto-suggests episode distribution based on node placement,
+REQ-019  AI auto-suggests episode distribution based on scene placement,
          event scale, and target word count per episode.
 
 REQ-020  User can drag episode dividers on the timeline to re-partition
@@ -215,14 +215,14 @@ REQ-020  User can drag episode dividers on the timeline to re-partition
          new structure.
 
 REQ-021  System estimates and displays per-episode word count based on
-         assigned nodes and target range (configurable, default
+         assigned scenes and target range (configurable, default
          3,000-5,000 characters for web novels).
 
 REQ-022  System automatically classifies each episode ending's hook type
          (twist, crisis, breadcrumb, emotional explosion, etc.) after
          generation and displays it as a read-only label.
 
-REQ-023  AI uses episode-node links to determine narrative position context
+REQ-023  AI uses episode-scene links to determine narrative position context
          (e.g., "Episode 7 of 40, entering mid-section") and adjusts
          pacing and tone accordingly.
 ```
@@ -267,7 +267,7 @@ REQ-031  User can place location nodes on the world map and define
          movement paths between locations.
 
 REQ-032  World map integrates with the timeline so location data is
-         available per node/scene.
+         available per scene.
 
 REQ-033  AI suggests new locations based on story events and can auto-add
          them to the map.
@@ -276,16 +276,16 @@ REQ-033  AI suggests new locations based on story events and can auto-add
 ### 5.7 AI Draft Generation
 
 ```
-REQ-034  User can select any event node and press "Generate AI Draft" to
+REQ-034  User can select any scene and press "Generate AI Draft" to
          produce prose for that scene.
 
 REQ-035  System auto-assembles the AI prompt from: global Config settings,
-         narrative position (from episode-node links), relevant characters
+         narrative position (from episode-scene links), relevant characters
          and their current relationship states, location (from world map),
-         prior episode flow (AI-compressed summaries from node-episode
-         links), foreshadowing info (from node connection lines),
+         prior episode flow (AI-compressed summaries from scene-episode
+         links), foreshadowing info (from scene connection lines),
          simultaneous events (from other tracks at the same timeline
-         point), current episode's assigned nodes, next episode preview,
+         point), current episode's assigned scenes, next episode preview,
          and episode-end hook type.
 
 REQ-036  System generates 2-3 draft variations simultaneously with
@@ -330,7 +330,7 @@ REQ-043  User can make direction-based partial edit requests on selected
 REQ-044  User can write freely in the editor with optional inline
          autocomplete suggestions.
 
-REQ-045  User can navigate between previous and next event nodes directly
+REQ-045  User can navigate between previous and next scenes directly
          from the editor.
 ```
 
@@ -340,8 +340,8 @@ REQ-045  User can navigate between previous and next event nodes directly
 REQ-046  System can perform a character consistency check across all
          episodes (appearance, personality, speech patterns).
 
-REQ-047  System can verify foreshadowing recovery: checks that setup nodes
-         have corresponding payoff nodes and flags unresolved threads.
+REQ-047  System can verify foreshadowing recovery: checks that setup scenes
+         have corresponding payoff scenes and flags unresolved threads.
 
 REQ-048  System can detect setting contradictions (location details,
          timeline inconsistencies, world-rule violations).
@@ -377,17 +377,17 @@ REQ-051  Product team can monitor: user acquisition funnel, project
    - **Free text:** Types or pastes their story idea into a text input area.
    - **File import:** Drags a Notion export or Markdown file into the project.
    - **Genre template:** Selects "Regression Fantasy" from a template gallery.
-3. System processes the input and generates an initial Config, Timeline (with event nodes), and Character Map.
+3. System processes the input and generates an initial Config, Timeline (with scenes), and Character Map.
    - If input is too vague to structure (e.g., "a love story") -> system asks 2-3 clarifying questions before generating structure.
    - If input is rich (multi-page notes) -> system structures directly and presents result.
-4. User sees the generated timeline with nodes, character map with relationships, and config bar pre-filled. First-time users see an onboarding overlay explaining each area.
-5. User reviews and edits the auto-generated structure: renames nodes, adjusts character details, moves events on the timeline, adds missing characters.
-6. User selects a node on the timeline (e.g., "Protagonist discovers regression ability").
+4. User sees the generated timeline with scenes, character map with relationships, and config bar pre-filled. First-time users see an onboarding overlay explaining each area.
+5. User reviews and edits the auto-generated structure: renames scenes, adjusts character details, moves events on the timeline, adds missing characters.
+6. User selects a scene on the timeline (e.g., "Protagonist discovers regression ability").
 7. Editor panel opens. User presses "Generate AI Draft."
 8. System assembles prompt from all context sources and generates 2-3 variations.
-   - If generation fails -> system shows error with retry option and suggests checking node details for completeness.
+   - If generation fails -> system shows error with retry option and suggests checking scene details for completeness.
 9. User reads the variations, selects one (or mixes sections from multiple), and edits the text.
-10. Node status updates from "Unwritten" to "AI Draft Complete" (and to "Author-Edited" once the user modifies text).
+10. Scene status updates from "Unwritten" to "AI Draft Complete" (and to "Author-Edited" once the user modifies text).
 
 **Drop-off risks:**
 - Step 3: Auto-structuring produces a result that doesn't match the user's vision. Mitigation: make every element editable, show a "This is a starting point — edit freely" message.
@@ -396,15 +396,15 @@ REQ-051  Product team can monitor: user acquisition funnel, project
 
 ### Journey 2: Episode Organization
 
-1. User has created 15+ event nodes on the timeline.
+1. User has created 15+ scenes on the timeline.
 2. User opens the episode organization view (or system prompts: "You have enough events to start organizing episodes").
-3. AI suggests episode distribution: "Based on your 18 nodes, I suggest 6 episodes. Here's a proposed grouping."
+3. AI suggests episode distribution: "Based on your 18 scenes, I suggest 6 episodes. Here's a proposed grouping."
 4. System places episode dividers on the timeline.
 5. User reviews per-episode word count estimates. Episode 3 is estimated at 8,000 characters (over the 3,000-5,000 target).
 6. User drags the Episode 3/4 divider leftward, splitting the large event group into two episodes.
 7. System auto-rebuilds AI context for affected episodes.
 8. User tags Episode 2's ending as "breadcrumb" (subtle clue) and Episode 4's ending as "crisis" (cliffhanger).
-9. When user generates AI drafts for nodes in these episodes, the AI adjusts pacing and ending direction based on episode position and hook type.
+9. When user generates AI drafts for scenes in these episodes, the AI adjusts pacing and ending direction based on episode position and hook type.
 
 ### Journey 3: Character Map Evolution
 
@@ -412,18 +412,18 @@ REQ-051  Product team can monitor: user acquisition funnel, project
 2. User sees auto-generated character nodes with relationship lines from the initial structuring.
 3. User clicks on the protagonist node and edits the character card: adds a secret motivation, refines personality description.
 4. User creates a new relationship line between the protagonist and antagonist, labels it "former allies," marks it as dashed (negative) with a one-directional arrow.
-5. User uses the temporal slider to set a different relationship state at an earlier timeline point: "allies" (solid line) before the betrayal node.
-6. When generating AI drafts for scenes before the betrayal, the AI references the allied relationship state. After the betrayal node, it references the adversarial state.
+5. User uses the temporal slider to set a different relationship state at an earlier timeline point: "allies" (solid line) before the betrayal scene.
+6. When generating AI drafts for scenes before the betrayal, the AI references the allied relationship state. After the betrayal scene, it references the adversarial state.
 
 ### Journey 4: Revision After First Draft Complete
 
-1. User has completed AI drafts and edits for all nodes across 12 episodes.
+1. User has completed AI drafts and edits for all scenes across 12 episodes.
 2. User opens the Revision panel.
 3. System runs character consistency check. Flags: "In Episode 3, Seo-jun is described as having brown eyes, but in Episode 9, they are described as black."
-4. System runs foreshadowing verification. Flags: "The mysterious letter introduced in Episode 2, Node 4 has no payoff in any subsequent node."
+4. System runs foreshadowing verification. Flags: "The mysterious letter introduced in Episode 2, Scene 4 has no payoff in any subsequent scene."
 5. User clicks on the foreshadowing flag. System suggests: "Consider adding a reveal scene around Episode 8-10. Here are three options for how the letter could pay off."
-6. User selects a suggestion, and the system creates a new node on the timeline linked to the original foreshadowing node.
-7. User generates an AI draft for the new node, which automatically includes the foreshadowing context.
+6. User selects a suggestion, and the system creates a new scene on the timeline linked to the original foreshadowing scene.
+7. User generates an AI draft for the new scene, which automatically includes the foreshadowing context.
 
 ---
 
@@ -432,7 +432,7 @@ REQ-051  Product team can monitor: user acquisition funnel, project
 ### In Scope (Full Product Vision)
 
 - Project creation from free text, file import, or genre templates with AI auto-structuring
-- Visual multi-track timeline with drag-and-drop node editing
+- Visual multi-track timeline with drag-and-drop scene editing
 - Event-episode separation layer with draggable episode dividers
 - Interactive character relationship map with temporal tracking
 - Visual world map (real and fictional) with timeline integration
@@ -528,7 +528,7 @@ REQ-051  Product team can monitor: user acquisition funnel, project
 ### Narrex Differentiators
 
 1. **Visual timeline-based structure.** No competitor — international or Korean — offers a multi-track visual timeline for story planning. This is the primary differentiator.
-2. **Visual editing = AI prompting.** Manipulating the UI (moving nodes, editing character cards, dragging episode dividers) directly shapes what the AI generates. No prompt engineering required.
+2. **Visual editing = AI prompting.** Manipulating the UI (moving scenes, editing character cards, dragging episode dividers) directly shapes what the AI generates. No prompt engineering required.
 3. **Beginner-friendly UX.** Progressive feature disclosure and an always-available AI chat panel let non-technical users ask for help on their own terms, unlike competitors that assume writing experience.
 4. **AI variations.** Multiple draft versions + tone sliders + AI Surprise give authors meaningful creative control, unlike single-output generators.
 5. **Korean web novel specialization.** Genre-aware (regression, romance-fantasy, martial arts), Korean-native prose output, episode-length calibrated for web novel standards (3,000-5,000 characters).
@@ -544,15 +544,15 @@ Prove that a user can go from idea to a multi-episode AI-assisted draft using th
 
 **Included:**
 - Free text input and file import with AI auto-structuring (REQ-001, REQ-002, REQ-004)
-- Multi-track timeline with node editing: add, delete, move via drag-and-drop, parallel tracks, merge/branch points, vertical alignment (REQ-009, REQ-010, REQ-011, REQ-012, REQ-013, REQ-014, REQ-015)
-- Node overlay with event details (REQ-014)
+- Multi-track timeline with scene editing: add, delete, move via drag-and-drop, parallel tracks, merge/branch points, vertical alignment (REQ-009, REQ-010, REQ-011, REQ-012, REQ-013, REQ-014, REQ-015)
+- Scene detail panel with event details (REQ-014)
 - Character relationship map: node graph, relationship lines, character cards (REQ-024, REQ-025, REQ-026)
-- Per-node AI draft generation with auto-assembled context (REQ-034, REQ-035)
+- Per-scene AI draft generation with auto-assembled context (REQ-034, REQ-035)
 - Basic editor: edit generated text, direction-based edit requests (REQ-042, REQ-043)
 - Basic Config bar (REQ-007, REQ-008)
 
 **Deferred to Phase 2+:**
-- Episode organization layer (nodes map 1:1 to scenes initially)
+- Episode organization layer (scenes map 1:1 to episodes initially)
 - World map
 - Temporal relationship tracking
 - Genre templates

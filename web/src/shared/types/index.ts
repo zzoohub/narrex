@@ -1,6 +1,6 @@
 export type Locale = 'ko' | 'en' | 'es' | 'pt-BR' | 'id' | 'ja'
 
-export type NodeStatus = 'empty' | 'ai-draft' | 'edited' | 'needs-revision'
+export type SceneStatus = 'empty' | 'ai-draft' | 'edited' | 'needs-revision'
 
 export type RelationshipType = 'positive' | 'negative' | 'one-way'
 
@@ -35,11 +35,11 @@ export interface Relationship {
   type: RelationshipType
 }
 
-export interface TimelineNode {
+export interface Scene {
   id: string
   trackId: string
   title: string
-  status: NodeStatus
+  status: SceneStatus
   characterIds: string[]
   location: string
   moodTags: string[]
@@ -51,7 +51,7 @@ export interface TimelineNode {
 export interface Track {
   id: string
   label: string
-  nodes: TimelineNode[]
+  scenes: Scene[]
 }
 
 export interface StoryConfig {

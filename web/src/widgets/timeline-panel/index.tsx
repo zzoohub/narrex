@@ -14,11 +14,11 @@ import type { Track } from '@/shared/types'
 
 interface TimelinePanelProps {
   tracks: Track[]
-  selectedNodeId: string | null
-  onSelectNode: (id: string) => void
+  selectedSceneId: string | null
+  onSelectScene: (id: string) => void
 }
 
-function nodeStatusIcon(status: string) {
+function sceneStatusIcon(status: string) {
   switch (status) {
     case 'ai-draft':
       return <IconPen size={12} class="text-accent" />
@@ -31,7 +31,7 @@ function nodeStatusIcon(status: string) {
   }
 }
 
-function nodeTooltip(t: (k: string) => string, status: string) {
+function sceneTooltip(t: (k: string) => string, status: string) {
   switch (status) {
     case 'empty':
       return t('status.empty')
@@ -109,44 +109,44 @@ export function TimelinePanel(props: TimelinePanelProps) {
                   </span>
                 </div>
 
-                {/* Nodes */}
+                {/* Scenes */}
                 <div class="flex items-center gap-2">
-                  <For each={track.nodes}>
-                    {(node, i) => (
+                  <For each={track.scenes}>
+                    {(scene, i) => (
                       <div class="flex items-center gap-2">
                         {/* Connection line */}
                         <Show when={i() > 0}>
                           <div class="w-8 h-0.5 bg-border-default rounded-full flex-shrink-0" />
                         </Show>
 
-                        {/* Node */}
+                        {/* Scene */}
                         <div class="relative group">
                           <button
                             type="button"
                             class="tl-node flex items-center justify-center"
-                            data-status={node.status}
-                            data-selected={props.selectedNodeId === node.id}
-                            onClick={() => props.onSelectNode(node.id)}
-                            aria-label={`${node.title}, ${nodeTooltip(t, node.status)}`}
+                            data-status={scene.status}
+                            data-selected={props.selectedSceneId === scene.id}
+                            onClick={() => props.onSelectScene(scene.id)}
+                            aria-label={`${scene.title}, ${sceneTooltip(t, scene.status)}`}
                           >
-                            {nodeStatusIcon(node.status)}
+                            {sceneStatusIcon(scene.status)}
                           </button>
 
                           {/* Tooltip */}
                           <div class="absolute -top-10 left-1/2 -translate-x-1/2 px-2 py-1 bg-surface-overlay border border-border-default rounded-md text-xs text-fg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg z-20">
-                            {node.title}
+                            {scene.title}
                           </div>
                         </div>
                       </div>
                     )}
                   </For>
 
-                  {/* Add node button */}
+                  {/* Add scene button */}
                   <div class="w-8 h-0.5 bg-border-default rounded-full flex-shrink-0" />
                   <button
                     type="button"
                     class="w-7 h-7 rounded-full border border-dashed border-border-default flex items-center justify-center text-fg-muted hover:border-accent hover:text-accent transition-colors cursor-pointer flex-shrink-0"
-                    aria-label="Add node"
+                    aria-label="Add scene"
                   >
                     <IconPlus size={14} />
                   </button>

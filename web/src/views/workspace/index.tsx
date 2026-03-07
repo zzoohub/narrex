@@ -13,11 +13,11 @@ import { ConfigBar } from '@/widgets/config-bar'
 import { TimelinePanel } from '@/widgets/timeline-panel'
 import { CharacterMap } from '@/widgets/character-map'
 import { EditorPanel } from '@/widgets/editor-panel'
-import { NodeDetail } from '@/widgets/node-detail'
+import { SceneDetail } from '@/widgets/scene-detail'
 import type {
   StoryConfig,
   Track,
-  TimelineNode,
+  Scene,
   Character,
   Relationship,
 } from '@/shared/types'
@@ -46,7 +46,7 @@ const mockRelationships: Relationship[] = [
   { id: 'r3', fromId: 'c2', toId: 'c3', label: '형제', type: 'positive' },
 ]
 
-const mockNodes: TimelineNode[] = [
+const mockScenes: Scene[] = [
   { id: 'n1', trackId: 't1', title: '패배와 죽음', status: 'edited', characterIds: ['c1'], location: '전장', moodTags: ['절망'], plotSummary: '서준은 전쟁에서 패배하고 죽음을 맞이한다.', content: '차가운 바람이 피로 물든 들판을 훑었다. 서준은 부러진 검을 쥔 채 하늘을 올려다보았다. 이것이 끝인가. 그의 입술에서 흘러나온 마지막 한마디—"다시 한 번만..."', position: 0 },
   { id: 'n2', trackId: 't1', title: '회귀 — 어린 시절로', status: 'edited', characterIds: ['c1'], location: '어린 시절 침실', moodTags: ['경이', '불신'], plotSummary: '서준이 12세의 몸으로 깨어난다. 어린 시절 침실. 불신, 그리고 서서히 현실을 깨달음.', content: '눈을 떴을 때, 천장에 익숙한 얼룩이 보였다. 어머니가 지우려 했던, 하지만 끝내 남아 있던 그 얼룩. 서준은 작은 두 손을 들어 올렸다. 흉터가 없었다.', position: 1 },
   { id: 'n3', trackId: 't1', title: '결심', status: 'ai-draft', characterIds: ['c1', 'c2'], location: '마을 광장', moodTags: ['결의'], plotSummary: '서준은 이번 생에서는 모든 것을 바꾸겠다고 다짐한다.', content: '마을 광장에 서자 모든 것이 선명했다. 저 골목에서 3년 후 화재가 날 것이고, 저 우물은 내년에 마를 것이다. 서준은 주먹을 꽉 쥐었다. 이번에는 다를 것이다.', position: 2 },
@@ -57,8 +57,8 @@ const mockNodes: TimelineNode[] = [
 ]
 
 const mockTracks: Track[] = [
-  { id: 't1', label: '메인 플롯', nodes: mockNodes.filter((n) => n.trackId === 't1') },
-  { id: 't2', label: '민혁 (적대자)', nodes: mockNodes.filter((n) => n.trackId === 't2') },
+  { id: 't1', label: '메인 플롯', scenes: mockScenes.filter((n) => n.trackId === 't1') },
+  { id: 't2', label: '민혁 (적대자)', scenes: mockScenes.filter((n) => n.trackId === 't2') },
 ]
 
 /* ═════════════════════════════════════════════════════════════════════════ */
@@ -78,29 +78,29 @@ export function WorkspaceView() {
   const [bottomHeight, setBottomHeight] = createSignal(240)
 
   // Selection
-  const [selectedNodeId, setSelectedNodeId] = createSignal<string | null>(null)
+  const [selectedSceneId, setSelectedSceneId] = createSignal<string | null>(null)
 
-  const selectedNode = () => mockNodes.find((n) => n.id === selectedNodeId())
+  const selectedScene = () => mockScenes.find((n) => n.id === selectedSceneId())
 
-  function handleSelectNode(id: string) {
-    setSelectedNodeId(id)
+  function handleSelectScene(id: string) {
+    setSelectedSceneId(id)
     setRightOpen(true)
   }
 
   function handleCloseRight() {
     setRightOpen(false)
-    setSelectedNodeId(null)
+    setSelectedSceneId(null)
   }
 
   // Prev/next navigation
-  const currentTrackNodes = () => {
-    const node = selectedNode()
-    if (!node) return []
-    return mockNodes.filter((n) => n.trackId === node.trackId).sort((a, b) => a.position - b.position)
+  const currentTrackScenes = () => {
+    const scene = selectedScene()
+    if (!scene) return []
+    return mockScenes.filter((n) => n.trackId === scene.trackId).sort((a, b) => a.position - b.position)
   }
-  const currentIndex = () => currentTrackNodes().findIndex((n) => n.id === selectedNodeId())
-  const prevNode = () => currentTrackNodes()[currentIndex() - 1]
-  const nextNode = () => currentTrackNodes()[currentIndex() + 1]
+  const currentIndex = () => currentTrackScenes().findIndex((n) => n.id === selectedSceneId())
+  const prevScene = () => currentTrackScenes()[currentIndex() - 1]
+  const nextScene = () => currentTrackScenes()[currentIndex() + 1]
 
   // Resize handlers
   function createHorizontalResize(
@@ -240,11 +240,11 @@ export function WorkspaceView() {
         <div class="flex-1 min-w-0 flex flex-col">
           <div class="flex-1 overflow-hidden">
             <EditorPanel
-              selectedNode={selectedNode() ?? null}
-              prevNodeTitle={prevNode()?.title}
-              nextNodeTitle={nextNode()?.title}
-              onSelectPrev={() => prevNode() && handleSelectNode(prevNode()!.id)}
-              onSelectNext={() => nextNode() && handleSelectNode(nextNode()!.id)}
+              selectedScene={selectedScene() ?? null}
+              prevSceneTitle={prevScene()?.title}
+              nextSceneTitle={nextScene()?.title}
+              onSelectPrev={() => prevScene() && handleSelectScene(prevScene()!.id)}
+              onSelectNext={() => nextScene() && handleSelectScene(nextScene()!.id)}
             />
           </div>
 
@@ -260,15 +260,15 @@ export function WorkspaceView() {
             >
               <TimelinePanel
                 tracks={mockTracks}
-                selectedNodeId={selectedNodeId()}
-                onSelectNode={handleSelectNode}
+                selectedSceneId={selectedSceneId()}
+                onSelectScene={handleSelectScene}
               />
             </div>
           </Show>
         </div>
 
-        {/* Right panel — Node detail */}
-        <Show when={rightOpen() && selectedNode()}>
+        {/* Right panel — Scene detail */}
+        <Show when={rightOpen() && selectedScene()}>
           <div
             class="resize-h"
             onPointerDown={createHorizontalResize(setRightWidth, rightWidth, 300, 500, -1)}
@@ -277,8 +277,8 @@ export function WorkspaceView() {
             class="flex-shrink-0 overflow-hidden border-l border-border-default"
             style={{ width: `${rightWidth()}px` }}
           >
-            <NodeDetail
-              node={selectedNode()!}
+            <SceneDetail
+              scene={selectedScene()!}
               characters={mockCharacters}
               onClose={handleCloseRight}
             />

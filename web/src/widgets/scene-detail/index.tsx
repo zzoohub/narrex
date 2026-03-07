@@ -1,16 +1,16 @@
 import { Show } from 'solid-js'
 import { useI18n } from '@/shared/lib/i18n'
 import { Chip, Button, IconX, IconPlus } from '@/shared/ui'
-import type { TimelineNode, Character, NodeStatus } from '@/shared/types'
+import type { Scene, Character, SceneStatus } from '@/shared/types'
 
-interface NodeDetailProps {
-  node: TimelineNode
+interface SceneDetailProps {
+  scene: Scene
   characters: Character[]
   onClose: () => void
 }
 
-function statusLabel(t: (k: string) => string, status: NodeStatus) {
-  const map: Record<NodeStatus, string> = {
+function statusLabel(t: (k: string) => string, status: SceneStatus) {
+  const map: Record<SceneStatus, string> = {
     empty: 'status.empty',
     'ai-draft': 'status.aiDraft',
     edited: 'status.edited',
@@ -19,7 +19,7 @@ function statusLabel(t: (k: string) => string, status: NodeStatus) {
   return t(map[status])
 }
 
-function statusColor(status: NodeStatus) {
+function statusColor(status: SceneStatus) {
   switch (status) {
     case 'ai-draft':
       return 'text-accent bg-accent-muted'
@@ -32,18 +32,18 @@ function statusColor(status: NodeStatus) {
   }
 }
 
-export function NodeDetail(props: NodeDetailProps) {
+export function SceneDetail(props: SceneDetailProps) {
   const { t } = useI18n()
 
   const assignedChars = () =>
-    props.characters.filter((c) => props.node.characterIds.includes(c.id))
+    props.characters.filter((c) => props.scene.characterIds.includes(c.id))
 
   return (
     <div class="flex flex-col h-full bg-surface">
       {/* ── Header ──────────────────────────────────────────────── */}
       <div class="flex items-center justify-between px-4 h-10 border-b border-border-subtle flex-shrink-0">
         <span class="text-xs font-medium text-fg-secondary uppercase tracking-wide">
-          {t('nodeDetail.title')}
+          {t('sceneDetail.title')}
         </span>
         <button
           type="button"
@@ -60,11 +60,11 @@ export function NodeDetail(props: NodeDetailProps) {
         {/* Title */}
         <label class="flex flex-col gap-1.5">
           <span class="text-xs font-medium text-fg-secondary uppercase tracking-wide">
-            {t('nodeDetail.sceneTitle')}
+            {t('sceneDetail.sceneTitle')}
           </span>
           <input
             type="text"
-            value={props.node.title}
+            value={props.scene.title}
             class="h-9 px-3 rounded-lg text-sm bg-canvas border border-border-default text-fg placeholder:text-fg-muted hover:border-accent/30 focus:border-accent focus:outline-none focus:ring-2 focus:ring-focus-ring transition-colors"
           />
         </label>
@@ -72,7 +72,7 @@ export function NodeDetail(props: NodeDetailProps) {
         {/* Characters */}
         <div class="flex flex-col gap-1.5">
           <span class="text-xs font-medium text-fg-secondary uppercase tracking-wide">
-            {t('nodeDetail.characters')}
+            {t('sceneDetail.characters')}
           </span>
           <div class="flex flex-wrap items-center gap-2">
             {assignedChars().map((char) => (
@@ -87,11 +87,11 @@ export function NodeDetail(props: NodeDetailProps) {
         {/* Location */}
         <label class="flex flex-col gap-1.5">
           <span class="text-xs font-medium text-fg-secondary uppercase tracking-wide">
-            {t('nodeDetail.location')}
+            {t('sceneDetail.location')}
           </span>
           <input
             type="text"
-            value={props.node.location}
+            value={props.scene.location}
             class="h-9 px-3 rounded-lg text-sm bg-canvas border border-border-default text-fg placeholder:text-fg-muted hover:border-accent/30 focus:border-accent focus:outline-none focus:ring-2 focus:ring-focus-ring transition-colors"
           />
         </label>
@@ -99,10 +99,10 @@ export function NodeDetail(props: NodeDetailProps) {
         {/* Mood / Tone */}
         <div class="flex flex-col gap-1.5">
           <span class="text-xs font-medium text-fg-secondary uppercase tracking-wide">
-            {t('nodeDetail.mood')}
+            {t('sceneDetail.mood')}
           </span>
           <div class="flex flex-wrap items-center gap-2">
-            {props.node.moodTags.map((tag) => (
+            {props.scene.moodTags.map((tag) => (
               <Chip label={tag} variant="accent" onRemove={() => {}} />
             ))}
             <Button variant="ghost" size="sm" icon={<IconPlus size={14} />}>
@@ -114,33 +114,33 @@ export function NodeDetail(props: NodeDetailProps) {
         {/* Plot Summary */}
         <label class="flex flex-col gap-1.5">
           <span class="text-xs font-medium text-fg-secondary uppercase tracking-wide">
-            {t('nodeDetail.plotSummary')}
+            {t('sceneDetail.plotSummary')}
           </span>
           <textarea
-            value={props.node.plotSummary}
+            value={props.scene.plotSummary}
             rows={6}
-            placeholder={t('nodeDetail.plotPlaceholder')}
+            placeholder={t('sceneDetail.plotPlaceholder')}
             class="px-3 py-2.5 rounded-lg text-sm bg-canvas border border-border-default text-fg placeholder:text-fg-muted resize-none hover:border-accent/30 focus:border-accent focus:outline-none focus:ring-2 focus:ring-focus-ring transition-colors leading-relaxed"
           />
         </label>
 
         {/* Status */}
         <div class="flex items-center justify-between pt-2 border-t border-border-subtle">
-          <span class="text-xs text-fg-muted">{t('nodeDetail.title')}</span>
+          <span class="text-xs text-fg-muted">{t('sceneDetail.title')}</span>
           <span
             class={[
               'text-xs font-medium px-2 py-0.5 rounded-md',
-              statusColor(props.node.status),
+              statusColor(props.scene.status),
             ].join(' ')}
           >
-            {statusLabel(t, props.node.status)}
+            {statusLabel(t, props.scene.status)}
           </span>
         </div>
 
-        <Show when={props.node.content}>
+        <Show when={props.scene.content}>
           <div class="flex items-center justify-between">
             <span class="text-xs text-fg-muted">
-              {props.node.content.length.toLocaleString()} {t('editor.characters')}
+              {props.scene.content.length.toLocaleString()} {t('editor.characters')}
             </span>
           </div>
         </Show>

@@ -28,7 +28,7 @@ Narrex is a visual novel editor where the story is a timeline of events, not a b
 ### 1.3 Assumptions
 
 1. **Scene-level Korean prose generation is viable.** Frontier-class LLMs produce Korean prose good enough to revise, not discard. If quality is insufficient, the provider adapter abstraction enables rapid provider switching.
-2. **Context compression preserves narrative fidelity.** AI-generated summaries of prior nodes maintain enough detail for consistency over 15-20 nodes (Phase 1 scope). Full 40+ episode support requires validation.
+2. **Context compression preserves narrative fidelity.** AI-generated summaries of prior scenes maintain enough detail for consistency over 15-20 scenes (Phase 1 scope). Full 40+ episode support requires validation.
 3. **Single developer for initial development.** Architecture optimizes for operational simplicity and development velocity over horizontal scalability.
 4. **Desktop-first.** The timeline and editor require screen real estate >= 1280px. Mobile is out of scope.
 5. **LLM API costs are the dominant variable cost.** At ~$0.03-0.06 per scene generation, cost optimization is an architectural concern from day one.
@@ -105,10 +105,10 @@ Dependencies always point inward. Domain code never imports framework or infrast
 
 **API Design Philosophy**:
 
-- **REST** with JSON payloads. Resources map to domain entities (projects, nodes, characters, drafts).
+- **REST** with JSON payloads. Resources map to domain entities (projects, scenes, characters, drafts).
 - **Versioning**: URL path (`/api/v1/...`). Breaking changes get a new version.
-- **Pagination**: Cursor-based for lists (timeline nodes ordered by position, projects by last-edited).
-- **Streaming**: SSE endpoint for AI generation (`/api/v1/nodes/{id}/generate`). Standard POST for non-streaming operations.
+- **Pagination**: Cursor-based for lists (timeline scenes ordered by position, projects by last-edited).
+- **Streaming**: SSE endpoint for AI generation (`/api/v1/scenes/{id}/generate`). Standard POST for non-streaming operations.
 
 ### 3.3 Component Overview
 
@@ -118,7 +118,7 @@ The API server is organized into domain modules:
 |--------|---------------|---------------|
 | **auth** | OAuth2 flow, JWT issuance/validation, session management | Login, every authenticated request |
 | **project** | Project CRUD, config management, file import parsing | Project creation, config updates |
-| **timeline** | Node CRUD, track management, ordering, branch/merge connections, vertical alignment | Node manipulation, drag-and-drop |
+| **timeline** | Scene CRUD, track management, ordering, branch/merge connections, vertical alignment | Scene manipulation, drag-and-drop |
 | **character** | Character CRUD, relationship management, character cards | Character map interactions |
 | **generation** | Context assembly, LLM prompt construction, provider adapter orchestration, streaming, summary generation | AI draft generation (core value) |
 | **editor** | Draft storage, direction-based edit orchestration, text versioning | Editor interactions |
@@ -127,7 +127,7 @@ The API server is organized into domain modules:
 **Module dependencies** (inward only):
 - `generation` depends on `project`, `timeline`, `character` (reads context for prompt assembly)
 - `structuring` depends on `project`, `timeline`, `character` (writes initial structure)
-- `editor` depends on `timeline`, `generation` (reads node data, triggers re-generation)
+- `editor` depends on `timeline`, `generation` (reads scene data, triggers re-generation)
 - All modules depend on `auth` (middleware)
 
 The `generation` module is the critical path — it orchestrates context assembly from multiple modules and manages the SSE streaming connection. It is the primary candidate for future extraction if scaling requires it.
@@ -148,7 +148,7 @@ User input (text or file)
   -> API: writes to DB in single transaction
     -> project record (config values)
     -> track records
-    -> node records (with positions, track assignments)
+    -> scene records (with positions, track assignments)
     -> character records
     -> relationship records
   -> Response: complete workspace state
@@ -156,17 +156,17 @@ User input (text or file)
 
 Consistency: Strong. All writes in a single database transaction. Client receives complete workspace state.
 
-**Flow 2: Node -> AI Draft Generation (Core value delivery)**
+**Flow 2: Scene -> AI Draft Generation (Core value delivery)**
 
 ```
-User clicks "Generate" on node
+User clicks "Generate" on scene
   -> API: generation module assembles context
     -> Read: project config (DB, cached in Redis)
-    -> Read: node details (DB)
+    -> Read: scene details (DB)
     -> Read: character cards + relationships for assigned characters (DB, cached)
-    -> Read: compressed summaries of preceding nodes (DB/cache)
-    -> Read: simultaneous nodes on other tracks (DB)
-    -> Read: next node title + summary (DB)
+    -> Read: compressed summaries of preceding scenes (DB/cache)
+    -> Read: simultaneous scenes on other tracks (DB)
+    -> Read: next scene title + summary (DB)
   -> Assemble structured prompt (template + all context)
   -> LLM provider adapter: streaming request
   <- SSE stream: tokens from LLM
@@ -174,7 +174,7 @@ User clicks "Generate" on node
   -> Client: renders tokens progressively in editor
   -> On stream complete:
     -> Store full draft text in DB
-    -> Update node status to "AI Draft"
+    -> Update scene status to "AI Draft"
     -> Async: generate compressed summary
       -> LLM provider adapter: summarization request (lightweight model)
       -> Store summary in DB + cache
@@ -201,7 +201,7 @@ User selects text + enters direction ("more tension")
 
 | Store | Data | Why This Type | Consistency | Retention |
 |-------|------|---------------|-------------|-----------|
-| **Neon (PostgreSQL)** | Projects, nodes, tracks, connections, characters, relationships, drafts, summaries, users | Relational — entities have rich relationships (nodes->tracks, nodes->characters, characters->relationships). ACID transactions for workspace state. | Strong | Indefinite |
+| **Neon (PostgreSQL)** | Projects, scenes, tracks, connections, characters, relationships, drafts, summaries, users | Relational — entities have rich relationships (scenes->tracks, scenes->characters, characters->relationships). ACID transactions for workspace state. | Strong | Indefinite |
 | **Upstash Redis** | Assembled prompt context cache, rate limit counters, refresh token blocklist | Key-value — fast reads for repeated context assembly. Atomic counters for rate limiting. | Eventual (cache) | TTL-based: context 15min, rate limits 1min |
 | **Cloudflare R2** | Imported files (.md, .txt, .zip), character profile images, exported manuscripts [Phase 2] | Object storage — binary blobs, presigned URLs for direct client upload, zero egress fees. | Eventual | Indefinite |
 
@@ -212,7 +212,7 @@ User selects text + enters direction ("more tension")
 | Cached Data | Storage | TTL | Invalidation | Rationale |
 |-------------|---------|-----|--------------|-----------|
 | Assembled prompt context (config + character data) | Redis | 15 min | On config or character update (explicit delete) | Config and character data are stable between edits. Avoid re-querying on repeated generations within a session. |
-| Node summaries | Redis + DB (source of truth) | 1 hour | On draft change for that node | Summaries are expensive (LLM call). Cache prevents recomputation for downstream generation. |
+| Scene summaries | Redis + DB (source of truth) | 1 hour | On draft change for that scene | Summaries are expensive (LLM call). Cache prevents recomputation for downstream generation. |
 | User session data | Redis | 7 days (refresh token lifetime) | On logout or token rotation | Fast auth validation without DB hit per request. |
 
 Cache stampede prevention is not a concern at Phase 1 scale. At scale, use Redis `SETNX`-based lock for summary regeneration.
@@ -294,7 +294,7 @@ Client -> Google OAuth2 consent screen
 **Metrics** (Cloud Monitoring):
 - RED per endpoint (rate, errors, duration)
 - AI-specific: generations/min, avg tokens/generation, cost/user/day, TTFT
-- Business: projects created/day, nodes with drafts/day
+- Business: projects created/day, scenes with drafts/day
 
 **Alerting**:
 - Error rate > 5% over 5 min
@@ -343,11 +343,11 @@ Client -> Google OAuth2 consent screen
 
 ### 6.5 Testing Architecture
 
-**Strategy**: Unit-heavy pyramid. Domain logic (context assembly, prompt construction, node ordering) is pure and extensively unit-tested. Integration tests cover adapter boundaries.
+**Strategy**: Unit-heavy pyramid. Domain logic (context assembly, prompt construction, scene ordering) is pure and extensively unit-tested. Integration tests cover adapter boundaries.
 
 | Layer | What | How | Target |
 |-------|------|-----|--------|
-| Unit | Domain logic: context assembly, node ordering, prompt templates, validation rules | `cargo test` — pure functions, no mocks needed (hexagonal ports make domain dependencies-free) | 80%+ domain module coverage |
+| Unit | Domain logic: context assembly, scene ordering, prompt templates, validation rules | `cargo test` — pure functions, no mocks needed (hexagonal ports make domain dependencies-free) | 80%+ domain module coverage |
 | Integration | DB adapters (SQLx queries), LLM provider adapters, R2 client | `cargo test` with Neon branch + Ollama (local LLM) | All adapter boundaries |
 | E2E | Core journey: create project -> auto-structure -> generate draft -> edit | Playwright against staging | 3 critical flows |
 | AI quality | Generation output quality, summary fidelity, Korean prose naturalness | LLM-as-judge evaluation (50 test scenarios across 3 genres) | Weekly, not per-PR |
@@ -392,17 +392,17 @@ Client -> Google OAuth2 consent screen
 
 | Risk | Impact | Likelihood | Mitigation |
 |------|--------|------------|------------|
-| Context assembly prompt exceeds LLM context window at 15+ nodes | Degraded generation quality or truncation | Medium | Token budget management: 16K tokens for context, truncate oldest summaries first. Monitor total tokens per generation. |
+| Context assembly prompt exceeds LLM context window at 15+ scenes | Degraded generation quality or truncation | Medium | Token budget management: 16K tokens for context, truncate oldest summaries first. Monitor total tokens per generation. |
 | SSE streaming drops connection on long generations | Incomplete drafts | Low | Cloud Run supports SSE natively. 300s timeout. Client reconnection with last-received position. Store partial drafts server-side. |
 | Neon cold starts add latency after idle | Slow first request | Medium | ~500ms cold start, acceptable. Configure minimum compute during peak hours if problematic. |
 | Korean prose quality below "worth editing" threshold | Core value proposition fails | Medium | Pre-launch: test 50+ scenes across 3 genres with target users. Adapter enables switching between Gemini and Claude. Genre-specific prompt engineering. |
-| Summary compression loses critical details over 20+ nodes | Later scenes contradict earlier ones | Medium | Phase 1: full summaries (not summary-of-summaries). Tiered compression if token budget exceeded: recent 5 nodes full, older nodes ultra-compressed. |
+| Summary compression loses critical details over 20+ scenes | Later scenes contradict earlier ones | Medium | Phase 1: full summaries (not summary-of-summaries). Tiered compression if token budget exceeded: recent 5 scenes full, older scenes ultra-compressed. |
 
 ### 8.2 Open Questions
 
 1. **Ollama model selection for local development.** Which model provides acceptable Korean prose quality for free local iteration? Candidates: llama3, gemma2, EEVE-Korean. *Needs: local quality benchmarking. Owner: zzoo.*
 
-2. **Summary compression fidelity at scale.** Does compounding summarization maintain narrative detail over 20+ nodes? *Needs: test with 25-node manuscript, measure contradiction rate. Owner: zzoo.*
+2. **Summary compression fidelity at scale.** Does compounding summarization maintain narrative detail over 20+ scenes? *Needs: test with 25-scene manuscript, measure contradiction rate. Owner: zzoo.*
 
 3. **Notion .zip import depth.** Notion exports have complex internal structure. How deep should parsing go? *MVP answer: extract text content only, ignore Notion-specific structure (databases, toggles). Owner: zzoo.*
 
@@ -423,10 +423,10 @@ Client -> Google OAuth2 consent screen
 ### ADR-2: Frontend Framework — TanStack Start + SolidJS
 
 - **Status**: Accepted
-- **Context**: The workspace UI requires fine-grained reactivity for the multi-track timeline (drag-and-drop, node state updates, panel resizing) and streaming text rendering in the editor.
+- **Context**: The workspace UI requires fine-grained reactivity for the multi-track timeline (drag-and-drop, scene state updates, panel resizing) and streaming text rendering in the editor.
 - **Decision**: TanStack Start (SSR) + SolidJS (reactive UI) on Cloudflare Workers.
 - **Alternatives Considered**:
-  - **Next.js (React)**: Rejected. React's virtual DOM diffing is unnecessary overhead for the timeline — when a single node's status changes, only that node needs to update. SolidJS's fine-grained reactivity handles this surgically. The React ecosystem advantage (shadcn/ui, Radix) is not critical — Narrex has a custom design system ("Ink & Amber").
+  - **Next.js (React)**: Rejected. React's virtual DOM diffing is unnecessary overhead for the timeline — when a single scene's status changes, only that scene needs to update. SolidJS's fine-grained reactivity handles this surgically. The React ecosystem advantage (shadcn/ui, Radix) is not critical — Narrex has a custom design system ("Ink & Amber").
 - **Consequences**: (+) Smaller bundles, surgical DOM updates, no virtual DOM overhead. (-) Smaller component ecosystem. Some libraries (rich text editors) may need custom SolidJS implementations.
 
 ### ADR-3: System Architecture — Modular Monolith
@@ -442,7 +442,7 @@ Client -> Google OAuth2 consent screen
 ### ADR-4: Database — Neon (Serverless PostgreSQL)
 
 - **Status**: Accepted
-- **Context**: Richly interconnected entities (projects, nodes, tracks, characters, relationships) need relational modeling. Global audience.
+- **Context**: Richly interconnected entities (projects, scenes, tracks, characters, relationships) need relational modeling. Global audience.
 - **Decision**: Neon in us-east-1 (Virginia).
 - **Alternatives Considered**:
   - **Supabase (Seoul)**: Rejected. Global audience means Seoul region is suboptimal. Neon's branching and scale-to-zero are better aligned with solopreneur cost model.
@@ -522,7 +522,7 @@ Phase 1 uses Gemini Pro for all tasks, with Claude as automatic fallback on fail
 **Protocol**: SSE (Server-Sent Events)
 
 ```
-Client --POST /api/v1/nodes/{id}/generate--> API Server (LlmPort adapter)
+Client --POST /api/v1/scenes/{id}/generate--> API Server (LlmPort adapter)
        <--text/event-stream (SSE)--          Adapter --HTTPS--> Gemini / Claude
 ```
 
@@ -544,7 +544,7 @@ Context Assembly Pipeline
 1. Project Config (budget: ~500 tokens)
    genre, theme, era/location, POV, tone
 
-2. Current Node (budget: ~1K tokens)
+2. Current Scene (budget: ~1K tokens)
    title, plot summary, location, mood tags
 
 3. Characters — filtered to this scene (budget: ~2K tokens)
@@ -552,15 +552,15 @@ Context Assembly Pipeline
    + relationships between assigned characters
 
 4. Narrative Context (budget: ~11K tokens, flexible)
-   compressed summaries of preceding nodes
+   compressed summaries of preceding scenes
    ordered by timeline position
 
 5. Parallel Context (budget: ~1K tokens)
    simultaneous events on other tracks
-   (vertically aligned nodes)
+   (vertically aligned scenes)
 
 6. Forward Context (budget: ~500 tokens)
-   next node title + summary (if exists)
+   next scene title + summary (if exists)
 
    ============> Structured Prompt Template
    ============> LLM provider adapter (streaming)
@@ -568,7 +568,7 @@ Context Assembly Pipeline
 
 **Token budget management**:
 - Total context budget: 16K tokens (leaves room for generation output)
-- Priority: Config > Current Node > Characters > Forward > Parallel > Narrative
+- Priority: Config > Current Scene > Characters > Forward > Parallel > Narrative
 - If narrative summaries exceed budget, truncate oldest first (most distant events are least relevant)
 
 **Prompt templates**: Version-controlled in the codebase. Structured with clear section delimiters. Changes tested via AI quality eval suite.
@@ -588,7 +588,7 @@ Draft text (1,500-3,000 chars)
   -> Stored in DB + cached in Redis (1hr TTL)
 ```
 
-**Quality risk**: Compounding summarization loses detail over 20+ nodes. Phase 1 mitigation: use full summaries, not summary-of-summaries. Monitor context token usage. If budget exceeded, implement tiered compression: recent 5 nodes full summaries, older nodes ultra-compressed.
+**Quality risk**: Compounding summarization loses detail over 20+ scenes. Phase 1 mitigation: use full summaries, not summary-of-summaries. Monitor context token usage. If budget exceeded, implement tiered compression: recent 5 scenes full summaries, older scenes ultra-compressed.
 
 ### 10.5 Cost Optimization
 
@@ -636,7 +636,7 @@ Draft text (1,500-3,000 chars)
 **Components**:
 - API Server: auth, project, timeline, character, generation, editor, structuring modules
 - LLM adapters: GeminiAdapter (primary) + AnthropicAdapter (fallback) + OllamaAdapter (local dev)
-- Web Client: Dashboard, Project Creation, Workspace (Config Bar, Timeline, Character Map, Editor, Node Detail)
+- Web Client: Dashboard, Project Creation, Workspace (Config Bar, Timeline, Character Map, Editor, Scene Detail)
 
 **Infrastructure**:
 - GCP Cloud Run (API server — single service)

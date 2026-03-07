@@ -19,7 +19,7 @@ The user's goal is not "use a timeline" or "manage characters" — it is **to ho
 
 1. A way to input the idea (project creation)
 2. A way to see the structured result (workspace: timeline + character map)
-3. A way to generate prose (AI draft generation per node)
+3. A way to generate prose (AI draft generation per scene)
 4. A way to refine prose (editor with direction-based edits)
 
 ### What Can Be Removed
@@ -83,7 +83,7 @@ Desktop-first web application. The multi-track timeline and editor require subst
 |   +-- Timeline Panel (bottom, full-width)
 |   +-- Character Map Panel (left sidebar, toggleable)
 |   +-- Editor Panel (center/right, context-dependent)
-|   +-- Node Detail Overlay (right sidebar or modal)
+|   +-- Scene Detail Panel (right sidebar or modal)
 |   +-- World Map Panel (left sidebar, toggleable) [Phase 3+]
 |   +-- AI Chat Panel (right sidebar, toggleable) [Phase 2]
 |   +-- Episode Organization Overlay [Phase 2]
@@ -103,9 +103,9 @@ Desktop-first web application. The multi-track timeline and editor require subst
 The workspace is a single-page application with togglable panels. No deep navigation hierarchy. Users switch between panels, not pages.
 
 **Reachability:** Every core action is at most 2 clicks from the workspace:
-- Generate draft: select node (1) -> click "Generate" (2)
+- Generate draft: select scene (1) -> click "Generate" (2)
 - Edit character: click character node on map (1) -> edit card (in-place)
-- Add timeline node: click "+" on timeline (1)
+- Add timeline scene: click "+" on timeline (1)
 
 ### Panel Layout (Desktop, >=1280px)
 
@@ -115,19 +115,19 @@ The workspace is a single-page application with togglable panels. No deep naviga
 +----------+------------------------------------+---------------+
 | Left     | Center                             | Right         |
 | Panel    | (Editor / Welcome)                 | Panel         |
-|          |                                    | (Node Detail) |
+|          |                                    | (Scene Detail)|
 | Character|                                    |               |
 | Map      |                                    |               |
 |          |                                    |               |
 +----------+--------+---------------------------+---------------+
 | Timeline (full width, horizontal scroll, multi-track)         |
-| Track 1: [node]--[node]--[node]--[node]--[+]                 |
-| Track 2:         [node]--[node]--[+]                          |
+| Track 1: [scene]--[scene]--[scene]--[scene]--[+]             |
+| Track 2:         [scene]--[scene]--[+]                        |
 | [+ Add Track]                                                 |
 +---------------------------------------------------------------+
 ```
 
-**Mental model:** Video editor. Timeline at the bottom (= video timeline). Editor in the center (= preview monitor). Character Map on the left (= media library). Node Detail on the right (= inspector/properties). Config Bar at the top (= project settings).
+**Mental model:** Video editor. Timeline at the bottom (= video timeline). Editor in the center (= preview monitor). Character Map on the left (= media library). Scene Detail on the right (= inspector/properties). Config Bar at the top (= project settings).
 
 ### Panel Behavior
 
@@ -135,8 +135,8 @@ The workspace is a single-page application with togglable panels. No deep naviga
 |-------|--------------|--------|--------|
 | Config Bar | Collapsed (shows genre + tone summary) | Click to expand | No |
 | Left Panel (Character Map) | Open, 280px wide | Toggle icon in toolbar | Drag edge, min 240px, max 400px |
-| Center (Editor) | Shows welcome/overview when no node selected | Always visible | Fills remaining space |
-| Right Panel (Node Detail) | Hidden until node selected | Auto-opens on node select, close button | Drag edge, min 300px, max 500px |
+| Center (Editor) | Shows welcome/overview when no scene selected | Always visible | Fills remaining space |
+| Right Panel (Scene Detail) | Hidden until scene selected | Auto-opens on scene select, close button | Drag edge, min 300px, max 500px |
 | Timeline | Open, 240px tall | Toggle icon in toolbar | Drag top edge, min 160px, max 50vh |
 
 ### Responsive Behavior
@@ -178,7 +178,7 @@ Dashboard
   |                 |
   |                 +-- Workspace opens with auto-generated:
   |                       - Config bar pre-filled
-  |                       - Timeline with event nodes
+  |                       - Timeline with scenes
   |                       - Character map with relationships
   |                       - Summary toast: "Found X characters, Y events"
 ```
@@ -194,35 +194,35 @@ Dashboard
 ```
 Workspace (Timeline panel)
   |
-  +-- Add node: Click [+] between nodes or at track end
-  |     -> Node appears with "Untitled Event" placeholder
-  |     -> Right panel opens with Node Detail form
+  +-- Add scene: Click [+] between scenes or at track end
+  |     -> Scene appears with "Untitled Scene" placeholder
+  |     -> Right panel opens with Scene Detail form
   |
-  +-- Select node: Click on node
-  |     -> Node highlights
-  |     -> Right panel shows Node Detail
+  +-- Select scene: Click on scene
+  |     -> Scene highlights
+  |     -> Right panel shows Scene Detail
   |     -> Center panel shows Editor (if draft exists) or empty state
   |
-  +-- Move node: Drag to new position (within track or across tracks)
+  +-- Move scene: Drag to new position (within track or across tracks)
   |     -> Ghost preview shows destination
-  |     -> Adjacent nodes shift to accommodate
+  |     -> Adjacent scenes shift to accommodate
   |     -> Drop completes move (optimistic UI)
   |
-  +-- Delete node: Select node -> press Delete key or context menu
-  |     -> [If node has content] Confirmation dialog: "Delete 'Node Title'?"
-  |     -> [If node is empty] Delete immediately, show undo snackbar
+  +-- Delete scene: Select scene -> press Delete key or context menu
+  |     -> [If scene has content] Confirmation dialog: "Delete 'Scene Title'?"
+  |     -> [If scene is empty] Delete immediately, show undo snackbar
   |
-  +-- Branch: Drag from node's branch handle to empty space on another track
-  |     -> Creates new node on target track with connection line
+  +-- Branch: Drag from scene's branch handle to empty space on another track
+  |     -> Creates new scene on target track with connection line
   |
-  +-- Merge: Drag from multiple nodes to a single downstream node
+  +-- Merge: Drag from multiple scenes to a single downstream scene
   |     -> Connection lines converge to merge point
   |
   +-- Add track: Click [+ Add Track] below existing tracks
   |     -> New empty track appears with label input
   |
   +-- Remove track: Right-click track label -> "Remove Track"
-        -> [If track has nodes] Show confirmation
+        -> [If track has scenes] Show confirmation
         -> [If track empty] Remove immediately
 ```
 
@@ -254,9 +254,9 @@ Workspace (Left Panel: Character Map)
 ### Flow 4: AI Draft Generation + Editing [Phase 1]
 
 ```
-Workspace (Node selected)
+Workspace (Scene selected)
   |
-  +-- Node Detail (Right Panel):
+  +-- Scene Detail (Right Panel):
   |     - Review/edit: title, plot summary, characters, location, mood tags
   |
   +-- Editor (Center Panel):
@@ -268,12 +268,12 @@ Workspace (Node selected)
   |     +-- Click [Generate Draft]
   |     |     -> Button becomes loading state: "Generating..."
   |     |     -> Prose streams into editor as it's generated (15-30s)
-  |     |     -> On complete: node status -> "AI Draft"
+  |     |     -> On complete: scene status -> "AI Draft"
   |     |
   |     +-- [If draft exists] Prose displayed in editor
   |           |
   |           +-- Edit directly: type, select, cut/copy/paste, undo/redo
-  |           |     -> Node status -> "Edited" on first modification
+  |           |     -> Scene status -> "Edited" on first modification
   |           |
   |           +-- Direction-based edit:
   |           |     (1) Select text passage
@@ -289,7 +289,7 @@ Workspace (Node selected)
   |                 -> Confirmation: "Replace current draft?"
   |                 -> New draft streams in
   |
-  +-- Navigate to prev/next node: arrows in Editor header
+  +-- Navigate to prev/next scene: arrows in Editor header
 ```
 
 ### Flow 5: Episode Organization [Phase 2]
@@ -323,11 +323,11 @@ Workspace -> Revision Panel (toggle from toolbar)
   |
   +-- Results displayed as issue cards:
   |     - Issue description
-  |     - Affected nodes (clickable -> navigates to node)
+  |     - Affected scenes (clickable -> navigates to scene)
   |     - Suggested fix (expandable)
   |     - [Apply Fix] or [Dismiss]
   |
-  +-- Apply fix creates new node or modifies existing draft
+  +-- Apply fix creates new scene or modifies existing draft
 ```
 
 ---
@@ -511,16 +511,16 @@ Single line showing key settings as tags. Click [v] expands to full view.
 - Genre, Theme, Era/Location: free text inputs with dropdown suggestions for common Korean web novel genres.
 - Point of View: dropdown (1st person / 3rd person limited / 3rd person omniscient).
 - Mood/Tone: tag chips. Click to edit, [+ Add] to add new tag, click [x] on tag to remove.
-- Changes auto-save. Nodes with drafts generated before the change display a "config changed" indicator (Zeigarnik: incomplete state visible).
+- Changes auto-save. Scenes with drafts generated before the change display a "config changed" indicator (Zeigarnik: incomplete state visible).
 
-**"Config changed" indicator on nodes:**
+**"Config changed" indicator on scenes:**
 
-Nodes whose draft was generated with different config values show a small warning badge. Hovering the badge shows: "Story settings changed since this draft was generated. Re-generate to apply new settings."
+Scenes whose draft was generated with different config values show a small warning badge. Hovering the badge shows: "Story settings changed since this draft was generated. Re-generate to apply new settings."
 
 ### 5.4 Workspace — Timeline Panel [Phase 1]
 
 **Location:** Bottom of workspace, full width
-**Primary action:** Select a node to view/edit/generate
+**Primary action:** Select a scene to view/edit/generate
 
 This is the core visual differentiator. Design must balance power (multi-track, branch/merge) with approachability (non-technical users).
 
@@ -540,7 +540,7 @@ This is the core visual differentiator. Design must balance power (multi-track, 
 +---------------------------------------------------------------+
 ```
 
-**Node visual states** (not color-only — uses fill + icon + label):
+**Scene visual states** (not color-only — uses fill + icon + label):
 
 | State | Visual | Icon | Tooltip |
 |-------|--------|------|---------|
@@ -549,19 +549,19 @@ This is the core visual differentiator. Design must balance power (multi-track, 
 | Edited | Solid filled circle | Checkmark | "Author-edited" |
 | Needs Revision | Filled circle with warning border | Warning triangle | "Settings changed since draft" |
 
-**Node interaction:**
+**Scene interaction:**
 
 | Action | Trigger | Response |
 |--------|---------|----------|
-| Select | Click | Node highlights (ring), Right panel opens with Node Detail, Center panel shows Editor |
+| Select | Click | Scene highlights (ring), Right panel opens with Scene Detail, Center panel shows Editor |
 | Quick preview | Hover (desktop) | Tooltip with title + first 2 lines of plot summary |
-| Add node | Click [+] at end of track or between nodes | New empty node inserted with smooth animation, auto-selected |
-| Move node | Drag | Ghost preview at cursor. Drop target highlighted. Adjacent nodes shift. 300ms transition. |
+| Add scene | Click [+] at end of track or between scenes | New empty scene inserted with smooth animation, auto-selected |
+| Move scene | Drag | Ghost preview at cursor. Drop target highlighted. Adjacent scenes shift. 300ms transition. |
 | Cross-track move | Drag to different track | Same as move, track assignment updates |
 | Delete | Select + Delete key, or right-click -> "Delete" | Confirmation if has content; undo snackbar if empty |
-| Context menu | Right-click on node | Menu: Edit Details, Generate Draft, Delete |
-| Branch | Drag from node's bottom branch handle | Creates connection to new node on target track |
-| Merge | Drag connection from node to existing node on another track | Merge line drawn |
+| Context menu | Right-click on scene | Menu: Edit Details, Generate Draft, Delete |
+| Branch | Drag from scene's bottom branch handle | Creates connection to new scene on target track |
+| Merge | Drag connection from scene to existing scene on another track | Merge line drawn |
 
 **Track interaction:**
 
@@ -569,40 +569,40 @@ This is the core visual differentiator. Design must balance power (multi-track, 
 |--------|---------|----------|
 | Add track | Click [+ Add Track] | New track appended at bottom, label input focused |
 | Rename track | Double-click track label | Inline text edit |
-| Remove track | Right-click label -> "Remove Track" | Confirmation if has nodes |
+| Remove track | Right-click label -> "Remove Track" | Confirmation if has scenes |
 | Collapse track | Click chevron next to label | Track collapses to single line (saves vertical space) |
 
 **Zoom and scroll:**
 
 - Horizontal scroll: scroll wheel (horizontal) or click-and-drag on empty timeline area.
 - Zoom: Ctrl/Cmd + scroll wheel, or zoom controls in toolbar.
-- [Fit] button: fits all nodes into visible area.
+- [Fit] button: fits all scenes into visible area.
 - Pinch-to-zoom on trackpad.
 
 **Vertical alignment of simultaneous events:**
 
-Nodes at the same narrative time across tracks are snapped to a vertical column. A faint vertical line connects aligned nodes. Hovering an aligned column highlights all nodes in that time position.
+Scenes at the same narrative time across tracks are snapped to a vertical column. A faint vertical line connects aligned scenes. Hovering an aligned column highlights all scenes in that time position.
 
 **Auto-structuring result:**
 
-When a project is first created, the timeline appears pre-populated. An inline hint at the top of the timeline says: "This is a starting point — drag, add, or delete nodes to match your vision." This hint dismisses on first interaction and does not return. (Cognitive Load: reduce extraneous load by showing guidance only when relevant.)
+When a project is first created, the timeline appears pre-populated. An inline hint at the top of the timeline says: "This is a starting point — drag, add, or delete scenes to match your vision." This hint dismisses on first interaction and does not return. (Cognitive Load: reduce extraneous load by showing guidance only when relevant.)
 
 **Connection lines:**
 
-- Sequential connections (within track): thin solid line between nodes.
+- Sequential connections (within track): thin solid line between scenes.
 - Branch/merge connections (across tracks): curved bezier lines, slightly thicker.
 - Foreshadowing connections [Phase 2]: dashed colored line with arrow, distinct from structural connections.
 
-### 5.5 Workspace — Node Detail Panel [Phase 1]
+### 5.5 Workspace — Scene Detail Panel [Phase 1]
 
-**Location:** Right side panel (auto-opens on node selection)
+**Location:** Right side panel (auto-opens on scene selection)
 **Primary action:** Define what this scene is about (to shape AI generation)
 
 **Layout:**
 
 ```
 +-----------------------------------+
-| Node Detail                   [x] |
+| Scene Detail                  [x] |
 +-----------------------------------+
 |                                   |
 | Title                             |
@@ -656,7 +656,7 @@ When a project is first created, the timeline appears pre-populated. An inline h
 **Location:** Center panel
 **Primary action:** Edit scene prose
 
-**Empty State (no node selected):**
+**Empty State (no scene selected):**
 
 ```
 +-----------------------------------------------+
@@ -669,11 +669,11 @@ When a project is first created, the timeline appears pre-populated. An inline h
 +-----------------------------------------------+
 ```
 
-**Empty State (node selected, no draft):**
+**Empty State (scene selected, no draft):**
 
 ```
 +-----------------------------------------------+
-| <- [Prev Node Title]  Scene 5  [Next Title] ->|
+| <- [Prev Scene Title]  Scene 5  [Next Title] ->|
 +-----------------------------------------------+
 |                                               |
 |                                               |
@@ -751,7 +751,7 @@ If no text is selected and user clicks [Edit with AI] from a toolbar menu, the d
 - Standard text editing (type, select, cut/copy/paste)
 - Undo/redo (Cmd+Z / Cmd+Shift+Z, 50+ action stack)
 - Character count (real-time)
-- Prev/next node navigation
+- Prev/next scene navigation
 - Direction-based partial regeneration
 - Re-generate entire draft (with confirmation)
 
@@ -860,19 +860,19 @@ A timeline slider appears at the bottom of the Character Map panel, linked to th
 
 ### 5.8 Workspace — World Map Panel [Phase 3+]
 
-Replaces or tabs with Character Map in the left panel. Shows a visual map (real or fictional) with location nodes. Locations link to timeline nodes. Not designed in Phase 1 — location is a free-text field on Node Detail.
+Replaces or tabs with Character Map in the left panel. Shows a visual map (real or fictional) with location nodes. Locations link to timeline scenes. Not designed in Phase 1 — location is a free-text field on Scene Detail.
 
 ### 5.9 AI Chat Panel [Phase 2]
 
-Right sidebar toggle (shares space with Node Detail or opens as a separate tab). Context-aware chat for story questions, brainstorming, structural advice. Reads Config, Timeline, Character Map as context.
+Right sidebar toggle (shares space with Scene Detail or opens as a separate tab). Context-aware chat for story questions, brainstorming, structural advice. Reads Config, Timeline, Character Map as context.
 
 ### 5.10 Episode Organization [Phase 2]
 
-Overlay on the timeline that adds episode dividers. Dividers are draggable vertical lines that partition nodes into episodes. Each episode section shows word count estimate and hook type label.
+Overlay on the timeline that adds episode dividers. Dividers are draggable vertical lines that partition scenes into episodes. Each episode section shows word count estimate and hook type label.
 
 ### 5.11 Revision Panel [Phase 3+]
 
-Toggle panel that runs AI-powered checks across the full manuscript. Displays issues as cards with links to affected nodes and suggested fixes.
+Toggle panel that runs AI-powered checks across the full manuscript. Displays issues as cards with links to affected scenes and suggested fixes.
 
 ### 5.12 Export [Phase 2]
 
@@ -888,13 +888,13 @@ Modal dialog accessed from workspace toolbar. Format selection (DOCX, EPUB, plai
 
 | Phase | Visual Feedback | Duration |
 |-------|----------------|----------|
-| Grab | Node lifts slightly (scale 1.05), shadow appears | 100ms |
-| Drag | Ghost of node follows cursor. Valid drop zones highlight. Invalid zones dim. | Continuous |
-| Over valid target | Target position shows insertion indicator (line or gap). Adjacent nodes shift. | 200ms transition |
-| Drop | Node animates to final position. Snackbar: "Node moved" with [Undo]. | 300ms ease-out |
-| Cancel | Press Escape during drag -> node returns to original position. | 200ms |
+| Grab | Scene lifts slightly (scale 1.05), shadow appears | 100ms |
+| Drag | Ghost of scene follows cursor. Valid drop zones highlight. Invalid zones dim. | Continuous |
+| Over valid target | Target position shows insertion indicator (line or gap). Adjacent scenes shift. | 200ms transition |
+| Drop | Scene animates to final position. Snackbar: "Scene moved" with [Undo]. | 300ms ease-out |
+| Cancel | Press Escape during drag -> scene returns to original position. | 200ms |
 
-**Accessibility:** Drag-and-drop has a keyboard alternative. Select node -> use Ctrl+Arrow keys to move position. Confirmation via Enter.
+**Accessibility:** Drag-and-drop has a keyboard alternative. Select scene -> use Ctrl+Arrow keys to move position. Confirmation via Enter.
 
 ### 6.2 Auto-Save
 
@@ -909,8 +909,8 @@ All user edits auto-save. No save button anywhere in the product.
 | Scope | Mechanism | Depth |
 |-------|-----------|-------|
 | Editor text | Cmd+Z / Cmd+Shift+Z | 50+ actions |
-| Timeline operations (node add/move/delete) | Cmd+Z or undo snackbar | 20 actions |
-| Node Detail field edits | Cmd+Z within each field | Standard browser undo |
+| Timeline operations (scene add/move/delete) | Cmd+Z or undo snackbar | 20 actions |
+| Scene Detail field edits | Cmd+Z within each field | Standard browser undo |
 | Character Map operations | Cmd+Z or undo snackbar | 20 actions |
 | AI generation | [Re-generate] regenerates; undo restores pre-generation text | Full draft preserved |
 
@@ -920,11 +920,11 @@ All user edits auto-save. No save button anywhere in the product.
 |----------|--------|
 | Cmd+Z | Undo |
 | Cmd+Shift+Z | Redo |
-| Delete / Backspace | Delete selected node (with confirmation if has content) |
-| Enter | Open editor for selected node |
-| Cmd+G | Generate draft for selected node |
-| Escape | Close overlay/panel, deselect node |
-| Arrow keys | Navigate between nodes on timeline |
+| Delete / Backspace | Delete selected scene (with confirmation if has content) |
+| Enter | Open editor for selected scene |
+| Cmd+G | Generate draft for selected scene |
+| Escape | Close overlay/panel, deselect scene |
+| Arrow keys | Navigate between scenes on timeline |
 | Tab | Move focus between panels |
 | Cmd+\ | Toggle left panel |
 | Cmd+] | Toggle right panel |
@@ -934,16 +934,16 @@ All user edits auto-save. No save button anywhere in the product.
 
 Right-click on interactive elements shows context-specific menus.
 
-**Node context menu:**
+**Scene context menu:**
 - Edit Details
 - Generate Draft
 - Re-generate Draft (if draft exists)
-- Duplicate Node
-- Delete Node
+- Duplicate Scene
+- Delete Scene
 
 **Track context menu:**
 - Rename Track
-- Remove Track (disabled if has nodes; or confirms deletion of all nodes)
+- Remove Track (disabled if has scenes; or confirms deletion of all scenes)
 
 **Character node context menu:**
 - Edit Character
@@ -962,7 +962,7 @@ Right-click on interactive elements shows context-specific menus.
 | Auto-structuring | 10-30s | Staged progress with descriptive steps |
 | AI draft generation | 15-30s | Streaming text output (progressive rendering) |
 | Direction-based edit | 5-10s | Inline streaming replacement |
-| Node operations (add/move/delete) | <300ms | Optimistic UI, no indicator |
+| Scene operations (add/move/delete) | <300ms | Optimistic UI, no indicator |
 | Character map layout | <500ms | Force-directed simulation runs visually |
 | Auto-save | <1s | Subtle "Saving..." -> "Saved" in footer |
 
@@ -970,11 +970,11 @@ Right-click on interactive elements shows context-specific menus.
 
 Only used for destructive + irreversible actions:
 
-- Delete node with content: "Delete '[Node Title]'? This will remove the scene and its draft. This cannot be undone."
+- Delete scene with content: "Delete '[Scene Title]'? This will remove the scene and its draft. This cannot be undone."
   [Cancel] [Delete Scene]
 - Delete character: "Delete '[Character Name]'? This character will be removed from all scenes. This cannot be undone."
   [Cancel] [Delete Character]
-- Re-generate draft: "Replace current draft? Your existing draft for '[Node Title]' will be overwritten."
+- Re-generate draft: "Replace current draft? Your existing draft for '[Scene Title]' will be overwritten."
   [Cancel] [Replace Draft]
 
 All confirmation dialogs use specific verbs, not "OK"/"Yes". (UX Writing: verb rule.)
@@ -994,7 +994,7 @@ All confirmation dialogs use specific verbs, not "OK"/"Yes". (UX Writing: verb r
 | Context | Tone | Example |
 |---------|------|---------|
 | First visit | Warm, inviting | "Start your first story" |
-| Working | Direct, minimal | "Generate Draft", "Save", node status labels |
+| Working | Direct, minimal | "Generate Draft", "Save", scene status labels |
 | AI generated | Neutral, factual | "Found 4 characters, 12 events. Here's your story structure." |
 | Error | Calm, solution-focused | "We couldn't generate this scene. Check the plot summary and try again." |
 | Success | Subtle warmth | "All changes saved" (not fireworks, not "Great job!") |
@@ -1020,9 +1020,9 @@ All confirmation dialogs use specific verbs, not "OK"/"Yes". (UX Writing: verb r
 
 **Empty states:**
 - Dashboard: "No projects yet. Start your first story."
-- Timeline (first project): "This is a starting point — drag, add, or delete nodes to match your vision."
-- Editor (no node selected): "Select a scene on the timeline to start writing."
-- Editor (node selected, no draft): "Ready to bring this scene to life. Add a plot summary, then generate your first draft."
+- Timeline (first project): "This is a starting point — drag, add, or delete scenes to match your vision."
+- Editor (no scene selected): "Select a scene on the timeline to start writing."
+- Editor (scene selected, no draft): "Ready to bring this scene to life. Add a plot summary, then generate your first draft."
 - Character Map (empty): "No characters yet. Characters are created automatically when you structure your story."
 
 **Error messages:**
@@ -1065,7 +1065,7 @@ All system UI is in Korean (primary market). English labels in this document are
 |-------------|---------------|
 | Text contrast | 4.5:1 minimum for body text, 3:1 for large text and UI components |
 | Focus indicator | 2px outline with 3:1 contrast on all interactive elements |
-| Color not sole indicator | Node states use fill pattern + icon + text label (not just color) |
+| Color not sole indicator | Scene states use fill pattern + icon + text label (not just color) |
 | Keyboard navigation | All features reachable via keyboard. Tab order matches visual layout. |
 | Screen reader labels | All interactive elements have `aria-label` or visible text label |
 | Scalable text | Supports browser zoom to 200% without layout breakage |
@@ -1075,8 +1075,8 @@ All system UI is in Korean (primary market). English labels in this document are
 
 The visual timeline presents unique accessibility challenges:
 
-- **Keyboard navigation:** Arrow keys move between nodes. Enter opens node detail. Tab moves between tracks.
-- **Screen reader:** Nodes announced as "Scene [number]: [title], status: [state], track: [track name]". Relationships announced as connections.
+- **Keyboard navigation:** Arrow keys move between scenes. Enter opens scene detail. Tab moves between tracks.
+- **Screen reader:** Scenes announced as "Scene [number]: [title], status: [state], track: [track name]". Relationships announced as connections.
 - **Alternative view:** A list view toggle (accessible from toolbar) presents the timeline as a sequential list of scenes grouped by track. This serves both accessibility and users who find the visual timeline overwhelming. (PRD Risk: "Visual timeline is too complex for target users" — list view is the mitigation.)
 
 ### 8.3 Character Map Accessibility
@@ -1087,7 +1087,7 @@ The visual timeline presents unique accessibility challenges:
 
 ### 8.4 Dark Mode
 
-Full dark mode support. Theme follows system preference (`prefers-color-scheme`) with manual override in account settings. All color tokens have light and dark variants. Node state colors adjusted for dark backgrounds.
+Full dark mode support. Theme follows system preference (`prefers-color-scheme`) with manual override in account settings. All color tokens have light and dark variants. Scene state colors adjusted for dark backgrounds.
 
 ---
 
@@ -1101,7 +1101,7 @@ The multi-track timeline with branch/merge points, character maps, and AI genera
 |------|---------------|---------------|--------------|
 | 1. Project creation | Text input, file import | Genre templates [Phase 2] | N/A |
 | 2. Workspace first load | Timeline (may start with 1 track), Config bar (collapsed), Character map (populated), Editor (empty state) | Multi-track controls, branch/merge, context menus | User interacts with timeline |
-| 3. First node interaction | Node detail panel opens automatically | Direction-based editing, keyboard shortcuts | User generates first draft |
+| 3. First scene interaction | Scene detail panel opens automatically | Direction-based editing, keyboard shortcuts | User generates first draft |
 | 4. First generation | [Generate Draft] button prominent in editor | Re-generate, [Edit with AI] on selection | Draft exists in editor |
 | 5. First edit | Standard text editing | Direction-based AI editing | User selects text (floating toolbar appears) |
 
@@ -1109,10 +1109,10 @@ The multi-track timeline with branch/merge points, character maps, and AI genera
 
 | Trigger | Hint | Dismissal |
 |---------|------|-----------|
-| First workspace load | "This is a starting point — drag, add, or delete nodes to match your vision." (above timeline) | First timeline interaction |
-| First node selection | "Add a plot summary to get the best AI draft." (in node detail if plot summary is empty) | Plot summary is filled |
+| First workspace load | "This is a starting point — drag, add, or delete scenes to match your vision." (above timeline) | First timeline interaction |
+| First scene selection | "Add a plot summary to get the best AI draft." (in scene detail if plot summary is empty) | Plot summary is filled |
 | First draft generated | "Select any text and click 'Edit with AI' to refine specific passages." (below editor toolbar) | First use of Edit with AI |
-| First track added | "Each track represents a parallel storyline. Nodes aligned vertically happen at the same time." (above new track) | Dismissed on click or after 10 seconds |
+| First track added | "Each track represents a parallel storyline. Scenes aligned vertically happen at the same time." (above new track) | Dismissed on click or after 10 seconds |
 
 Hints appear as subtle banners (not modals, not blocking). They do not reappear after dismissal. Stored in local preference.
 
@@ -1126,20 +1126,20 @@ Hints appear as subtle banners (not modals, not blocking). They do not reappear 
 - Dashboard (project list + empty state)
 - Project Creation (free text input, file import, clarifying questions, processing)
 - Workspace: Config Bar (collapsed/expanded)
-- Workspace: Timeline Panel (multi-track, nodes, branch/merge, zoom/scroll)
-- Workspace: Node Detail Panel (title, characters, location, mood, plot summary)
+- Workspace: Timeline Panel (multi-track, scenes, branch/merge, zoom/scroll)
+- Workspace: Scene Detail Panel (title, characters, location, mood, plot summary)
 - Workspace: Editor Panel (prose editing, AI generation, direction-based edits)
 - Workspace: Character Map Panel (force-directed graph, character cards, relationship lines)
 
 **Key flows:**
 - New project: idea input -> auto-structuring -> workspace
-- Timeline editing: add/move/delete/branch/merge nodes
+- Timeline editing: add/move/delete/branch/merge scenes
 - Character management: add/edit characters, create/edit relationships
-- AI generation: select node -> fill details -> generate -> edit -> direction-based refine
-- Node navigation: prev/next in editor, click on timeline
+- AI generation: select scene -> fill details -> generate -> edit -> direction-based refine
+- Scene navigation: prev/next in editor, click on timeline
 
 **Interaction patterns:**
-- Drag-and-drop (timeline nodes)
+- Drag-and-drop (timeline scenes)
 - Auto-save (all edits)
 - Undo/redo (editor + timeline)
 - Streaming AI output (generation + direction edits)
@@ -1160,7 +1160,7 @@ Hints appear as subtle banners (not modals, not blocking). They do not reappear 
 - Timeline shows episode dividers and per-episode word count
 - Generation produces 2-3 draft variations with comparison view
 - Tone/style sliders appear before generation
-- Foreshadowing connection lines between nodes
+- Foreshadowing connection lines between scenes
 - Editor gains inline autocomplete suggestions
 - Editor gains full manuscript reading mode with episode navigation
 - Onboarding tutorial (step-by-step first project guide)
@@ -1174,13 +1174,13 @@ Hints appear as subtle banners (not modals, not blocking). They do not reappear 
 ### Phase 3+ (Depth + Delight)
 
 **New screens:**
-- World Map Panel (left sidebar tab, visual map with location nodes)
+- World Map Panel (left sidebar tab, visual map with location pins)
 - Revision Panel (check results as issue cards with suggested fixes)
 
 **New flows:**
-- World map: add locations, link to timeline nodes, AI location suggestions
+- World map: add locations, link to timeline scenes, AI location suggestions
 - Temporal relationship tracking: slider on character map shows relationship state at story points
-- Revision: run checks -> review issues -> apply fixes -> re-generate affected nodes
+- Revision: run checks -> review issues -> apply fixes -> re-generate affected scenes
 - AI Surprise mode: generates unexpected but consistent narrative direction
 - AI gap detection: suggests scenes to fill narrative holes
 
