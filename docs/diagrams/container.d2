@@ -1,0 +1,113 @@
+direction: right
+
+# ── Actor ───────────────────────────────────────────
+writer: Writer {
+  shape: person
+  icon: https://icons.terrastruct.com/essentials%2F359-users.svg
+  style.fill: "#f5f0e8"
+  style.stroke: "#b08040"
+}
+
+# ── System Boundary ─────────────────────────────────
+narrex: Narrex System {
+  style.stroke-dash: 3
+  style.fill: "#faf8f4"
+  style.stroke: "#b08040"
+  style.font-color: "#3d3529"
+
+  web: Web Client {
+    label: "Web Client\n[TanStack Start + SolidJS]\nCloudflare Workers"
+    style.fill: "#e8dcc8"
+    style.stroke: "#b08040"
+    style.font-color: "#3d3529"
+  }
+
+  api: API Server {
+    label: "API Server\n[Rust / Axum + LLM Adapters]\nGCP Cloud Run"
+    style.fill: "#ddd4c0"
+    style.stroke: "#b08040"
+    style.font-color: "#3d3529"
+    icon: https://icons.terrastruct.com/tech%2F022-server.svg
+  }
+
+  db: Neon PostgreSQL {
+    shape: cylinder
+    icon: https://icons.terrastruct.com/dev%2Fpostgresql.svg
+    style.fill: "#d4dbc8"
+    style.stroke: "#7a8a6e"
+    style.font-color: "#3d3529"
+  }
+
+  cache: Upstash Redis {
+    shape: cylinder
+    icon: https://icons.terrastruct.com/dev%2Fredis.svg
+    style.fill: "#e0ccc8"
+    style.stroke: "#8a6e6e"
+    style.font-color: "#3d3529"
+  }
+
+  r2: Cloudflare R2 {
+    shape: cylinder
+    style.fill: "#c8d0d8"
+    style.stroke: "#6e7a8a"
+    style.font-color: "#3d3529"
+  }
+}
+
+# ── External Systems ────────────────────────────────
+llm: LLM Providers {
+  style.fill: "#e8e4df"
+  style.stroke: "#8a7e6e"
+  style.font-color: "#3d3529"
+
+  google: Google AI (Gemini)
+  anthropic: Anthropic (Claude)
+}
+
+auth: Google OAuth2 {
+  style.fill: "#e8e4df"
+  style.stroke: "#8a7e6e"
+  style.font-color: "#3d3529"
+}
+
+# ── Connections ─────────────────────────────────────
+writer -> narrex.web: "HTTPS" {
+  style.stroke: "#b08040"
+  style.font-color: "#6b5c3a"
+}
+
+narrex.web -> narrex.api: "REST (JSON) +\nSSE (streaming)" {
+  style.stroke: "#b08040"
+  style.font-color: "#6b5c3a"
+}
+
+narrex.web -> narrex.r2: "Presigned URL\n(direct upload)" {
+  style.stroke: "#6e7a8a"
+  style.font-color: "#4a5a6a"
+  style.stroke-dash: 5
+}
+
+narrex.api -> llm: "HTTPS\n(via LlmPort adapters)" {
+  style.stroke: "#6b7a8a"
+  style.font-color: "#4a5a6a"
+}
+
+narrex.api -> narrex.db: "PostgreSQL TCP\n(via Neon pooler)" {
+  style.stroke: "#7a8a6e"
+  style.font-color: "#5a6a4a"
+}
+
+narrex.api -> narrex.cache: "HTTP / TCP" {
+  style.stroke: "#8a6e6e"
+  style.font-color: "#6a4a4a"
+}
+
+narrex.api -> narrex.r2: "S3-compatible\nHTTPS" {
+  style.stroke: "#6e7a8a"
+  style.font-color: "#4a5a6a"
+}
+
+narrex.api -> auth: "OAuth2\ncode exchange" {
+  style.stroke: "#8a7e6e"
+  style.font-color: "#6b5c3a"
+}
