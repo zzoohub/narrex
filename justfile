@@ -3,10 +3,9 @@ set dotenv-load := false
 # ─── Dynamic path resolution ─────────────────────────────────────────────────
 # Supports both monorepo (services/api, clients/web) and flat (api, web) layouts
 
-api_dir := if path_exists("services/api") == "true" { "services/api" } else { "api" }
+services_dir := if path_exists("services") == "true" { "services" } else { "." }
 worker_dir := if path_exists("services/worker") == "true" { "services/worker" } else { "worker" }
 web_dir := if path_exists("clients/web") == "true" { "clients/web" } else { "web" }
-mobile_dir := if path_exists("clients/mobile") == "true" { "clients/mobile" } else { "mobile" }
 
 default:
     @just --list
@@ -22,36 +21,35 @@ push branch="main" msg="update":
 # ─── DB ───────────────────────────────────────────────────────────────────────
 
 db-migrate:
-    cd db && echo "TODO: run migrations"
+    cd {{ services_dir }} && cargo sqlx migrate run --source ../db/migrations
 
 db-seed:
     cd db && echo "TODO: run seeds"
 
 db-reset: db-migrate db-seed
 
-# ─── API ──────────────────────────────────────────────────────────────────────
-# NOTE: Adjust for your backend (Axum: cargo run, FastAPI: uvicorn)
+# ─── API (Rust / Axum) ───────────────────────────────────────────────────────
 
-api-install:
-    cd {{ api_dir }} && uv sync
+api-check:
+    cd {{ services_dir }} && cargo check
 
 api-dev:
-    cd {{ api_dir }} && PYTHONPATH=src uv run uvicorn app.main:create_app --factory --reload --host 0.0.0.0 --port 8080
+    cd {{ services_dir }} && cargo watch -x 'run -p narrex-api'
 
 api-start:
-    cd {{ api_dir }} && PYTHONPATH=src uv run python -m app.main
+    cd {{ services_dir }} && cargo run -p narrex-api
 
 api-test *args:
-    cd {{ api_dir }} && PYTHONPATH=src uv run pytest {{ args }}
-
-api-test-cov:
-    cd {{ api_dir }} && PYTHONPATH=src uv run pytest --cov=src --cov-report=term-missing
+    cd {{ services_dir }} && cargo nextest run {{ args }}
 
 api-lint:
-    cd {{ api_dir }} && uv run ruff check .
+    cd {{ services_dir }} && cargo clippy --all-targets -- -D warnings
+
+api-fmt:
+    cd {{ services_dir }} && cargo fmt --all
 
 api-clean:
-    rm -rf {{ api_dir }}/.venv {{ api_dir }}/__pycache__
+    cd {{ services_dir }} && cargo clean
 
 # ─── Worker ───────────────────────────────────────────────────────────────────
 # NOTE: Adjust commands for your framework (Celery, BullMQ, Temporal, etc.)
@@ -107,33 +105,7 @@ web-test-cov:
     cd {{ web_dir }} && bun vitest run --coverage
 
 web-clean:
-    rm -rf {{ web_dir }}/.next {{ web_dir }}/coverage
-
-# ─── Mobile (Expo React Native) ───────────────────────────────────────────
-
-mobile-install:
-    cd {{ mobile_dir }} && bun install
-
-mobile-dev:
-    cd {{ mobile_dir }} && bunx expo start --dev-client
-
-mobile-ios:
-    cd {{ mobile_dir }} && bunx expo run:ios
-
-mobile-android:
-    cd {{ mobile_dir }} && bunx expo run:android
-
-mobile-lint:
-    cd {{ mobile_dir }} && bun run lint
-
-mobile-typecheck:
-    cd {{ mobile_dir }} && bun tsc --noEmit
-
-mobile-test *args:
-    cd {{ mobile_dir }} && bun vitest run {{ args }}
-
-mobile-clean:
-    rm -rf {{ mobile_dir }}/.expo {{ mobile_dir }}/node_modules
+    rm -rf {{ web_dir }}/.output {{ web_dir }}/coverage
 
 # ─── E2E (Playwright) ────────────────────────────────────────────────────────
 # Runs from project root against e2e/ directory.
@@ -156,9 +128,9 @@ e2e-report:
 
 # ─── Quality ──────────────────────────────────────────────────────────────────
 
-lint: api-lint worker-lint web-lint mobile-lint
+lint: api-lint web-lint
 
-test: api-test worker-test web-test mobile-test
+test: api-test web-test
 
 check: lint test
 
