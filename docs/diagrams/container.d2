@@ -1,0 +1,110 @@
+direction: down
+
+writer: Writer {
+  shape: person
+  style.stroke: "#E8A84C"
+  style.fill: "#2A2520"
+}
+
+web: Web Client (Cloudflare Workers) {
+  style.stroke: "#E8A84C"
+  style.fill: "#1C1917"
+  style.font-color: "#E8A84C"
+
+  spa: TanStack Start\n+ SolidJS + Tailwind v4 {
+    style.stroke: "#8B7355"
+    style.fill: "#292524"
+  }
+}
+
+api: API Server (Cloud Run) {
+  style.stroke: "#E8A84C"
+  style.fill: "#1C1917"
+  style.font-color: "#E8A84C"
+
+  auth: Auth {
+    style.stroke: "#8B7355"
+    style.fill: "#292524"
+  }
+  project: Project {
+    style.stroke: "#8B7355"
+    style.fill: "#292524"
+  }
+  timeline: Timeline {
+    style.stroke: "#8B7355"
+    style.fill: "#292524"
+  }
+  character: Character {
+    style.stroke: "#8B7355"
+    style.fill: "#292524"
+  }
+  generation: Generation {
+    style.stroke: "#8B7355"
+    style.fill: "#292524"
+  }
+  structuring: Structuring {
+    style.stroke: "#8B7355"
+    style.fill: "#292524"
+  }
+
+  structuring -> generation: LLM calls
+  structuring -> project
+  structuring -> timeline
+  structuring -> character
+  generation -> timeline: Reads context
+  generation -> character: Reads context
+  generation -> project: Reads config
+}
+
+google: Google OAuth {
+  style.stroke: "#666"
+  style.fill: "#1C1917"
+}
+
+llm: LLM Providers {
+  style.stroke: "#555"
+  style.stroke-dash: 5
+  style.fill: "#1C1917"
+
+  cf: CF Workers AI\n(Primary) {
+    shape: cloud
+    style.stroke: "#F6821F"
+    style.fill: "#1C1917"
+  }
+  gemini: Gemini Flash\n(Fallback) {
+    shape: cloud
+    style.stroke: "#4285F4"
+    style.fill: "#1C1917"
+  }
+}
+
+neon: Neon PostgreSQL {
+  shape: cylinder
+  style.stroke: "#3ECF8E"
+  style.fill: "#1C1917"
+}
+
+redis: Upstash Redis {
+  shape: cylinder
+  style.stroke: "#DC382D"
+  style.fill: "#1C1917"
+}
+
+writer -> web.spa: Browser
+
+web.spa -> api.auth: REST (JWT)
+web.spa -> api.project: REST
+web.spa -> api.timeline: REST
+web.spa -> api.character: REST
+web.spa -> api.generation: SSE stream
+web.spa -> api.structuring: SSE stream
+
+api.auth -> google: OAuth2
+api.generation -> llm.cf: HTTP
+api.generation -> llm.gemini: HTTP {style.stroke-dash: 5}
+api.auth -> neon
+api.project -> neon
+api.timeline -> neon
+api.character -> neon
+api.generation -> neon: Drafts + summaries
+api.generation -> redis: Cached context

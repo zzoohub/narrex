@@ -1,0 +1,63 @@
+direction: down
+
+writer: Writer {
+  shape: person
+  style.stroke: "#E8A84C"
+  style.fill: "#2A2520"
+}
+
+narrex: Narrex {
+  style.stroke: "#E8A84C"
+  style.fill: "#1C1917"
+  style.font-color: "#E8A84C"
+  style.bold: true
+
+  web: Web Client\n(TanStack Start + SolidJS) {
+    style.stroke: "#8B7355"
+    style.fill: "#292524"
+  }
+  api: API Server\n(Rust / Axum) {
+    style.stroke: "#8B7355"
+    style.fill: "#292524"
+  }
+  web -> api: REST + SSE
+}
+
+external: External Services {
+  style.stroke-dash: 5
+  style.stroke: "#555"
+
+  google-oauth: Google OAuth {
+    style.stroke: "#666"
+    style.fill: "#1C1917"
+  }
+  cf-ai: CF Workers AI\n(Primary LLM) {
+    shape: cloud
+    style.stroke: "#F6821F"
+    style.fill: "#1C1917"
+  }
+  gemini: Gemini Flash\n(Fallback LLM) {
+    shape: cloud
+    style.stroke: "#4285F4"
+    style.fill: "#1C1917"
+  }
+  neon: Neon PostgreSQL {
+    shape: cylinder
+    style.stroke: "#3ECF8E"
+    style.fill: "#1C1917"
+  }
+  redis: Upstash Redis {
+    shape: cylinder
+    style.stroke: "#DC382D"
+    style.fill: "#1C1917"
+  }
+}
+
+writer -> narrex.web: Uses (browser)
+narrex.api -> external.google-oauth: Authenticates
+narrex.api -> external.cf-ai: Scene generation
+narrex.api -> external.gemini: Fallback generation {
+  style.stroke-dash: 5
+}
+narrex.api -> external.neon: Reads / writes
+narrex.api -> external.redis: Caches
