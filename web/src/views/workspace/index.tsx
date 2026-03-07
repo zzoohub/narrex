@@ -47,13 +47,13 @@ const mockRelationships: Relationship[] = [
 ]
 
 const mockScenes: Scene[] = [
-  { id: 'n1', trackId: 't1', title: '패배와 죽음', status: 'edited', characterIds: ['c1'], location: '전장', moodTags: ['절망'], plotSummary: '서준은 전쟁에서 패배하고 죽음을 맞이한다.', content: '차가운 바람이 피로 물든 들판을 훑었다. 서준은 부러진 검을 쥔 채 하늘을 올려다보았다. 이것이 끝인가. 그의 입술에서 흘러나온 마지막 한마디—"다시 한 번만..."', position: 0 },
-  { id: 'n2', trackId: 't1', title: '회귀 — 어린 시절로', status: 'edited', characterIds: ['c1'], location: '어린 시절 침실', moodTags: ['경이', '불신'], plotSummary: '서준이 12세의 몸으로 깨어난다. 어린 시절 침실. 불신, 그리고 서서히 현실을 깨달음.', content: '눈을 떴을 때, 천장에 익숙한 얼룩이 보였다. 어머니가 지우려 했던, 하지만 끝내 남아 있던 그 얼룩. 서준은 작은 두 손을 들어 올렸다. 흉터가 없었다.', position: 1 },
-  { id: 'n3', trackId: 't1', title: '결심', status: 'ai-draft', characterIds: ['c1', 'c2'], location: '마을 광장', moodTags: ['결의'], plotSummary: '서준은 이번 생에서는 모든 것을 바꾸겠다고 다짐한다.', content: '마을 광장에 서자 모든 것이 선명했다. 저 골목에서 3년 후 화재가 날 것이고, 저 우물은 내년에 마를 것이다. 서준은 주먹을 꽉 쥐었다. 이번에는 다를 것이다.', position: 2 },
-  { id: 'n4', trackId: 't1', title: '첫 번째 시험', status: 'empty', characterIds: ['c1', 'c3'], location: '검술 수련장', moodTags: ['긴장감'], plotSummary: '', content: '', position: 3 },
-  { id: 'n5', trackId: 't1', title: '숨겨진 진실', status: 'needs-revision', characterIds: ['c1', 'c2'], location: '도서관', moodTags: ['미스터리'], plotSummary: '지연이 서준의 이상한 행동을 추궁한다.', content: '지연은 서준의 눈을 똑바로 바라보았다. "넌 달라졌어. 그것도 하룻밤 사이에." 서준은 시선을 피했다.', position: 4 },
-  { id: 'n6', trackId: 't2', title: '민혁의 음모', status: 'ai-draft', characterIds: ['c3'], location: '왕궁 밀실', moodTags: ['긴장감', '어두운'], plotSummary: '민혁이 왕실과 비밀 거래를 한다.', content: '촛불이 흔들리는 밀실에서 민혁은 봉인된 서신을 꺼냈다. 왕실의 문장이 찍힌 그 편지를 읽는 그의 입가에 미소가 번졌다.', position: 2 },
-  { id: 'n7', trackId: 't2', title: '세력 규합', status: 'empty', characterIds: ['c3'], location: '은밀한 저택', moodTags: [], plotSummary: '', content: '', position: 3 },
+  { id: 'n1', trackId: 't1', title: '패배와 죽음', status: 'edited', characterIds: ['c1'], location: '전장', moodTags: ['절망'], plotSummary: '서준은 전쟁에서 패배하고 죽음을 맞이한다.', content: '차가운 바람이 피로 물든 들판을 훑었다. 서준은 부러진 검을 쥔 채 하늘을 올려다보았다. 이것이 끝인가. 그의 입술에서 흘러나온 마지막 한마디—"다시 한 번만..."', startPosition: 0, duration: 1 },
+  { id: 'n2', trackId: 't1', title: '회귀 — 어린 시절로', status: 'edited', characterIds: ['c1'], location: '어린 시절 침실', moodTags: ['경이', '불신'], plotSummary: '서준이 12세의 몸으로 깨어난다. 어린 시절 침실. 불신, 그리고 서서히 현실을 깨달음.', content: '눈을 떴을 때, 천장에 익숙한 얼룩이 보였다. 어머니가 지우려 했던, 하지만 끝내 남아 있던 그 얼룩. 서준은 작은 두 손을 들어 올렸다. 흉터가 없었다.', startPosition: 1, duration: 1 },
+  { id: 'n3', trackId: 't1', title: '결심', status: 'ai-draft', characterIds: ['c1', 'c2'], location: '마을 광장', moodTags: ['결의'], plotSummary: '서준은 이번 생에서는 모든 것을 바꾸겠다고 다짐한다.', content: '마을 광장에 서자 모든 것이 선명했다. 저 골목에서 3년 후 화재가 날 것이고, 저 우물은 내년에 마를 것이다. 서준은 주먹을 꽉 쥐었다. 이번에는 다를 것이다.', startPosition: 2, duration: 1.5 },
+  { id: 'n4', trackId: 't1', title: '첫 번째 시험', status: 'empty', characterIds: ['c1', 'c3'], location: '검술 수련장', moodTags: ['긴장감'], plotSummary: '', content: '', startPosition: 3.5, duration: 1 },
+  { id: 'n5', trackId: 't1', title: '숨겨진 진실', status: 'needs-revision', characterIds: ['c1', 'c2'], location: '도서관', moodTags: ['미스터리'], plotSummary: '지연이 서준의 이상한 행동을 추궁한다.', content: '지연은 서준의 눈을 똑바로 바라보았다. "넌 달라졌어. 그것도 하룻밤 사이에." 서준은 시선을 피했다.', startPosition: 4.5, duration: 1.5 },
+  { id: 'n6', trackId: 't2', title: '민혁의 음모', status: 'ai-draft', characterIds: ['c3'], location: '왕궁 밀실', moodTags: ['긴장감', '어두운'], plotSummary: '민혁이 왕실과 비밀 거래를 한다.', content: '촛불이 흔들리는 밀실에서 민혁은 봉인된 서신을 꺼냈다. 왕실의 문장이 찍힌 그 편지를 읽는 그의 입가에 미소가 번졌다.', startPosition: 2, duration: 1.5 },
+  { id: 'n7', trackId: 't2', title: '세력 규합', status: 'empty', characterIds: ['c3'], location: '은밀한 저택', moodTags: [], plotSummary: '', content: '', startPosition: 3.5, duration: 1 },
 ]
 
 const mockTracks: Track[] = [
@@ -96,7 +96,7 @@ export function WorkspaceView() {
   const currentTrackScenes = () => {
     const scene = selectedScene()
     if (!scene) return []
-    return mockScenes.filter((n) => n.trackId === scene.trackId).sort((a, b) => a.position - b.position)
+    return mockScenes.filter((n) => n.trackId === scene.trackId).sort((a, b) => a.startPosition - b.startPosition)
   }
   const currentIndex = () => currentTrackScenes().findIndex((n) => n.id === selectedSceneId())
   const prevScene = () => currentTrackScenes()[currentIndex() - 1]

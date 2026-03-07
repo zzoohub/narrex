@@ -71,12 +71,12 @@ const translations: Record<Locale, Record<string, string>> = {
     'sceneDetail.location': '배경',
     'sceneDetail.mood': '분위기 (작품 설정 재정의)',
     'sceneDetail.plotSummary': '줄거리 요약',
-    'sceneDetail.plotPlaceholder': '이 장면에서 무슨 일이 일어나나요? 자세할수록 AI 초안의 품질이 높아집니다.',
+    'sceneDetail.plotPlaceholder': '이 장면에서 무슨 일이 일어나나요? 자세할수록 AI 초고의 품질이 높아집니다.',
     // Editor
     'editor.selectScene': '타임라인에서 장면을 선택해 집필을 시작하세요',
     'editor.readyTitle': '이 장면에 생명을 불어넣을 준비가 되었습니다.',
-    'editor.readyDescription': '상세 패널에서 줄거리 요약을 작성한 후 초안을 생성하세요.',
-    'editor.generate': '초안 생성',
+    'editor.readyDescription': '상세 패널에서 줄거리 요약을 작성한 후 초고를 생성하세요.',
+    'editor.generate': '초고 생성',
     'editor.regenerate': '다시 생성',
     'editor.editWithAi': 'AI로 수정',
     'editor.aiDirection': '어떻게 바꿀까요?',
@@ -86,7 +86,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'editor.characters': '자',
     // Status
     'status.empty': '미작성',
-    'status.aiDraft': 'AI 초안',
+    'status.aiDraft': 'AI 초고',
     'status.edited': '수정 완료',
     'status.needsRevision': '재확인 필요',
     // Common

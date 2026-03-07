@@ -28,7 +28,7 @@ This document covers the PostgreSQL schema only. Redis and R2 are documented in 
 
 2. **UUIDs for all primary keys.** Externally safe (no enumeration), distributed-friendly. Uses `gen_random_uuid()` (UUID v4, built-in since PG 13). Performance impact is negligible at expected scale (<1M rows).
 
-3. **Fractional ordering for drag-and-drop.** `position` columns use `DOUBLE PRECISION` with initial spacing of 1024.0. Insertions use midpoints. Renormalize when gaps fall below 0.001. This avoids renumbering all siblings on every reorder.
+3. **Fractional ordering for drag-and-drop.** `start_position` uses `DOUBLE PRECISION` with initial spacing of 1024.0. Insertions use midpoints. Renormalize when gaps fall below 0.001. This avoids renumbering all siblings on every reorder. `duration` represents the scene's timeline extent (NLE clip model).
 
 4. **Soft delete for projects only.** Projects use `deleted_at TIMESTAMPTZ` — users may want to recover. Scenes, tracks, characters use hard delete with `ON DELETE CASCADE` from project. Generation logs use `ON DELETE SET NULL` for scene/project FKs to preserve cost data.
 
@@ -55,7 +55,7 @@ Triggers:     trg_{table}_{event}
 
 | Topic | Design Doc Implies | Database Design Decision | Reason |
 |-------|-------------------|-------------------------|--------|
-| Scene position | Not specified | `DOUBLE PRECISION` fractional ordering | Avoids O(n) renumbering on drag-and-drop. Standard pattern (Figma, Linear). |
+| Scene position | Not specified | NLE model: `start_position` (DOUBLE PRECISION, fractional ordering) + `duration` (DOUBLE PRECISION, timeline extent) | Avoids O(n) renumbering on drag-and-drop. Scenes with overlapping ranges on different tracks are simultaneous. Standard NLE clip pattern. |
 | Draft storage | "Store full draft text in DB" | Versioned `draft` table (all versions kept) | PRD requires undo for direction-based edits. Version history enables this without application-level undo stacks. |
 | Scene summary | "1:1 with scene" | `scene_summary` with `scene_id` as PK | Eliminates redundant surrogate key. One summary per scene, replaced on update. |
 | Character table name | N/A | `character` (unquoted) | Non-reserved in PostgreSQL (can be used as identifier). Works with SQLx compile-time queries. |
@@ -111,7 +111,8 @@ erDiagram
         text location
         text_array mood_tags
         scene_status status
-        double_precision position
+        double_precision start_position
+        double_precision duration
         timestamptz created_at
         timestamptz updated_at
     }
@@ -226,8 +227,8 @@ erDiagram
 -- Scene lifecycle states (REQ-015)
 CREATE TYPE scene_status AS ENUM ('empty', 'ai_draft', 'edited', 'needs_revision');
 
--- Narrative flow between scenes (REQ-012)
-CREATE TYPE connection_type AS ENUM ('sequential', 'branch', 'merge');
+-- Cross-track narrative links (REQ-012). Sequential flow is implicit from track ordering.
+CREATE TYPE connection_type AS ENUM ('branch', 'merge');
 
 -- Character relationship appearance (REQ-026)
 CREATE TYPE relationship_visual AS ENUM ('solid', 'dashed', 'arrowed');
@@ -353,22 +354,25 @@ CREATE TABLE scene (
     project_id      UUID             NOT NULL REFERENCES project(id) ON DELETE CASCADE,
     created_at      TIMESTAMPTZ      NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ      NOT NULL DEFAULT now(),
-    position        DOUBLE PRECISION NOT NULL,
+    start_position  DOUBLE PRECISION NOT NULL,
+    duration        DOUBLE PRECISION NOT NULL DEFAULT 1.0,
     status          scene_status     NOT NULL DEFAULT 'empty',
     title           TEXT             NOT NULL,
     plot_summary    TEXT,
     location        TEXT,
     mood_tags       TEXT[]           DEFAULT '{}',
-    CONSTRAINT chk_scene_position CHECK (position > 0),
+    CONSTRAINT chk_scene_start_position CHECK (start_position >= 0),
+    CONSTRAINT chk_scene_duration CHECK (duration > 0),
     CONSTRAINT chk_scene_title_length CHECK (char_length(title) <= 500)
 );
 
 COMMENT ON COLUMN scene.project_id IS 'Denormalized from track.project_id for query performance';
-COMMENT ON COLUMN scene.position IS 'Fractional ordering. Initial spacing: 1024.0. Insert at midpoint.';
+COMMENT ON COLUMN scene.start_position IS 'Fractional ordering. Initial spacing: 1024.0. Insert at midpoint.';
+COMMENT ON COLUMN scene.duration IS 'Timeline extent. Default 1.0. Scenes on different tracks with overlapping ranges are simultaneous.';
 COMMENT ON COLUMN scene.mood_tags IS 'Override config-level tone for this scene';
 
-CREATE INDEX idx_scene_project_position ON scene (project_id, position);
-CREATE INDEX idx_scene_track_position ON scene (track_id, position);
+CREATE INDEX idx_scene_project_position ON scene (project_id, start_position);
+CREATE INDEX idx_scene_track_position ON scene (track_id, start_position);
 CREATE INDEX idx_scene_mood_tags ON scene USING GIN (mood_tags);
 
 CREATE TRIGGER trg_scene_updated_at
@@ -380,7 +384,7 @@ CREATE TRIGGER trg_scene_updated_at
 
 #### scene_connection [Phase 1]
 
-Narrative flow between scenes — sequential, branch, and merge points (REQ-012).
+Cross-track narrative links: branch and merge points (REQ-012). Sequential flow is implicit from start_position ordering within a track.
 
 ```sql
 CREATE TABLE scene_connection (
@@ -389,7 +393,7 @@ CREATE TABLE scene_connection (
     source_scene_id UUID            NOT NULL REFERENCES scene(id) ON DELETE CASCADE,
     target_scene_id UUID            NOT NULL REFERENCES scene(id) ON DELETE CASCADE,
     created_at      TIMESTAMPTZ     NOT NULL DEFAULT now(),
-    connection_type connection_type  NOT NULL DEFAULT 'sequential',
+    connection_type connection_type  NOT NULL,
     CONSTRAINT chk_no_self_connection CHECK (source_scene_id != target_scene_id),
     CONSTRAINT uq_scene_connection UNIQUE (source_scene_id, target_scene_id)
 );
@@ -577,8 +581,8 @@ CREATE INDEX idx_genlog_created_at ON generation_log USING BRIN (created_at);
 | user_account | uq_user_email | UNIQUE (B-tree) | email | Email uniqueness |
 | project | idx_project_user_id | B-tree (partial) | user_id WHERE deleted_at IS NULL | Dashboard: list user's active projects |
 | track | idx_track_project_id | B-tree | (project_id, position) | Ordered tracks for a project |
-| scene | idx_scene_project_position | B-tree | (project_id, position) | All scenes in a project, ordered |
-| scene | idx_scene_track_position | B-tree | (track_id, position) | Scenes within a track, ordered |
+| scene | idx_scene_project_position | B-tree | (project_id, start_position) | All scenes in a project, NLE clip ordering |
+| scene | idx_scene_track_position | B-tree | (track_id, start_position) | Scenes within a track, NLE clip ordering |
 | scene | idx_scene_mood_tags | GIN | mood_tags | Tag-based filtering |
 | scene_connection | idx_scene_connection_source | B-tree | source_scene_id | Outgoing connections from a scene |
 | scene_connection | idx_scene_connection_target | B-tree | target_scene_id | Incoming connections to a scene |
@@ -602,8 +606,8 @@ PostgreSQL does NOT auto-create indexes on FK columns. Every FK in this schema h
 |-----------|-----------|
 | project.user_id | idx_project_user_id |
 | track.project_id | idx_track_project_id |
-| scene.track_id | idx_scene_track_position |
-| scene.project_id | idx_scene_project_position |
+| scene.track_id | idx_scene_track_position (track_id, start_position) |
+| scene.project_id | idx_scene_project_position (project_id, start_position) |
 | scene_connection.source_scene_id | idx_scene_connection_source |
 | scene_connection.target_scene_id | idx_scene_connection_target |
 | scene_connection.project_id | idx_scene_connection_project |
@@ -656,21 +660,24 @@ LEFT JOIN character_relationship cr
     AND (cr.character_a_id IN (SELECT id FROM scene_characters)
          AND cr.character_b_id IN (SELECT id FROM scene_characters));
 
--- Step 4: Preceding scene summaries, ordered by position (~11K tokens)
+-- Step 4: Preceding scene summaries, ordered by start_position (~11K tokens)
+-- $2 = current scene's start_position
 SELECT s.title, ss.summary_text
 FROM scene s
 JOIN scene_summary ss ON ss.scene_id = s.id
 WHERE s.project_id = $1
-  AND s.position < $2  -- current scene's position
-ORDER BY s.position ASC;
+  AND (s.start_position + s.duration) <= $2
+ORDER BY s.start_position ASC;
 
--- Step 5: Simultaneous scenes on other tracks (~1K tokens)
+-- Step 5: Scenes that overlap in timeline position with the current scene on other tracks (~1K tokens)
+-- $2 = current scene's track_id, $3 = current scene's start_position, $4 = current scene's duration
 SELECT s.title, s.plot_summary, t.label AS track_label
 FROM scene s
 JOIN track t ON t.id = s.track_id
 WHERE s.project_id = $1
-  AND s.track_id != $2  -- current scene's track
-  AND s.position BETWEEN ($3 - 0.5) AND ($3 + 0.5);  -- same timeline position (±tolerance)
+  AND s.track_id != $2
+  AND s.start_position < ($3 + $4)
+  AND (s.start_position + s.duration) > $3;
 
 -- Step 6: Next scene preview (~500 tokens)
 SELECT title, plot_summary

@@ -29,11 +29,11 @@
   --focus-ring: rgba(184, 134, 45, 0.45);
   --skeleton-base: #e8e4db;
   --skeleton-shine: #f5f2eb;
-  --node-empty-border: #c4bfb4;
-  --node-draft-fill: #e8d5a8;
-  --node-edited-fill: #a3d4b8;
-  --node-revision-fill: #e8c8a0;
-  --node-revision-border: #d4983c;
+  --scene-empty-border: #c4bfb4;
+  --scene-draft-fill: #e8d5a8;
+  --scene-edited-fill: #a3d4b8;
+  --scene-revision-fill: #e8c8a0;
+  --scene-revision-border: #d4983c;
   color-scheme: light;
 }
 
@@ -61,11 +61,11 @@
   --focus-ring: rgba(212, 160, 77, 0.35);
   --skeleton-base: #1c1c24;
   --skeleton-shine: #282834;
-  --node-empty-border: #3a3a48;
-  --node-draft-fill: #4a3d22;
-  --node-edited-fill: #2a4a38;
-  --node-revision-fill: #4a3820;
-  --node-revision-border: #d4983c;
+  --scene-empty-border: #3a3a48;
+  --scene-draft-fill: #4a3d22;
+  --scene-edited-fill: #2a4a38;
+  --scene-revision-fill: #4a3820;
+  --scene-revision-border: #d4983c;
   color-scheme: dark;
 }
 
@@ -93,11 +93,11 @@
   --color-focus-ring: var(--focus-ring);
   --color-skeleton-base: var(--skeleton-base);
   --color-skeleton-shine: var(--skeleton-shine);
-  --color-node-empty-border: var(--node-empty-border);
-  --color-node-draft-fill: var(--node-draft-fill);
-  --color-node-edited-fill: var(--node-edited-fill);
-  --color-node-revision-fill: var(--node-revision-fill);
-  --color-node-revision-border: var(--node-revision-border);
+  --color-scene-empty-border: var(--scene-empty-border);
+  --color-scene-draft-fill: var(--scene-draft-fill);
+  --color-scene-edited-fill: var(--scene-edited-fill);
+  --color-scene-revision-fill: var(--scene-revision-fill);
+  --color-scene-revision-border: var(--scene-revision-border);
 
   --font-display: 'Cormorant Garamond', 'Noto Serif KR', Georgia, serif;
   --font-body: 'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, 'Noto Sans KR', sans-serif;
@@ -229,37 +229,42 @@ body {
   background: var(--accent);
 }
 
-/* ── Timeline node shapes ──────────────────────────────────────────────── */
-.tl-node {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: 2px solid var(--node-empty-border);
-  background: transparent;
+/* ── Timeline clip shapes (NLE-style) ─────────────────────────────────── */
+.tl-clip {
+  position: absolute;
+  top: 4px;
+  height: calc(100% - 8px);
+  border-radius: 6px;
+  border: 1.5px solid var(--scene-empty-border);
+  background: var(--surface-raised);
   cursor: pointer;
-  transition: all 0.2s;
-  flex-shrink: 0;
-  position: relative;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  overflow: hidden;
+  text-align: left;
+  min-width: 0;
 }
-.tl-node:hover {
-  border-color: var(--accent);
-  transform: scale(1.1);
-}
-.tl-node[data-selected="true"] {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--focus-ring);
-}
-.tl-node[data-status="ai-draft"] {
-  background: linear-gradient(to top, var(--node-draft-fill) 50%, transparent 50%);
+.tl-clip:hover {
   border-color: var(--accent);
 }
-.tl-node[data-status="edited"] {
-  background: var(--node-edited-fill);
+.tl-clip[data-selected="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--focus-ring);
+}
+.tl-clip[data-status="ai-draft"] {
+  background: var(--scene-draft-fill);
+  border-color: var(--accent);
+}
+.tl-clip[data-status="edited"] {
+  background: var(--scene-edited-fill);
   border-color: var(--success);
 }
-.tl-node[data-status="needs-revision"] {
-  background: var(--node-revision-fill);
-  border-color: var(--node-revision-border);
+.tl-clip[data-status="needs-revision"] {
+  background: var(--scene-revision-fill);
+  border-color: var(--scene-revision-border);
 }
 
 /* ── Streaming cursor ──────────────────────────────────────────────────── */

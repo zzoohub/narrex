@@ -45,7 +45,8 @@ export interface Scene {
   moodTags: string[]
   plotSummary: string
   content: string
-  position: number
+  startPosition: number
+  duration: number
 }
 
 export interface Track {
