@@ -39,5 +39,13 @@ describe('structuring API', () => {
       streamStructure({ sourceInput: 'minimal' })
       expect(mockCreateSSEStream).toHaveBeenCalledWith('/v1/projects/structure', { body: { sourceInput: 'minimal' } })
     })
+
+    it('includes locale when provided', () => {
+      mockCreateSSEStream.mockReturnValue({ stream: {} as AsyncIterable<unknown>, abort: vi.fn() })
+
+      const body = { sourceInput: '회귀 판타지 이야기', locale: 'ko' as const }
+      streamStructure(body)
+      expect(mockCreateSSEStream).toHaveBeenCalledWith('/v1/projects/structure', { body })
+    })
   })
 })

@@ -183,28 +183,36 @@ impl PromptBuilder {
     }
 
     /// System prompt for project structuring — instructs LLM to output JSON.
-    pub fn structure_system_prompt() -> String {
-        "당신은 이야기 구조 분석 전문가입니다. \
-         사용자의 이야기 아이디어를 분석하여 구조화된 요소를 추출합니다.\n\n\
-         ## 규칙\n\
-         - 유효한 JSON만 출력 (마크다운, 설명 없이)\n\
-         - JSON 스키마: { \"title\": string, \"genre\": string|null, \"theme\": string|null, \
-           \"era_location\": string|null, \
-           \"pov\": \"first_person\"|\"third_limited\"|\"third_omniscient\"|null, \
-           \"tone\": string|null, \
-           \"characters\": [{\"name\": string, \"personality\": string|null, \
-           \"appearance\": string|null, \"secrets\": string|null, \"motivation\": string|null}], \
-           \"relationships\": [{\"character_a\": string, \"character_b\": string, \
-           \"label\": string, \"direction\": \"bidirectional\"|\"a_to_b\"|\"b_to_a\"|null}], \
-           \"tracks\": [{\"label\": string|null, \
-           \"scenes\": [{\"title\": string, \"plot_summary\": string|null, \
-           \"location\": string|null, \"mood_tags\": [string]|null, \
-           \"characters\": [string]|null}]}] }\n\
-         - 이야기에 맞춰 3-8명의 등장인물 생성\n\
-         - 1-3개의 트랙(병렬 스토리라인) 생성\n\
-         - 트랙당 3-10개의 장면 생성\n\
-         - 텍스트에서 장르, 주제, 시대/배경, 시점, 톤을 추론"
-            .to_string()
+    /// `locale` controls the language of all text values in the output JSON.
+    pub fn structure_system_prompt(locale: &str) -> String {
+        let lang_instruction = match locale {
+            "ko" => "- 모든 텍스트 값(title, personality, plot_summary 등)은 반드시 한국어로 작성",
+            _ => "- All text values (title, personality, plot_summary, etc.) MUST be written in English",
+        };
+
+        format!(
+            "당신은 이야기 구조 분석 전문가입니다. \
+             사용자의 이야기 아이디어를 분석하여 구조화된 요소를 추출합니다.\n\n\
+             ## 규칙\n\
+             - 유효한 JSON만 출력 (마크다운, 설명 없이)\n\
+             {lang_instruction}\n\
+             - JSON 스키마: {{ \"title\": string, \"genre\": string|null, \"theme\": string|null, \
+               \"era_location\": string|null, \
+               \"pov\": \"first_person\"|\"third_limited\"|\"third_omniscient\"|null, \
+               \"tone\": string|null, \
+               \"characters\": [{{\"name\": string, \"personality\": string|null, \
+               \"appearance\": string|null, \"secrets\": string|null, \"motivation\": string|null}}], \
+               \"relationships\": [{{\"character_a\": string, \"character_b\": string, \
+               \"label\": string, \"direction\": \"bidirectional\"|\"a_to_b\"|\"b_to_a\"|null}}], \
+               \"tracks\": [{{\"label\": string|null, \
+               \"scenes\": [{{\"title\": string, \"plot_summary\": string|null, \
+               \"location\": string|null, \"mood_tags\": [string]|null, \
+               \"characters\": [string]|null}}]}}] }}\n\
+             - 이야기에 맞춰 3-8명의 등장인물 생성\n\
+             - 1-3개의 트랙(병렬 스토리라인) 생성\n\
+             - 트랙당 3-10개의 장면 생성\n\
+             - 텍스트에서 장르, 주제, 시대/배경, 시점, 톤을 추론"
+        )
     }
 
     /// Build a user prompt for project structuring.
@@ -495,25 +503,43 @@ mod tests {
     // ---- structure prompts ----
 
     #[test]
-    fn structure_system_prompt_contains_analyst_role() {
-        let prompt = PromptBuilder::structure_system_prompt();
+    fn structure_system_prompt_ko_contains_analyst_role() {
+        let prompt = PromptBuilder::structure_system_prompt("ko");
         assert!(prompt.contains("구조 분석"));
     }
 
     #[test]
-    fn structure_system_prompt_contains_json_instruction() {
-        let prompt = PromptBuilder::structure_system_prompt();
+    fn structure_system_prompt_ko_contains_json_instruction() {
+        let prompt = PromptBuilder::structure_system_prompt("ko");
         assert!(prompt.contains("JSON"));
     }
 
     #[test]
-    fn structure_system_prompt_contains_schema_fields() {
-        let prompt = PromptBuilder::structure_system_prompt();
+    fn structure_system_prompt_ko_contains_schema_fields() {
+        let prompt = PromptBuilder::structure_system_prompt("ko");
         assert!(prompt.contains("title"));
         assert!(prompt.contains("characters"));
         assert!(prompt.contains("tracks"));
         assert!(prompt.contains("scenes"));
         assert!(prompt.contains("relationships"));
+    }
+
+    #[test]
+    fn structure_system_prompt_ko_instructs_korean_output() {
+        let prompt = PromptBuilder::structure_system_prompt("ko");
+        assert!(prompt.contains("한국어"));
+    }
+
+    #[test]
+    fn structure_system_prompt_en_instructs_english_output() {
+        let prompt = PromptBuilder::structure_system_prompt("en");
+        assert!(prompt.contains("English"));
+    }
+
+    #[test]
+    fn structure_system_prompt_unknown_locale_defaults_to_english() {
+        let prompt = PromptBuilder::structure_system_prompt("fr");
+        assert!(prompt.contains("English"));
     }
 
     #[test]

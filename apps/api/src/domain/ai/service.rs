@@ -399,8 +399,9 @@ where
         &self,
         source_input: &str,
         clarification_answers: Option<&[String]>,
+        locale: &str,
     ) -> Result<(StructuredOutput, String, String, u32, u32), AiError> {
-        let system = PromptBuilder::structure_system_prompt();
+        let system = PromptBuilder::structure_system_prompt(locale);
         let user = PromptBuilder::structure_user_prompt(source_input, clarification_answers);
         let req = GenerateRequest {
             system_prompt: system,
@@ -641,7 +642,7 @@ mod tests {
         let svc = build_test_ai_service(mock_llm);
 
         let (output, model, provider, tokens_in, tokens_out) = svc
-            .generate_structure("나의 이야기", None)
+            .generate_structure("나의 이야기", None, "ko")
             .await
             .unwrap();
 
@@ -663,7 +664,7 @@ mod tests {
         let svc = build_test_ai_service(mock_llm);
 
         let (output, _, _, _, _) = svc
-            .generate_structure("텍스트", None)
+            .generate_structure("텍스트", None, "ko")
             .await
             .unwrap();
 
@@ -677,7 +678,7 @@ mod tests {
         let svc = build_test_ai_service(mock_llm);
 
         let (output, _, _, _, _) = svc
-            .generate_structure("텍스트", None)
+            .generate_structure("텍스트", None, "ko")
             .await
             .unwrap();
 
@@ -689,7 +690,7 @@ mod tests {
         let mock_llm = MockLlmProvider::new("not json at all".to_string());
         let svc = build_test_ai_service(mock_llm);
 
-        let err = svc.generate_structure("텍스트", None).await.unwrap_err();
+        let err = svc.generate_structure("텍스트", None, "ko").await.unwrap_err();
         match err {
             AiError::GenerationFailed(msg) => assert!(msg.contains("valid JSON")),
             other => panic!("expected GenerationFailed, got: {other:?}"),
@@ -701,7 +702,7 @@ mod tests {
         let mock_llm = MockLlmProvider::failing();
         let svc = build_test_ai_service(mock_llm);
 
-        let err = svc.generate_structure("텍스트", None).await.unwrap_err();
+        let err = svc.generate_structure("텍스트", None, "ko").await.unwrap_err();
         match err {
             AiError::GenerationFailed(msg) => assert!(msg.contains("provider unavailable")),
             other => panic!("expected GenerationFailed, got: {other:?}"),

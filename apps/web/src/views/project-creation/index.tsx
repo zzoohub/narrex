@@ -277,7 +277,7 @@ export function ProjectCreationView() {
     const sourceInput = fileContent() ?? text()
     const answers = Object.values(clarificationAnswers()).filter(Boolean)
 
-    const req: StructureRequest = { sourceInput }
+    const req: StructureRequest = { sourceInput, locale: locale() }
     if (answers.length > 0) req.clarificationAnswers = answers
     const { stream, abort } = streamStructure(req)
     abortStream = abort

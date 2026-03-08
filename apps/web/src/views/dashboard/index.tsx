@@ -1,4 +1,4 @@
-import { createResource, createSignal, For, Show, Suspense } from 'solid-js'
+import { createResource, createSignal, For, onCleanup, Show, Suspense } from 'solid-js'
 import { Link } from '@tanstack/solid-router'
 import { useI18n } from '@/shared/lib/i18n'
 import { useTheme } from '@/shared/stores/theme'
@@ -37,12 +37,32 @@ export function DashboardView() {
     })
   }
 
+  // ── Profile dropdown ──
+  const [profileOpen, setProfileOpen] = createSignal(false)
+  let profileRef: HTMLDivElement | undefined
+
+  const handleOutsideClick = (e: MouseEvent) => {
+    if (profileOpen() && profileRef && !profileRef.contains(e.target as Node)) {
+      setProfileOpen(false)
+    }
+  }
+  const handleEscape = (e: KeyboardEvent) => {
+    if (profileOpen() && e.key === 'Escape') setProfileOpen(false)
+  }
+  document.addEventListener('mousedown', handleOutsideClick, true)
+  document.addEventListener('keydown', handleEscape, true)
+  onCleanup(() => {
+    document.removeEventListener('mousedown', handleOutsideClick, true)
+    document.removeEventListener('keydown', handleEscape, true)
+  })
+
   // ── Responsive check ──
   const [isMobile, setIsMobile] = createSignal(false)
   if (typeof window !== 'undefined') {
     const check = () => setIsMobile(window.innerWidth < 768)
     check()
     window.addEventListener('resize', check)
+    onCleanup(() => window.removeEventListener('resize', check))
   }
 
   // ── Delete project ──
@@ -96,24 +116,48 @@ export function DashboardView() {
               </Button>
             }
           >
-            <button
-              type="button"
-              class="p-2 rounded-lg text-fg-muted hover:text-fg hover:bg-surface-raised transition-colors cursor-pointer"
-              aria-label={t('nav.account')}
-              onClick={logout}
-              title={user()?.name ?? ''}
-            >
-              <Show
-                when={user()?.profileImageUrl}
-                fallback={<IconUser size={18} />}
+            <div ref={profileRef} class="relative">
+              <button
+                type="button"
+                class="p-2 rounded-lg text-fg-muted hover:text-fg hover:bg-surface-raised transition-colors cursor-pointer"
+                aria-label={t('nav.account')}
+                onClick={() => setProfileOpen((v) => !v)}
+                title={user()?.name ?? ''}
               >
-                <img
-                  src={user()!.profileImageUrl!}
-                  alt=""
-                  class="w-5 h-5 rounded-full"
-                />
+                <Show
+                  when={user()?.profileImageUrl}
+                  fallback={<IconUser size={18} />}
+                >
+                  <img
+                    src={user()!.profileImageUrl!}
+                    alt=""
+                    class="w-5 h-5 rounded-full"
+                  />
+                </Show>
+              </button>
+
+              <Show when={profileOpen()}>
+                <div class="absolute right-0 top-full mt-1 w-56 py-1.5 rounded-lg bg-surface-raised border border-border-default shadow-xl shadow-black/30 animate-scale-in origin-top-right z-50">
+                  <div class="px-3 py-2">
+                    <Show when={user()?.name}>
+                      <p class="text-sm font-medium text-fg truncate">{user()!.name}</p>
+                    </Show>
+                    <p class="text-xs text-fg-muted truncate">{user()?.email}</p>
+                  </div>
+                  <div class="my-1 mx-2 h-px bg-border-default" />
+                  <button
+                    type="button"
+                    class="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-fg hover:bg-surface transition-colors cursor-pointer"
+                    onClick={() => {
+                      setProfileOpen(false)
+                      logout()
+                    }}
+                  >
+                    {t('nav.logout')}
+                  </button>
+                </div>
               </Show>
-            </button>
+            </div>
           </Show>
         </div>
       </header>

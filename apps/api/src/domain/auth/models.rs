@@ -8,6 +8,8 @@ pub struct User {
     pub email: String,
     pub display_name: Option<String>,
     pub profile_image_url: Option<String>,
+    pub theme_preference: String,
+    pub language_preference: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -30,6 +32,8 @@ pub struct GoogleUserInfo {
 pub struct UpdateProfile {
     pub display_name: Option<Option<String>>,
     pub profile_image_url: Option<Option<String>>,
+    pub theme_preference: Option<String>,
+    pub language_preference: Option<String>,
 }
 
 #[cfg(test)]

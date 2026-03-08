@@ -11,12 +11,14 @@ vi.mock('@tanstack/solid-router', () => ({
   Link: (props: any) => <a href={props.to}>{props.children}</a>,
 }))
 
+const mockLogout = vi.fn()
+
 vi.mock('@/shared/stores/auth', () => ({
   useAuth: () => ({
     state: () => 'authenticated',
     user: () => ({ id: 'u1', name: 'Test User', email: 'test@test.com', profileImageUrl: null }),
     loginWithGoogle: vi.fn(),
-    logout: vi.fn(),
+    logout: mockLogout,
   }),
 }))
 
@@ -215,6 +217,82 @@ describe('DashboardView', () => {
     await fireEvent.click(confirmBtn)
 
     expect(mockDeleteProject).toHaveBeenCalledWith('p1')
+  })
+
+  // ── Profile dropdown ─────────────────────────────────────────────
+
+  it('opens profile dropdown when avatar is clicked', async () => {
+    mockListProjects.mockResolvedValue({ data: [] })
+    renderDashboard()
+
+    const avatar = screen.getByLabelText('Account')
+    await fireEvent.click(avatar)
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Test User')).toBeInTheDocument()
+      expect(screen.getByText('test@test.com')).toBeInTheDocument()
+    })
+  })
+
+  it('calls logout when Log out button is clicked in dropdown', async () => {
+    mockListProjects.mockResolvedValue({ data: [] })
+    renderDashboard()
+
+    const avatar = screen.getByLabelText('Account')
+    await fireEvent.click(avatar)
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Log out')).toBeInTheDocument()
+    })
+
+    await fireEvent.click(screen.getByText('Log out'))
+    expect(mockLogout).toHaveBeenCalledTimes(1)
+  })
+
+  it('closes profile dropdown on Escape', async () => {
+    mockListProjects.mockResolvedValue({ data: [] })
+    renderDashboard()
+
+    const avatar = screen.getByLabelText('Account')
+    await fireEvent.click(avatar)
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Test User')).toBeInTheDocument()
+    })
+
+    await fireEvent.keyDown(document, { key: 'Escape' })
+
+    await vi.waitFor(() => {
+      expect(screen.queryByText('test@test.com')).not.toBeInTheDocument()
+    })
+  })
+
+  it('closes profile dropdown on outside click', async () => {
+    mockListProjects.mockResolvedValue({ data: [] })
+    renderDashboard()
+
+    const avatar = screen.getByLabelText('Account')
+    await fireEvent.click(avatar)
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Test User')).toBeInTheDocument()
+    })
+
+    await fireEvent.mouseDown(document.body)
+
+    await vi.waitFor(() => {
+      expect(screen.queryByText('test@test.com')).not.toBeInTheDocument()
+    })
+  })
+
+  it('does not call logout directly when avatar is clicked', async () => {
+    mockListProjects.mockResolvedValue({ data: [] })
+    renderDashboard()
+
+    const avatar = screen.getByLabelText('Account')
+    await fireEvent.click(avatar)
+
+    expect(mockLogout).not.toHaveBeenCalled()
   })
 
   it('does not delete when dialog is cancelled', async () => {

@@ -162,6 +162,7 @@ pub async fn structure_project(
     tracing::info!(user_id = %auth.user_id, input_len = body.source_input.len(), "structure_project: started");
     let source_input = body.source_input.clone();
     let clarification_answers = body.clarification_answers.clone();
+    let locale = body.locale.clone().unwrap_or_else(|| "ko".to_string());
 
     let stream = async_stream::stream! {
         use std::time::Instant;
@@ -174,7 +175,7 @@ pub async fn structure_project(
 
         // 2. Call LLM
         let answers_ref = clarification_answers.as_deref();
-        let result = state.ai_service().generate_structure(&source_input, answers_ref).await;
+        let result = state.ai_service().generate_structure(&source_input, answers_ref, &locale).await;
 
         let (output, model, provider, tokens_in, tokens_out) = match result {
             Ok(v) => {

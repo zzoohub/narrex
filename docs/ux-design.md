@@ -25,7 +25,7 @@ The user's goal is not "use a timeline" or "manage characters" — it is **to ho
 ### What Can Be Removed
 
 - No onboarding tutorial (Phase 1). UI must be self-explanatory via clear empty states and inline hints.
-- No settings page. Config bar handles all story settings; account settings are minimal.
+- No dedicated settings page for story settings. Config bar handles all story settings. Account settings (profile, preferences, account management) live on a separate settings page (see docs/prd-settings.md).
 - No landing page inside the app. Dashboard is the entry point.
 - No marketing copy in product flows.
 
@@ -91,8 +91,10 @@ Desktop-first web application. The multi-track timeline and editor require subst
 |
 +-- Export [Phase 2]
 |
-+-- Account Settings
-    +-- Profile
++-- Account Settings [Phase 1]
+    +-- Profile [Phase 1]
+    +-- Preferences (Theme, Language) [Phase 1]
+    +-- Account Management (Logout, Delete) [Phase 1]
     +-- Subscription / Billing [Phase 2]
 ```
 
@@ -203,6 +205,7 @@ Detailed screen specs are in separate files:
 | Scene Detail Panel | [ux/scene-detail.md](./ux/scene-detail.md) |
 | Editor Panel | [ux/editor-panel.md](./ux/editor-panel.md) |
 | Character Map Panel | [ux/character-map.md](./ux/character-map.md) |
+| Settings Page | [ux/settings.md](./ux/settings.md) |
 
 ### Future Phase Panels (Brief)
 

@@ -12,6 +12,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'nav.projects': '프로젝트',
     'nav.newProject': '새 프로젝트',
     'nav.account': '계정',
+    'nav.logout': '로그아웃',
     // Dashboard
     'dashboard.title': '내 프로젝트',
     'dashboard.newProject': '새 프로젝트',
@@ -137,6 +138,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'nav.projects': 'Projects',
     'nav.newProject': 'New Project',
     'nav.account': 'Account',
+    'nav.logout': 'Log out',
     'dashboard.title': 'My Projects',
     'dashboard.newProject': 'New Project',
     'dashboard.empty.title': 'No projects yet',

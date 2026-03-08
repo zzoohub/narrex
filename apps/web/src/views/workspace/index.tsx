@@ -1,15 +1,12 @@
 import { createSignal, createMemo, Show, For, onMount, onCleanup } from 'solid-js'
 import { useParams, Link } from '@tanstack/solid-router'
 import { useI18n } from '@/shared/lib/i18n'
-import { useTheme } from '@/shared/stores/theme'
 import { WorkspaceProvider, useWorkspace } from '@/features/workspace'
 import {
   IconChevronLeft,
   IconChevronRight,
   IconChevronUp,
   IconChevronDown,
-  IconMoon,
-  IconSun,
   IconSliders,
   Dialog,
 } from '@/shared/ui'
@@ -44,8 +41,6 @@ function parseTonePreview(tone: string | null | undefined): string[] {
 function WorkspaceLayout() {
   const ws = useWorkspace()
   const { t } = useI18n()
-  const { theme, toggle } = useTheme()
-
   // ---- Config panel ----
   const [configOpen, setConfigOpen] = createSignal(false)
 
@@ -301,8 +296,9 @@ function WorkspaceLayout() {
     >
       <div class="h-screen flex flex-col overflow-hidden bg-canvas">
         {/* ── Top bar ──────────────────────────────────────────── */}
-        <header class="flex items-center justify-between px-4 h-11 border-b border-border-default bg-surface flex-shrink-0 z-30">
-          <div class="flex items-center gap-3 min-w-0">
+        <header class="flex items-center px-4 h-11 border-b border-border-default bg-surface flex-shrink-0 z-30">
+          {/* Left */}
+          <div class="flex items-center gap-3 min-w-0 flex-1">
             <Link
               to="/"
               class="p-1.5 rounded-md text-fg-muted hover:text-fg hover:bg-surface-raised transition-colors"
@@ -318,9 +314,9 @@ function WorkspaceLayout() {
             </span>
           </div>
 
-          <div class="flex items-center gap-1">
-            <Show when={ws.state.project}>
-              {/* Config toggle + summary chips */}
+          {/* Center — Config toggle */}
+          <Show when={ws.state.project}>
+            <div class="flex items-center gap-1">
               <button
                 type="button"
                 onClick={() => setConfigOpen((v) => !v)}
@@ -340,7 +336,6 @@ function WorkspaceLayout() {
                 />
               </button>
 
-              {/* Collapsed summary chips — visible when panel is closed */}
               <Show when={!configOpen() && summaryItems().length > 0}>
                 <div class="hidden md:flex items-center gap-1 ml-1">
                   <span class="text-fg-muted/40 text-xs">|</span>
@@ -356,18 +351,12 @@ function WorkspaceLayout() {
                   </For>
                 </div>
               </Show>
-            </Show>
-            <button
-              type="button"
-              onClick={toggle}
-              class="p-1.5 rounded-md text-fg-muted hover:text-fg hover:bg-surface-raised transition-colors cursor-pointer"
-              aria-label="Toggle theme"
-            >
-              <Show when={theme() === 'dark'} fallback={<IconMoon size={16} />}>
-                <IconSun size={16} />
-              </Show>
-            </button>
-            <span class={`text-xs ml-2 hidden lg:inline ${saveStatusColor()}`}>
+            </div>
+          </Show>
+
+          {/* Right */}
+          <div class="flex items-center justify-end flex-1">
+            <span class={`text-xs hidden lg:inline ${saveStatusColor()}`}>
               {saveStatusText()}
             </span>
           </div>
