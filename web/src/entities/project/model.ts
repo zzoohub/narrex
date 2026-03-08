@@ -18,6 +18,8 @@ export interface ProjectSummary {
   id: string
   title: string
   genre: string | null
+  sceneCount: number
+  draftedSceneCount: number
   createdAt: string
   updatedAt: string
 }

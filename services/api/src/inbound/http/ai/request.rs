@@ -33,3 +33,10 @@ impl From<SaveDraftRequest> for CreateManualDraft {
         }
     }
 }
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpsertSceneSummaryRequest {
+    pub draft_version: i32,
+    pub summary_text: String,
+}

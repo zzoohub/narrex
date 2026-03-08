@@ -3,7 +3,7 @@ use sqlx::FromRow;
 use uuid::Uuid;
 
 use crate::domain::ai::error::AiError;
-use crate::domain::ai::models::{Draft, DraftSource, DraftSummary};
+use crate::domain::ai::models::{CreateDraftParams, Draft, DraftSource, DraftSummary};
 use crate::domain::ai::ports::DraftRepository;
 
 use super::Postgres;
@@ -79,34 +79,22 @@ struct NextVersionRow {
 
 #[async_trait::async_trait]
 impl DraftRepository for Postgres {
-    async fn create(
-        &self,
-        scene_id: Uuid,
-        version: i32,
-        content: &str,
-        source: DraftSource,
-        edit_direction: Option<&str>,
-        model: Option<&str>,
-        provider: Option<&str>,
-        tokens_in: Option<i32>,
-        tokens_out: Option<i32>,
-        cost: Option<f64>,
-    ) -> Result<Draft, AiError> {
+    async fn create(&self, params: &CreateDraftParams) -> Result<Draft, AiError> {
         let row = sqlx::query_as::<_, DraftRow>(
             "INSERT INTO draft (scene_id, version, content, source, edit_direction, model, provider, token_count_input, token_count_output, cost_usd) \
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) \
              RETURNING id, scene_id, version, content, char_count, source, edit_direction, model, provider, token_count_input, token_count_output, created_at",
         )
-        .bind(scene_id)
-        .bind(version)
-        .bind(content)
-        .bind(source.to_string())
-        .bind(edit_direction)
-        .bind(model)
-        .bind(provider)
-        .bind(tokens_in)
-        .bind(tokens_out)
-        .bind(cost)
+        .bind(params.scene_id)
+        .bind(params.version)
+        .bind(&params.content)
+        .bind(params.source.to_string())
+        .bind(&params.edit_direction)
+        .bind(&params.model)
+        .bind(&params.provider)
+        .bind(params.tokens_in)
+        .bind(params.tokens_out)
+        .bind(params.cost)
         .fetch_one(self.pool())
         .await
         .map_err(|e| AiError::Unknown(e.into()))?;

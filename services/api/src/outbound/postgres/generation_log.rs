@@ -1,8 +1,30 @@
+use sqlx::FromRow;
+use uuid::Uuid;
+
 use crate::domain::ai::error::AiError;
-use crate::domain::ai::models::GenerationLog;
+use crate::domain::ai::models::{CostSummary, GenerationLog};
 use crate::domain::ai::ports::GenerationLogRepository;
 
 use super::Postgres;
+
+#[derive(FromRow)]
+struct CostSummaryRow {
+    total_generations: Option<i64>,
+    total_tokens_input: Option<i64>,
+    total_tokens_output: Option<i64>,
+    total_cost_usd: Option<f64>,
+}
+
+impl CostSummaryRow {
+    fn into_domain(self) -> CostSummary {
+        CostSummary {
+            total_generations: self.total_generations.unwrap_or(0),
+            total_tokens_input: self.total_tokens_input.unwrap_or(0),
+            total_tokens_output: self.total_tokens_output.unwrap_or(0),
+            total_cost_usd: self.total_cost_usd.unwrap_or(0.0),
+        }
+    }
+}
 
 #[async_trait::async_trait]
 impl GenerationLogRepository for Postgres {
@@ -31,5 +53,44 @@ impl GenerationLogRepository for Postgres {
         .map_err(|e| AiError::Unknown(e.into()))?;
 
         Ok(())
+    }
+
+    async fn cost_summary_by_user(&self, user_id: Uuid) -> Result<CostSummary, AiError> {
+        let row = sqlx::query_as::<_, CostSummaryRow>(
+            "SELECT \
+                COUNT(*) AS total_generations, \
+                SUM(token_count_input)::BIGINT AS total_tokens_input, \
+                SUM(token_count_output)::BIGINT AS total_tokens_output, \
+                SUM(cost_usd)::DOUBLE PRECISION AS total_cost_usd \
+             FROM generation_log \
+             WHERE user_id = $1",
+        )
+        .bind(user_id)
+        .fetch_one(self.pool())
+        .await
+        .map_err(|e| AiError::Unknown(e.into()))?;
+
+        Ok(row.into_domain())
+    }
+
+    async fn cost_summary_by_project(
+        &self,
+        project_id: Uuid,
+    ) -> Result<CostSummary, AiError> {
+        let row = sqlx::query_as::<_, CostSummaryRow>(
+            "SELECT \
+                COUNT(*) AS total_generations, \
+                SUM(token_count_input)::BIGINT AS total_tokens_input, \
+                SUM(token_count_output)::BIGINT AS total_tokens_output, \
+                SUM(cost_usd)::DOUBLE PRECISION AS total_cost_usd \
+             FROM generation_log \
+             WHERE project_id = $1",
+        )
+        .bind(project_id)
+        .fetch_one(self.pool())
+        .await
+        .map_err(|e| AiError::Unknown(e.into()))?;
+
+        Ok(row.into_domain())
     }
 }

@@ -313,7 +313,7 @@ impl ProjectRepository for Postgres {
         user_id: Uuid,
         params: &PaginationParams,
     ) -> Result<PaginatedResult<ProjectSummary>, ProjectError> {
-        let limit = params.limit.min(100).max(1);
+        let limit = params.limit.clamp(1, 100);
         let fetch_limit = limit + 1; // fetch one extra to determine has_more
 
         let rows = if let Some(ref cursor) = params.cursor {

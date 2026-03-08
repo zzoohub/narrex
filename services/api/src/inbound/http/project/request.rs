@@ -20,6 +20,18 @@ impl From<CreateProjectTextRequest> for CreateProjectFromText {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CreateProjectDirectRequest {
+    pub title: String,
+    pub genre: Option<String>,
+    pub theme: Option<String>,
+    pub era_location: Option<String>,
+    pub pov: Option<String>,
+    pub tone: Option<String>,
+    pub source_input: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UpdateProjectRequest {
     pub title: Option<String>,
     pub genre: Option<Option<String>>,

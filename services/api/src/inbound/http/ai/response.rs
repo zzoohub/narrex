@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 use uuid::Uuid;
 
-use crate::domain::ai::models::{Draft, DraftSummary};
+use crate::domain::ai::models::{CostSummary, Draft, DraftSummary, SceneSummary};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -60,6 +60,50 @@ impl From<&DraftSummary> for DraftSummaryResponse {
             source: d.source.to_string(),
             edit_direction: d.edit_direction.clone(),
             created_at: d.created_at,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneSummaryResponse {
+    pub scene_id: Uuid,
+    pub draft_version: i32,
+    pub summary_text: String,
+    pub model: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+impl From<&SceneSummary> for SceneSummaryResponse {
+    fn from(s: &SceneSummary) -> Self {
+        Self {
+            scene_id: s.scene_id,
+            draft_version: s.draft_version,
+            summary_text: s.summary_text.clone(),
+            model: s.model.clone(),
+            created_at: s.created_at,
+            updated_at: s.updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CostSummaryResponse {
+    pub total_generations: i64,
+    pub total_tokens_input: i64,
+    pub total_tokens_output: i64,
+    pub total_cost_usd: f64,
+}
+
+impl From<&CostSummary> for CostSummaryResponse {
+    fn from(c: &CostSummary) -> Self {
+        Self {
+            total_generations: c.total_generations,
+            total_tokens_input: c.total_tokens_input,
+            total_tokens_output: c.total_tokens_output,
+            total_cost_usd: c.total_cost_usd,
         }
     }
 }

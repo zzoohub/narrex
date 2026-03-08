@@ -9,8 +9,8 @@ use narrex_llm::{GenerateRequest, LlmProvider};
 
 use super::error::AiError;
 use super::models::{
-    CreateManualDraft, Draft, DraftSource, DraftSummary, EditDraftRequest, GenerationLog,
-    GenerationStatus, GenerationType,
+    CostSummary, CreateDraftParams, CreateManualDraft, Draft, DraftSource, DraftSummary,
+    EditDraftRequest, GenerationLog, GenerationStatus, GenerationType, SceneSummary,
 };
 use super::ports::{
     ContextAssemblyRepository, DraftRepository, GenerationLogRepository, SceneSummaryRepository,
@@ -123,18 +123,18 @@ where
                             };
 
                             let draft = match draft_repo
-                                .create(
+                                .create(&CreateDraftParams {
                                     scene_id,
-                                    next_version,
-                                    &full_text,
-                                    DraftSource::AiGeneration,
-                                    None,
-                                    if final_model.is_empty() { None } else { Some(&final_model) },
-                                    if final_provider.is_empty() { None } else { Some(&final_provider) },
-                                    Some(tokens_in as i32),
-                                    Some(tokens_out as i32),
-                                    None,
-                                )
+                                    version: next_version,
+                                    content: full_text.clone(),
+                                    source: DraftSource::AiGeneration,
+                                    edit_direction: None,
+                                    model: if final_model.is_empty() { None } else { Some(final_model.clone()) },
+                                    provider: if final_provider.is_empty() { None } else { Some(final_provider.clone()) },
+                                    tokens_in: Some(tokens_in as i32),
+                                    tokens_out: Some(tokens_out as i32),
+                                    cost: None,
+                                })
                                 .await
                             {
                                 Ok(d) => d,
@@ -254,18 +254,18 @@ where
                             };
 
                             let draft = match draft_repo
-                                .create(
+                                .create(&CreateDraftParams {
                                     scene_id,
-                                    next_version,
-                                    &full_text,
-                                    DraftSource::AiEdit,
-                                    Some(&direction),
-                                    if final_model.is_empty() { None } else { Some(&final_model) },
-                                    if final_provider.is_empty() { None } else { Some(&final_provider) },
-                                    Some(tokens_in as i32),
-                                    Some(tokens_out as i32),
-                                    None,
-                                )
+                                    version: next_version,
+                                    content: full_text.clone(),
+                                    source: DraftSource::AiEdit,
+                                    edit_direction: Some(direction.clone()),
+                                    model: if final_model.is_empty() { None } else { Some(final_model.clone()) },
+                                    provider: if final_provider.is_empty() { None } else { Some(final_provider.clone()) },
+                                    tokens_in: Some(tokens_in as i32),
+                                    tokens_out: Some(tokens_out as i32),
+                                    cost: None,
+                                })
                                 .await
                             {
                                 Ok(d) => d,
@@ -319,18 +319,18 @@ where
     ) -> Result<Draft, AiError> {
         let version = self.draft_repo.next_version(scene_id).await?;
         self.draft_repo
-            .create(
+            .create(&CreateDraftParams {
                 scene_id,
                 version,
-                &input.content,
-                DraftSource::Manual,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-            )
+                content: input.content.clone(),
+                source: DraftSource::Manual,
+                edit_direction: None,
+                model: None,
+                provider: None,
+                tokens_in: None,
+                tokens_out: None,
+                cost: None,
+            })
             .await
     }
 
@@ -349,6 +349,46 @@ where
             .find_by_version(scene_id, version)
             .await?
             .ok_or(AiError::DraftNotFound)
+    }
+
+    /// Get the scene summary for a given scene.
+    pub async fn get_scene_summary(
+        &self,
+        scene_id: Uuid,
+    ) -> Result<SceneSummary, AiError> {
+        self.summary_repo
+            .find_by_scene(scene_id)
+            .await?
+            .ok_or(AiError::SceneNotFound)
+    }
+
+    /// Upsert a scene summary (manual or after generation).
+    pub async fn upsert_scene_summary(
+        &self,
+        scene_id: Uuid,
+        draft_version: i32,
+        summary_text: &str,
+        model: Option<&str>,
+    ) -> Result<SceneSummary, AiError> {
+        self.summary_repo
+            .upsert(scene_id, draft_version, summary_text, model)
+            .await
+    }
+
+    /// Get generation cost summary for a user.
+    pub async fn user_cost_summary(
+        &self,
+        user_id: Uuid,
+    ) -> Result<CostSummary, AiError> {
+        self.log_repo.cost_summary_by_user(user_id).await
+    }
+
+    /// Get generation cost summary for a project.
+    pub async fn project_cost_summary(
+        &self,
+        project_id: Uuid,
+    ) -> Result<CostSummary, AiError> {
+        self.log_repo.cost_summary_by_project(project_id).await
     }
 }
 

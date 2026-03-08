@@ -72,9 +72,9 @@ describe('I18nProvider', () => {
   })
 
   it('falls back to English when locale has no translation', () => {
-    // 'es' has an empty translations object
+    // Use a locale code that has no translations defined
     render(() => (
-      <I18nProvider initial={'es' as never}>
+      <I18nProvider initial={'zz' as never}>
         <TestConsumer translationKey="nav.projects" />
       </I18nProvider>
     ))

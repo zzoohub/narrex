@@ -1,16 +1,15 @@
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
-use axum::response::Response;
 use axum::Json;
 use uuid::Uuid;
 
-use crate::domain::project::models::PaginationParams;
+use crate::domain::project::models::{PaginationParams, PovType, Project, SourceType};
 use crate::inbound::http::error::ApiError;
 use crate::inbound::http::middleware::auth::AuthUser;
-use crate::inbound::http::response::{ApiSuccess, PaginatedResponse};
+use crate::inbound::http::response::{ApiSuccess, Created, PaginatedResponse};
 use crate::inbound::http::server::AppState;
 
-use super::request::{CreateProjectTextRequest, ListProjectsQuery, UpdateProjectRequest};
+use super::request::{CreateProjectDirectRequest, ListProjectsQuery, UpdateProjectRequest};
 use super::response::{ProjectResponse, ProjectSummaryResponse, WorkspaceResponse};
 
 /// `GET /v1/projects` — list user's projects with cursor pagination.
@@ -40,20 +39,40 @@ pub async fn list_projects(
     ))
 }
 
-/// `POST /v1/projects` — create a project with AI auto-structuring.
-///
-/// Phase 1 stub: returns a regular JSON response (SSE streaming deferred).
+/// `POST /v1/projects` — create a project directly.
 pub async fn create_project(
     State(state): State<AppState>,
     auth: AuthUser,
-    Json(body): Json<CreateProjectTextRequest>,
-) -> Result<Response, ApiError> {
-    let _ = (state, auth, body);
-    // TODO: Implement SSE streaming project creation.
-    // For Phase 1, return 501 to signal not yet implemented.
-    Err(ApiError::Internal(
-        "project creation with AI structuring not yet implemented".into(),
-    ))
+    Json(body): Json<CreateProjectDirectRequest>,
+) -> Result<Created<ProjectResponse>, ApiError> {
+    let pov = body
+        .pov
+        .as_deref()
+        .map(|s| s.parse::<PovType>())
+        .transpose()
+        .map_err(ApiError::UnprocessableEntity)?;
+
+    let project = Project {
+        id: Uuid::new_v4(),
+        user_id: auth.user_id,
+        title: body.title,
+        genre: body.genre,
+        theme: body.theme,
+        era_location: body.era_location,
+        pov,
+        tone: body.tone,
+        source_type: Some(SourceType::FreeText),
+        source_input: body.source_input,
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
+    };
+
+    let created = state
+        .project_service()
+        .create_project(&project, auth.user_id)
+        .await?;
+
+    Ok(Created::new(ProjectResponse::from(&created)))
 }
 
 /// `GET /v1/projects/{projectId}` — get project details.
@@ -79,7 +98,7 @@ pub async fn update_project(
 ) -> Result<ApiSuccess<ProjectResponse>, ApiError> {
     let update = body
         .try_into()
-        .map_err(|e: String| ApiError::UnprocessableEntity(e))?;
+        .map_err(ApiError::UnprocessableEntity)?;
 
     let project = state
         .project_service()

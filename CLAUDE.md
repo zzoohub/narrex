@@ -4,25 +4,47 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 <!-- Describe what this project does, who it's for, and core value proposition -->
 
+## Principles & Constraints
+### MUST (STRICTLY ENFORCED — NO EXCEPTIONS)
+1. **TDD**: NEVER write implementation code before tests. Follow this exact sequence:
+   1. Write ALL tests first as a complete spec
+   2. Run tests — confirm they FAIL (red)
+   3. Implement fully (no need for minimal/incremental steps)
+   4. Run tests — confirm ALL pass (green)
+   If you catch yourself writing implementation first, STOP and write the test first.
+   - Axum: `nextest`
+   - FastAPI: `pytest` + `httpx` + `anyio`
+   - Next.js: `vitest` + `@testing-library/react`
+   - TanStack/SolidJS: `vitest` + `@solidjs/testing-library`
+2. **Post-check**: After implementation, run sub-agents in parallel (skip for docs-only changes):
+   - **z-security-reviewer** (if auth/data/API changed)
+   - **z-verifier** (e2e + browser verification)
+   > Sub-agents report only. Fix → re-run → pass, then next step.
+3. Any change to requirements, product scope, architecture, data model, UX/UI design, or project structure must be reflected in `docs/`.
+
+### MUST NOT
+- (project-specific anti-patterns here)
+
 ## Architecture
 <!-- Describe high-level architecture (e.g., "Axum API + Next.js web client + background workers") -->
 
 ### Monorepo Structure
 ```
-├── services/
-│   ├── api/              # Backend API
-│   ├── crates/           # Rust crates
-│   └── worker/           # Queue, cron, pub/sub handlers
-├── web/
+├── apps/
+│   ├── api/              # Backend API → Cloud Run
+│   ├── worker/           # Background jobs → Cloud Run Jobs / CF Worker
+│   ├── web/              # Web client → CF Pages / Vercel
+│   └── mobile/           # Expo React Native
 ├── db/
 │   ├── migrations/
+│   ├── rollbacks/
 │   └── seeds/
-├── infra/                # Pulumi IaC
 ├── openapi/
 │   └── openapi.yaml      # API contract (source of truth)
+├── e2e/                  # End-to-end tests
 ├── docs/                 # Product planning (what and how to build)
 ├── biz/                  # Business operations (how to sell & grow)
-└── scripts/
+└── justfile              # dev, test, deploy commands
 ```
 
 ## Environment
@@ -36,22 +58,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | DB      | Docker Compose (`5432`)     | TBD  |
 | Redis   | Docker Compose (`6379`)     | TBD  |
 | LLM     | CF Workers AI (REST API)    | CF Workers AI (free) → Gemini Flash (fallback) |
-
-## Principles & Constraints
-### MUST
-1. **TDD**: Write all tests first as a spec, then implement, then verify all pass. (Tests → Impl → Green).
-   - Axum: `nextest`
-   - FastAPI: `pytest` + `httpx` + `anyio`
-   - Next.js: `vitest` + `@testing-library/react`
-   - TanStack/SolidJS: `vitest` + `@solidjs/testing-library`
-2. After implementation, run post-check sub-agents in parallel (skip for docs-only changes):
-   - **z-security-reviewer** (if auth/data/API changed)
-   - **z-verifier** (e2e + browser verification)
-   > Sub-agents report only. Fix → re-run → pass, then next step.
-3. Any change to requirements, product scope, architecture, data model, UX/UI design, or project structure must be reflected in `docs/`.
-
-### MUST NOT
-- (project-specific anti-patterns here)
 
 ## Build & Dev Commands
 All commands in `justfile`. Run `just --list` to see all recipes.

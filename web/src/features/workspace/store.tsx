@@ -39,7 +39,8 @@ interface WorkspaceActions {
   loadWorkspace: (projectId: string) => Promise<void>
 
   addScene: (trackId: string, startPosition: number) => void
-  updateScene: (sceneId: string, updates: Partial<Pick<Scene, 'title' | 'plotSummary' | 'location' | 'moodTags' | 'characterIds' | 'startPosition' | 'duration' | 'trackId'>>) => void
+  updateScene: (sceneId: string, updates: Partial<Pick<Scene, 'title' | 'plotSummary' | 'location' | 'moodTags' | 'characterIds' | 'startPosition' | 'duration' | 'trackId' | 'status'>>) => void
+  markSceneEdited: (sceneId: string) => void
   removeScene: (sceneId: string) => void
   moveScene: (sceneId: string, newTrackId: string, newStartPosition: number) => void
   selectScene: (sceneId: string | null) => void
@@ -88,6 +89,7 @@ export interface WorkspaceContextValue extends WorkspaceActions {
   readonly prevScene: () => Scene | undefined
   readonly nextScene: () => Scene | undefined
   draftContent: (sceneId: string) => string
+  readonly configVersion: () => number
 }
 
 // ---- Helpers ----------------------------------------------------------------
@@ -127,6 +129,7 @@ export const WorkspaceProvider: ParentComponent<{ projectId: string }> = (props)
   const [isGenerating, setIsGenerating] = createSignal(false)
   const [generatingSceneId, setGeneratingSceneId] = createSignal<string | null>(null)
   const [streamedContent, setStreamedContent] = createSignal('')
+  const [configVersion, setConfigVersion] = createSignal(0)
 
   // Auto-save debounce
   const autoSave = debounce(() => {
@@ -309,6 +312,18 @@ export const WorkspaceProvider: ParentComponent<{ projectId: string }> = (props)
       }))
       setSaveStatus('error')
     })
+  }
+
+  function markSceneEdited(sceneId: string): void {
+    const scene = state.scenes.find((s) => s.id === sceneId)
+    if (scene && scene.status === 'ai_draft') {
+      setState(produce((s) => {
+        const sc = s.scenes.find((x) => x.id === sceneId)
+        if (sc) sc.status = 'edited'
+      }))
+      markSaving()
+      sceneApi.updateScene(props.projectId, sceneId, { status: 'edited' } as any).catch(() => setSaveStatus('error'))
+    }
   }
 
   function selectScene(sceneId: string | null): void {
@@ -537,9 +552,25 @@ export const WorkspaceProvider: ParentComponent<{ projectId: string }> = (props)
   // ---- Project / Config ----
 
   function updateProjectAction(updates: Partial<Pick<Project, 'title' | 'genre' | 'theme' | 'eraLocation' | 'pov' | 'tone'>>): void {
+    // Check if any generation-relevant config fields changed
+    const configFields = ['genre', 'theme', 'eraLocation', 'pov', 'tone'] as const
+    const isConfigChange = configFields.some((f) => f in updates)
+
     setState(produce((s) => {
       if (s.project) Object.assign(s.project, updates)
+      // Mark scenes with existing drafts as needs_revision
+      if (isConfigChange) {
+        for (const scene of s.scenes) {
+          if (scene.status === 'ai_draft' || scene.status === 'edited') {
+            const hasDraft = s.draftContents[scene.id]?.length > 0
+            if (hasDraft) {
+              scene.status = 'needs_revision'
+            }
+          }
+        }
+      }
     }))
+    if (isConfigChange) setConfigVersion((v) => v + 1)
     markSaving()
     projectApi.updateProject(props.projectId, updates).catch(() => setSaveStatus('error'))
   }
@@ -610,11 +641,14 @@ export const WorkspaceProvider: ParentComponent<{ projectId: string }> = (props)
     nextScene,
     draftContent,
 
+    configVersion,
+
     loadWorkspace,
     addScene,
     updateScene,
     removeScene,
     moveScene,
+    markSceneEdited,
     selectScene,
     addTrack,
     updateTrack,

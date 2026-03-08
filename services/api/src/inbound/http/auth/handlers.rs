@@ -1,6 +1,7 @@
 use axum::extract::{Query, State};
 use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Redirect, Response};
+use axum::Json;
 
 use serde::Deserialize;
 
@@ -10,6 +11,7 @@ use crate::inbound::http::middleware::auth::AuthUser;
 use crate::inbound::http::response::ApiSuccess;
 use crate::inbound::http::server::AppState;
 
+use super::request::UpdateProfileRequest;
 use super::response::{AuthTokensResponse, UserResponse};
 
 // ---------------------------------------------------------------------------
@@ -69,12 +71,18 @@ pub async fn handle_google_callback(
         &state.config().google_redirect_uri,
     )
     .await
-    .map_err(|e| ApiError::BadRequest(format!("OAuth code exchange failed: {e}")))?;
+    .map_err(|e| {
+        tracing::error!("OAuth code exchange failed: {e}");
+        ApiError::BadRequest("OAuth authentication failed".into())
+    })?;
 
     // Fetch user info from Google.
     let google_user = fetch_google_user_info(&google_tokens.access_token)
         .await
-        .map_err(|e| ApiError::BadRequest(format!("failed to fetch Google user info: {e}")))?;
+        .map_err(|e| {
+            tracing::error!("failed to fetch Google user info: {e}");
+            ApiError::BadRequest("OAuth authentication failed".into())
+        })?;
 
     // Upsert user and issue tokens.
     let (_user, tokens, refresh_token) = state
@@ -82,8 +90,13 @@ pub async fn handle_google_callback(
         .google_callback(google_user)
         .await?;
 
-    // Build redirect with access token as query param.
-    let web_url = &query.state; // state param contains the web app URL
+    // Validate state param matches configured web app URL to prevent open redirect.
+    let expected_web_url = &state.config().web_app_url;
+    if query.state != *expected_web_url {
+        return Err(ApiError::BadRequest("invalid OAuth state parameter".into()));
+    }
+    let web_url = expected_web_url;
+
     let redirect_url = format!(
         "{}?accessToken={}&expiresIn={}",
         web_url, tokens.access_token, tokens.expires_in,
@@ -109,7 +122,7 @@ pub async fn handle_google_callback(
 pub async fn refresh_token(
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
-) -> Result<ApiSuccess<AuthTokensResponse>, ApiError> {
+) -> Result<Response, ApiError> {
     let cookie_header = headers
         .get(header::COOKIE)
         .and_then(|v| v.to_str().ok())
@@ -126,11 +139,20 @@ pub async fn refresh_token(
 
     let (tokens, new_refresh) = state.auth_service().refresh_tokens(refresh_token).await?;
 
-    // In a full implementation, we'd set a new refresh cookie here too.
-    // For now, just return the access token.
-    let _ = new_refresh;
+    // Rotate refresh token: issue new cookie replacing the old one.
+    let cookie = format!(
+        "refresh_token={}; HttpOnly; Secure; SameSite=Lax; Path=/v1/auth; Max-Age={}",
+        new_refresh,
+        30 * 24 * 60 * 60, // 30 days
+    );
 
-    Ok(ApiSuccess::new(AuthTokensResponse::from(&tokens)))
+    let mut response = ApiSuccess::new(AuthTokensResponse::from(&tokens)).into_response();
+    response.headers_mut().insert(
+        header::SET_COOKIE,
+        cookie.parse().expect("valid cookie header"),
+    );
+
+    Ok(response)
 }
 
 /// `POST /v1/auth/logout` — clear refresh token cookie.
@@ -150,18 +172,22 @@ pub async fn get_current_user(
     State(state): State<AppState>,
     auth: AuthUser,
 ) -> Result<ApiSuccess<UserResponse>, ApiError> {
-    // The AuthUser extractor already verified the token.
-    // We need to load the full user from the repository.
-    // For now, we use the auth service which verifies token + fetches user.
-    // Since AuthServiceImpl::get_current_user needs improvement,
-    // we'll return a minimal response from the user_id.
-    //
-    // TODO: Add `find_by_id` to UserRepository and use it here.
-    let _ = state;
-    let _ = auth;
-    Err(ApiError::Internal(
-        "get_current_user: UserRepository.find_by_id not yet implemented".into(),
-    ))
+    let user = state.auth_service().get_user(auth.user_id).await?;
+    Ok(ApiSuccess::new(UserResponse::from(&user)))
+}
+
+/// `PATCH /v1/auth/me` — update current user's profile.
+pub async fn update_profile(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Json(body): Json<UpdateProfileRequest>,
+) -> Result<ApiSuccess<UserResponse>, ApiError> {
+    let update = body.into();
+    let user = state
+        .auth_service()
+        .update_profile(auth.user_id, &update)
+        .await?;
+    Ok(ApiSuccess::new(UserResponse::from(&user)))
 }
 
 // ---------------------------------------------------------------------------

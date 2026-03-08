@@ -525,11 +525,29 @@ function GraphView(props: {
                           style={{ 'pointer-events': 'all' }}
                         >
                           {/* Main circle — drag to move */}
+                          <Show when={char.profileImageUrl}>
+                            <defs>
+                              <clipPath id={`avatar-clip-${char.id}`}>
+                                <circle cx={p().x} cy={p().y} r={22} />
+                              </clipPath>
+                            </defs>
+                            <image
+                              href={char.profileImageUrl!}
+                              x={p().x - 22}
+                              y={p().y - 22}
+                              width={44}
+                              height={44}
+                              clip-path={`url(#avatar-clip-${char.id})`}
+                              class="pointer-events-none"
+                            />
+                          </Show>
                           <circle
                             cx={p().x}
                             cy={p().y}
                             r={22}
-                            class="fill-surface-raised stroke-border-default hover:stroke-accent transition-colors"
+                            class={char.profileImageUrl
+                              ? 'fill-none stroke-border-default hover:stroke-accent transition-colors'
+                              : 'fill-surface-raised stroke-border-default hover:stroke-accent transition-colors'}
                             stroke-width={2}
                             onPointerDown={(e) => handleNodePointerDown(char.id, e)}
                             onClick={(e) => {
@@ -538,16 +556,18 @@ function GraphView(props: {
                             }}
                           />
 
-                          {/* Initial letter */}
-                          <text
-                            x={p().x}
-                            y={p().y}
-                            text-anchor="middle"
-                            dominant-baseline="central"
-                            class="text-sm font-semibold fill-fg select-none pointer-events-none"
-                          >
-                            {char.name.charAt(0)}
-                          </text>
+                          {/* Initial letter (only if no image) */}
+                          <Show when={!char.profileImageUrl}>
+                            <text
+                              x={p().x}
+                              y={p().y}
+                              text-anchor="middle"
+                              dominant-baseline="central"
+                              class="text-sm font-semibold fill-fg select-none pointer-events-none"
+                            >
+                              {char.name.charAt(0)}
+                            </text>
+                          </Show>
 
                           {/* Name label below */}
                           <text
@@ -775,11 +795,43 @@ function CharacterCard(props: {
 
       {/* Card body */}
       <div class="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Avatar placeholder */}
+        {/* Avatar with upload */}
         <div class="flex flex-col items-center gap-2">
-          <div class="w-16 h-16 rounded-full bg-surface-raised border-2 border-border-default flex items-center justify-center text-xl font-display font-semibold text-fg">
-            {props.character.name?.charAt(0) ?? '?'}
-          </div>
+          <label class="relative cursor-pointer group">
+            <Show
+              when={props.character.profileImageUrl}
+              fallback={
+                <div class="w-16 h-16 rounded-full bg-surface-raised border-2 border-border-default flex items-center justify-center text-xl font-display font-semibold text-fg group-hover:border-accent/50 transition-colors">
+                  {props.character.name?.charAt(0) ?? '?'}
+                </div>
+              }
+            >
+              <img
+                src={props.character.profileImageUrl!}
+                alt={props.character.name}
+                class="w-16 h-16 rounded-full object-cover border-2 border-border-default group-hover:border-accent/50 transition-colors"
+              />
+            </Show>
+            <div class="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+              <IconPen size={14} class="text-white" />
+            </div>
+            <input
+              type="file"
+              accept="image/*"
+              class="hidden"
+              onChange={(e) => {
+                const file = (e.target as HTMLInputElement).files?.[0]
+                if (!file) return
+                const reader = new FileReader()
+                reader.onload = () => {
+                  ws.updateCharacter(props.character.id, {
+                    profileImageUrl: reader.result as string,
+                  })
+                }
+                reader.readAsDataURL(file)
+              }}
+            />
+          </label>
         </div>
 
         {/* Editable fields */}

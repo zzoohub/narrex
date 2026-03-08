@@ -2,24 +2,13 @@ use uuid::Uuid;
 
 use super::error::AiError;
 use super::models::{
-    Draft, DraftSource, DraftSummary, GenerationContext, GenerationLog, SceneSummary,
+    CostSummary, CreateDraftParams, Draft, DraftSummary, GenerationContext, GenerationLog,
+    SceneSummary,
 };
 
 #[async_trait::async_trait]
 pub trait DraftRepository: Clone + Send + Sync + 'static {
-    async fn create(
-        &self,
-        scene_id: Uuid,
-        version: i32,
-        content: &str,
-        source: DraftSource,
-        edit_direction: Option<&str>,
-        model: Option<&str>,
-        provider: Option<&str>,
-        tokens_in: Option<i32>,
-        tokens_out: Option<i32>,
-        cost: Option<f64>,
-    ) -> Result<Draft, AiError>;
+    async fn create(&self, params: &CreateDraftParams) -> Result<Draft, AiError>;
 
     async fn find_latest_by_scene(&self, scene_id: Uuid) -> Result<Option<Draft>, AiError>;
 
@@ -56,6 +45,13 @@ pub trait SceneSummaryRepository: Clone + Send + Sync + 'static {
 #[async_trait::async_trait]
 pub trait GenerationLogRepository: Clone + Send + Sync + 'static {
     async fn create(&self, log: &GenerationLog) -> Result<(), AiError>;
+
+    async fn cost_summary_by_user(&self, user_id: Uuid) -> Result<CostSummary, AiError>;
+
+    async fn cost_summary_by_project(
+        &self,
+        project_id: Uuid,
+    ) -> Result<CostSummary, AiError>;
 }
 
 #[async_trait::async_trait]

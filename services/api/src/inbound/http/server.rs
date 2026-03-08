@@ -6,8 +6,9 @@ use axum::Router;
 use sqlx::PgPool;
 use tokio::net::TcpListener;
 use tokio::signal;
-use axum::http::{header, Method};
+use axum::http::{header, HeaderValue, Method};
 use tower_http::cors::CorsLayer;
+use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::timeout::TimeoutLayer;
 use tower_http::trace::TraceLayer;
 use tracing::info;
@@ -160,6 +161,7 @@ fn build_router(state: AppState, cors_origin: &str) -> Router {
         .allow_methods([
             Method::GET,
             Method::POST,
+            Method::PUT,
             Method::PATCH,
             Method::DELETE,
             Method::OPTIONS,
@@ -185,7 +187,12 @@ fn build_router(state: AppState, cors_origin: &str) -> Router {
     let authed = Router::new()
         // Auth
         .route("/v1/auth/logout", post(auth_handlers::logout))
-        .route("/v1/auth/me", get(auth_handlers::get_current_user))
+        .route(
+            "/v1/auth/me",
+            get(auth_handlers::get_current_user).patch(auth_handlers::update_profile),
+        )
+        // Cost analytics
+        .route("/v1/me/costs", get(ai_handlers::get_user_costs))
         // Projects
         .route(
             "/v1/projects",
@@ -200,6 +207,10 @@ fn build_router(state: AppState, cors_origin: &str) -> Router {
         .route(
             "/v1/projects/{projectId}/workspace",
             get(project_handlers::get_workspace),
+        )
+        .route(
+            "/v1/projects/{projectId}/costs",
+            get(ai_handlers::get_project_costs),
         )
         // Tracks
         .route(
@@ -260,6 +271,11 @@ fn build_router(state: AppState, cors_origin: &str) -> Router {
             "/v1/projects/{projectId}/scenes/{sceneId}/edit",
             post(ai_handlers::edit_scene_draft),
         )
+        // Scene Summary
+        .route(
+            "/v1/projects/{projectId}/scenes/{sceneId}/summary",
+            get(ai_handlers::get_scene_summary).put(ai_handlers::upsert_scene_summary),
+        )
         // Drafts
         .route(
             "/v1/projects/{projectId}/scenes/{sceneId}/drafts",
@@ -274,6 +290,22 @@ fn build_router(state: AppState, cors_origin: &str) -> Router {
         .merge(public)
         .merge(authed)
         .layer(cors)
+        .layer(SetResponseHeaderLayer::overriding(
+            header::STRICT_TRANSPORT_SECURITY,
+            HeaderValue::from_static("max-age=31536000; includeSubDomains"),
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            header::X_CONTENT_TYPE_OPTIONS,
+            HeaderValue::from_static("nosniff"),
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            header::X_FRAME_OPTIONS,
+            HeaderValue::from_static("DENY"),
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            header::REFERRER_POLICY,
+            HeaderValue::from_static("strict-origin-when-cross-origin"),
+        ))
         .layer(TimeoutLayer::with_status_code(
             axum::http::StatusCode::REQUEST_TIMEOUT,
             Duration::from_secs(60),

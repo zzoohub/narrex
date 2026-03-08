@@ -146,6 +146,49 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+    patch:
+      operationId: updateProfile
+      tags: [auth]
+      summary: Update current user's profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfile'
+      responses:
+        '200':
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/me/costs:
+    get:
+      operationId: getUserCosts
+      tags: [generation]
+      summary: Get AI generation cost summary for current user
+      responses:
+        '200':
+          description: User cost summary
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/CostSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   # ---- Projects -----------------------------------------------------------
 
   /v1/projects:
@@ -304,6 +347,29 @@ paths:
                 properties:
                   data:
                     $ref: '#/components/schemas/Workspace'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/projects/{projectId}/costs:
+    get:
+      operationId: getProjectCosts
+      tags: [generation]
+      summary: Get AI generation cost summary for a project
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+      responses:
+        '200':
+          description: Project cost summary
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/CostSummary'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -821,6 +887,62 @@ paths:
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
+  # ---- Scene Summary -------------------------------------------------------
+
+  /v1/projects/{projectId}/scenes/{sceneId}/summary:
+    get:
+      operationId: getSceneSummary
+      tags: [generation]
+      summary: Get scene summary
+      description: Returns the AI-generated summary for this scene used as context for subsequent scenes.
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+        - $ref: '#/components/parameters/SceneIdParam'
+      responses:
+        '200':
+          description: Scene summary
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/SceneSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      operationId: upsertSceneSummary
+      tags: [generation]
+      summary: Create or update scene summary
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdParam'
+        - $ref: '#/components/parameters/SceneIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertSceneSummary'
+      responses:
+        '200':
+          description: Upserted scene summary
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/SceneSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   # ---- Drafts -------------------------------------------------------------
 
   /v1/projects/{projectId}/scenes/{sceneId}/drafts:
@@ -1180,6 +1302,19 @@ components:
           format: date-time
           readOnly: true
 
+    UpdateProfile:
+      type: object
+      properties:
+        displayName:
+          type:
+            - string
+            - 'null'
+        profileImageUrl:
+          type:
+            - string
+            - 'null'
+          format: uri
+
     AuthTokens:
       type: object
       required: [accessToken, expiresIn]
@@ -1257,6 +1392,27 @@ components:
         updatedAt:
           type: string
           format: date-time
+
+    CreateProjectDirect:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          maxLength: 200
+        genre:
+          type: string
+        theme:
+          type: string
+        eraLocation:
+          type: string
+        pov:
+          type: string
+          enum: [first_person, third_limited, third_omniscient]
+        tone:
+          type: string
+        sourceInput:
+          type: string
 
     CreateProjectText:
       type: object
@@ -1857,6 +2013,63 @@ components:
           type: string
           description: User-edited prose content
           minLength: 1
+
+    # ---- Scene Summary ----------------------------------------------------
+
+    SceneSummary:
+      type: object
+      required: [sceneId, draftVersion, summaryText, createdAt, updatedAt]
+      properties:
+        sceneId:
+          type: string
+          format: uuid
+          readOnly: true
+        draftVersion:
+          type: integer
+          description: Draft version this summary was generated from
+        summaryText:
+          type: string
+          description: Compressed context summary for downstream generation
+        model:
+          type:
+            - string
+            - 'null'
+          readOnly: true
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+
+    UpsertSceneSummary:
+      type: object
+      required: [draftVersion, summaryText]
+      properties:
+        draftVersion:
+          type: integer
+          minimum: 1
+        summaryText:
+          type: string
+          minLength: 1
+
+    # ---- Cost Analytics ----------------------------------------------------
+
+    CostSummary:
+      type: object
+      required: [totalGenerations, totalTokensInput, totalTokensOutput, totalCostUsd]
+      properties:
+        totalGenerations:
+          type: integer
+        totalTokensInput:
+          type: integer
+        totalTokensOutput:
+          type: integer
+        totalCostUsd:
+          type: number
+          format: double
 
     # ---- Generation -------------------------------------------------------
 

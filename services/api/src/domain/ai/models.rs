@@ -149,6 +149,20 @@ pub struct CreateManualDraft {
 }
 
 #[derive(Debug, Clone)]
+pub struct CreateDraftParams {
+    pub scene_id: Uuid,
+    pub version: i32,
+    pub content: String,
+    pub source: DraftSource,
+    pub edit_direction: Option<String>,
+    pub model: Option<String>,
+    pub provider: Option<String>,
+    pub tokens_in: Option<i32>,
+    pub tokens_out: Option<i32>,
+    pub cost: Option<f64>,
+}
+
+#[derive(Debug, Clone)]
 pub struct EditDraftRequest {
     pub content: String,
     pub selected_text: Option<String>,
@@ -204,6 +218,18 @@ pub struct GenerationLog {
     pub cost_usd: f64,
     pub error_message: Option<String>,
     pub created_at: DateTime<Utc>,
+}
+
+// ---------------------------------------------------------------------------
+// CostSummary (analytics)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone)]
+pub struct CostSummary {
+    pub total_generations: i64,
+    pub total_tokens_input: i64,
+    pub total_tokens_output: i64,
+    pub total_cost_usd: f64,
 }
 
 #[cfg(test)]
@@ -297,5 +323,19 @@ mod tests {
         for v in [GenerationStatus::Success, GenerationStatus::Failure, GenerationStatus::Partial] {
             assert_eq!(v.to_string().parse::<GenerationStatus>().unwrap(), v);
         }
+    }
+
+    // --- CostSummary ---
+
+    #[test]
+    fn cost_summary_defaults_to_zero() {
+        let cs = CostSummary {
+            total_generations: 0,
+            total_tokens_input: 0,
+            total_tokens_output: 0,
+            total_cost_usd: 0.0,
+        };
+        assert_eq!(cs.total_generations, 0);
+        assert_eq!(cs.total_cost_usd, 0.0);
     }
 }

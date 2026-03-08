@@ -16,6 +16,7 @@
     "@tanstack/solid-query": "^5.90.23",
     "@tanstack/solid-router": "latest",
     "@tanstack/solid-start": "latest",
+    "@zip.js/zip.js": "^2.8.23",
     "d3": "^7.9.0",
     "gsap": "^3.14.2",
     "lucide-solid": "^0.577.0",

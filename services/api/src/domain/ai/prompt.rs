@@ -6,22 +6,19 @@ pub struct PromptBuilder;
 impl PromptBuilder {
     /// Build a system prompt for scene generation.
     pub fn system_prompt(ctx: &GenerationContext) -> String {
-        let mut parts: Vec<String> = Vec::new();
-
-        parts.push(
+        let mut parts = vec![
             "당신은 한국 웹소설 전문 작가입니다. \
              주어진 컨텍스트(장르, 톤, 시점, 캐릭터 정보, 이전 줄거리 요약)를 바탕으로 \
              지정된 장면의 본문을 작성합니다."
                 .to_string(),
-        );
-
-        parts.push("\n\n## 작성 규칙".to_string());
-        parts.push("- 한국어로 작성하되, 고유명사나 외래어는 원어 그대로 사용 가능".to_string());
-        parts.push("- 묘사와 대화를 균형 있게 배치".to_string());
-        parts.push("- 장면의 분위기(mood_tags)에 맞는 문체 사용".to_string());
-        parts.push("- 캐릭터의 성격, 동기, 비밀을 반영한 행동과 대사".to_string());
-        parts.push("- 이전 장면과의 연속성 유지".to_string());
-        parts.push("- 동시 진행 장면이 있다면 시간적 정합성 유지".to_string());
+            "\n\n## 작성 규칙".to_string(),
+            "- 한국어로 작성하되, 고유명사나 외래어는 원어 그대로 사용 가능".to_string(),
+            "- 묘사와 대화를 균형 있게 배치".to_string(),
+            "- 장면의 분위기(mood_tags)에 맞는 문체 사용".to_string(),
+            "- 캐릭터의 성격, 동기, 비밀을 반영한 행동과 대사".to_string(),
+            "- 이전 장면과의 연속성 유지".to_string(),
+            "- 동시 진행 장면이 있다면 시간적 정합성 유지".to_string(),
+        ];
 
         // POV instruction.
         if let Some(ref pov) = ctx.project.pov {
@@ -48,11 +45,10 @@ impl PromptBuilder {
 
     /// Build a user prompt for scene generation.
     pub fn user_prompt(ctx: &GenerationContext) -> String {
-        let mut parts: Vec<String> = Vec::new();
-
-        // Project config.
-        parts.push("## 작품 설정".to_string());
-        parts.push(format!("- 제목: {}", ctx.project.title));
+        let mut parts = vec![
+            "## 작품 설정".to_string(),
+            format!("- 제목: {}", ctx.project.title),
+        ];
         if let Some(ref genre) = ctx.project.genre {
             parts.push(format!("- 장르: {genre}"));
         }
@@ -169,10 +165,10 @@ impl PromptBuilder {
         selected_text: Option<&str>,
         direction: &str,
     ) -> String {
-        let mut parts: Vec<String> = Vec::new();
-
-        parts.push("## 현재 본문".to_string());
-        parts.push(content.to_string());
+        let mut parts = vec![
+            "## 현재 본문".to_string(),
+            content.to_string(),
+        ];
 
         if let Some(selected) = selected_text {
             parts.push(format!("\n## 선택된 텍스트\n{selected}"));

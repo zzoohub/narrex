@@ -20,6 +20,8 @@ import {
   IconAlertTriangle,
   IconSparkles,
   IconTrash,
+  IconChevronDown,
+  IconChevronRight,
   ContextMenu,
   Separator,
   type ContextMenuItem,
@@ -113,6 +115,23 @@ export function TimelinePanel() {
   const [addingTrack, setAddingTrack] = createSignal(false)
   const [newTrackLabel, setNewTrackLabel] = createSignal('')
 
+  // Track collapse state
+  const [collapsedTracks, setCollapsedTracks] = createSignal<Set<string>>(new Set())
+
+  // Branch-creation drag state
+  const [branchDrag, setBranchDrag] = createSignal<{
+    sourceSceneId: string
+    x1: number; y1: number
+    x2: number; y2: number
+  } | null>(null)
+
+  // Tooltip state
+  const [tooltip, setTooltip] = createSignal<{
+    x: number; y: number
+    title: string; summary: string
+  } | null>(null)
+  let tooltipTimer: ReturnType<typeof setTimeout> | undefined
+
   // Delete confirmation dialogs
   const [deleteSceneId, setDeleteSceneId] = createSignal<string | null>(null)
   const [deleteTrackId, setDeleteTrackId] = createSignal<string | null>(null)
@@ -145,6 +164,150 @@ export function TimelinePanel() {
   function zoomFit() {
     setScale(DEFAULT_SCALE)
   }
+
+  function handleWheel(e: WheelEvent) {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault()
+      const delta = e.deltaY > 0 ? -SCALE_STEP / 2 : SCALE_STEP / 2
+      setScale((s) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s + delta)))
+    }
+  }
+
+  // ---- Track collapse helpers ----
+
+  function toggleTrackCollapse(trackId: string) {
+    setCollapsedTracks((prev) => {
+      const next = new Set(prev)
+      if (next.has(trackId)) next.delete(trackId)
+      else next.add(trackId)
+      return next
+    })
+  }
+
+  // ---- Tooltip helpers ----
+
+  function showSceneTooltip(e: PointerEvent, scene: Scene) {
+    clearTimeout(tooltipTimer)
+    tooltipTimer = setTimeout(() => {
+      const summary = scene.plotSummary
+        ? scene.plotSummary.slice(0, 100) + (scene.plotSummary.length > 100 ? '...' : '')
+        : ''
+      setTooltip({
+        x: e.clientX + 12,
+        y: e.clientY + 12,
+        title: scene.title || '\u2014',
+        summary,
+      })
+    }, 400)
+  }
+
+  function hideSceneTooltip() {
+    clearTimeout(tooltipTimer)
+    setTooltip(null)
+  }
+
+  // ---- Branch handle drag (create branch/merge connections) ----
+
+  function handleBranchHandleDown(e: PointerEvent, sceneId: string) {
+    e.stopPropagation()
+    e.preventDefault()
+    const bodyRect = timelineBodyRef?.getBoundingClientRect()
+    if (!bodyRect) return
+
+    const lookup = sceneLookup()
+    const info = lookup.get(sceneId)
+    if (!info) return
+
+    const startX = info.scene.startPosition * scale() + (info.scene.duration * scale()) / 2 + TRACK_LABEL_WIDTH
+    const startY = RULER_HEIGHT + info.trackIndex * TRACK_HEIGHT + TRACK_HEIGHT - 4
+
+    setBranchDrag({
+      sourceSceneId: sceneId,
+      x1: startX,
+      y1: startY,
+      x2: startX,
+      y2: startY,
+    })
+
+    const onMove = (ev: PointerEvent) => {
+      const rx = ev.clientX - bodyRect.left + (timelineBodyRef?.scrollLeft ?? 0)
+      const ry = ev.clientY - bodyRect.top + (timelineBodyRef?.scrollTop ?? 0)
+      setBranchDrag((prev) => prev ? { ...prev, x2: rx, y2: ry } : null)
+    }
+
+    const onUp = (ev: PointerEvent) => {
+      document.removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointerup', onUp)
+
+      const drag = branchDrag()
+      setBranchDrag(null)
+      if (!drag) return
+
+      // Find target scene under pointer
+      const rx = ev.clientX - bodyRect.left + (timelineBodyRef?.scrollLeft ?? 0)
+      const ry = ev.clientY - bodyRect.top + (timelineBodyRef?.scrollTop ?? 0)
+
+      const tracks = ws.trackScenes()
+      const targetTrackIndex = Math.floor((ry - RULER_HEIGHT) / TRACK_HEIGHT)
+      if (targetTrackIndex < 0 || targetTrackIndex >= tracks.length) return
+
+      const targetTrack = tracks[targetTrackIndex]!
+      // Check if pointer is over an existing scene (merge) or empty space (branch)
+      let targetScene: Scene | null = null
+      for (const s of targetTrack.scenes) {
+        const sx = s.startPosition * scale() + TRACK_LABEL_WIDTH
+        const sw = Math.max(s.duration * scale(), 24)
+        if (rx >= sx && rx <= sx + sw) {
+          targetScene = s
+          break
+        }
+      }
+
+      if (targetScene && targetScene.id !== drag.sourceSceneId) {
+        // Merge: connect to existing scene
+        ws.addConnection(drag.sourceSceneId, targetScene.id, 'merge')
+      } else if (!targetScene && targetTrack.id !== ws.state.scenes.find((s) => s.id === drag.sourceSceneId)?.trackId) {
+        // Branch: create new scene on target track
+        const newStartPos = Math.max(0, (rx - TRACK_LABEL_WIDTH) / scale())
+        ws.addScene(targetTrack.id, Math.round(newStartPos * 4) / 4)
+        // After a tick, find the newly added scene and create a branch connection
+        setTimeout(() => {
+          const newScenes = ws.state.scenes.filter((s) => s.trackId === targetTrack.id)
+          const newest = newScenes[newScenes.length - 1]
+          if (newest) {
+            ws.addConnection(drag.sourceSceneId, newest.id, 'branch')
+          }
+        }, 100)
+      }
+    }
+
+    document.addEventListener('pointermove', onMove)
+    document.addEventListener('pointerup', onUp)
+  }
+
+  // ---- Simultaneous event bands ----
+
+  const simultaneousBands = createMemo(() => {
+    const tracks = ws.trackScenes()
+    if (tracks.length < 2) return []
+
+    // Collect all unique overlap regions across tracks
+    const bands: Array<{ start: number; end: number }> = []
+    for (let i = 0; i < tracks.length; i++) {
+      for (let j = i + 1; j < tracks.length; j++) {
+        for (const sa of tracks[i]!.scenes) {
+          for (const sb of tracks[j]!.scenes) {
+            const overlapStart = Math.max(sa.startPosition, sb.startPosition)
+            const overlapEnd = Math.min(sa.startPosition + sa.duration, sb.startPosition + sb.duration)
+            if (overlapEnd > overlapStart) {
+              bands.push({ start: overlapStart, end: overlapEnd })
+            }
+          }
+        }
+      }
+    }
+    return bands
+  })
 
   // ---- Computed ----
 
@@ -427,6 +590,7 @@ export function TimelinePanel() {
         class="flex-1 overflow-auto relative"
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
+        onWheel={handleWheel}
       >
         {/* SVG connection lines layer */}
         <svg
@@ -437,6 +601,37 @@ export function TimelinePanel() {
             'z-index': '1',
           }}
         >
+          {/* Simultaneous event bands */}
+          <For each={simultaneousBands()}>
+            {(band) => (
+              <rect
+                x={band.start * scale() + TRACK_LABEL_WIDTH}
+                y={RULER_HEIGHT}
+                width={(band.end - band.start) * scale()}
+                height={ws.trackScenes().length * TRACK_HEIGHT}
+                fill="var(--accent)"
+                opacity="0.06"
+                class="pointer-events-none"
+              />
+            )}
+          </For>
+
+          {/* Branch drag preview line */}
+          <Show when={branchDrag()}>
+            {(drag) => (
+              <line
+                x1={drag().x1}
+                y1={drag().y1}
+                x2={drag().x2}
+                y2={drag().y2}
+                stroke="var(--accent)"
+                stroke-width={2}
+                stroke-dasharray="6 3"
+                class="pointer-events-none"
+              />
+            )}
+          </Show>
+
           <For each={ws.state.connections}>
             {(conn: SceneConnection) => {
               const lookup = sceneLookup()
@@ -497,18 +692,29 @@ export function TimelinePanel() {
           <For each={ws.trackScenes()}>
             {(track, trackIndex) => {
               const endPos = () => trackEndPosition(track.scenes)
+              const isCollapsed = () => collapsedTracks().has(track.id)
 
               return (
                 <ContextMenu items={trackContextItems(track.id, track.label)}>
                   <div
                     class="flex border-b border-border-subtle"
-                    style={{ height: `${TRACK_HEIGHT}px` }}
+                    style={{ height: isCollapsed() ? '24px' : `${TRACK_HEIGHT}px` }}
                   >
                     {/* Track label */}
                     <div
-                      class="flex-shrink-0 flex items-center justify-end pr-3 border-r border-border-subtle"
+                      class="flex-shrink-0 flex items-center gap-1 justify-end pr-3 border-r border-border-subtle"
                       style={{ width: `${TRACK_LABEL_WIDTH}px` }}
                     >
+                      <button
+                        type="button"
+                        class="p-0.5 rounded text-fg-muted hover:text-fg transition-colors cursor-pointer flex-shrink-0"
+                        onClick={() => toggleTrackCollapse(track.id)}
+                        aria-label={isCollapsed() ? 'Expand track' : 'Collapse track'}
+                      >
+                        <Show when={isCollapsed()} fallback={<IconChevronDown size={12} />}>
+                          <IconChevronRight size={12} />
+                        </Show>
+                      </button>
                       <Show
                         when={renamingTrackId() === track.id}
                         fallback={
@@ -539,50 +745,63 @@ export function TimelinePanel() {
                     </div>
 
                     {/* Clips area */}
-                    <div class="relative flex-1" style={{ width: `${timelineWidth()}px` }}>
-                      <For each={track.scenes}>
-                        {(scene) => (
-                          <ContextMenu items={sceneContextItems(scene.id)}>
-                            <button
-                              type="button"
-                              class="tl-clip"
-                              style={{
-                                left: `${scene.startPosition * scale()}px`,
-                                width: `${Math.max(scene.duration * scale(), 24)}px`,
-                                opacity: dragging()?.sceneId === scene.id ? '0.3' : '1',
-                              }}
-                              data-status={statusToCss(scene.status)}
-                              data-selected={ws.selectedSceneId() === scene.id}
-                              onClick={(e) => {
-                                // Don't select if we just finished dragging
-                                if (!dragging()) {
-                                  e.stopPropagation()
-                                  ws.selectScene(scene.id)
-                                }
-                              }}
-                              onPointerDown={(e) => handlePointerDown(e, scene.id, track.id, scene.startPosition)}
-                              aria-label={`${scene.title || 'Untitled'}, ${sceneTooltip(t, scene.status)}`}
-                            >
-                              {sceneStatusIcon(scene.status)}
-                              <span class="text-xs text-fg truncate">
-                                {scene.title || '\u2014'}
-                              </span>
-                            </button>
-                          </ContextMenu>
-                        )}
-                      </For>
+                    <Show when={!isCollapsed()}>
+                      <div class="relative flex-1" style={{ width: `${timelineWidth()}px` }}>
+                        <For each={track.scenes}>
+                          {(scene) => (
+                            <ContextMenu items={sceneContextItems(scene.id)}>
+                              <button
+                                type="button"
+                                class="tl-clip group"
+                                style={{
+                                  left: `${scene.startPosition * scale()}px`,
+                                  width: `${Math.max(scene.duration * scale(), 24)}px`,
+                                  opacity: dragging()?.sceneId === scene.id ? '0.3' : '1',
+                                }}
+                                data-status={statusToCss(scene.status)}
+                                data-selected={ws.selectedSceneId() === scene.id}
+                                onClick={(e) => {
+                                  if (!dragging()) {
+                                    e.stopPropagation()
+                                    ws.selectScene(scene.id)
+                                  }
+                                }}
+                                onPointerDown={(e) => handlePointerDown(e, scene.id, track.id, scene.startPosition)}
+                                onPointerEnter={(e) => showSceneTooltip(e, scene)}
+                                onPointerLeave={hideSceneTooltip}
+                                aria-label={`${scene.title || 'Untitled'}, ${sceneTooltip(t, scene.status)}`}
+                              >
+                                {sceneStatusIcon(scene.status)}
+                                <span class="text-xs text-fg truncate">
+                                  {scene.title || '\u2014'}
+                                </span>
+                                {/* Branch handle (bottom-right, visible on hover) */}
+                                <span
+                                  class="absolute -bottom-1.5 right-1 w-3 h-3 rounded-full bg-accent/60 hover:bg-accent border border-surface opacity-0 group-hover:opacity-100 transition-opacity cursor-crosshair"
+                                  onPointerDown={(e) => handleBranchHandleDown(e, scene.id)}
+                                />
+                              </button>
+                            </ContextMenu>
+                          )}
+                        </For>
 
-                      {/* [+] Add scene button at end of track */}
-                      <button
-                        type="button"
-                        class="absolute top-1/2 -translate-y-1/2 flex items-center justify-center w-7 h-7 rounded-md border border-dashed border-border-default text-fg-muted hover:border-accent hover:text-accent hover:bg-accent-muted transition-colors cursor-pointer"
-                        style={{ left: `${endPos() * scale() + 8}px` }}
-                        aria-label="Add scene"
-                        onClick={() => ws.addScene(track.id, endPos())}
-                      >
-                        <IconPlus size={14} />
-                      </button>
-                    </div>
+                        {/* [+] Add scene button at end of track */}
+                        <button
+                          type="button"
+                          class="absolute top-1/2 -translate-y-1/2 flex items-center justify-center w-7 h-7 rounded-md border border-dashed border-border-default text-fg-muted hover:border-accent hover:text-accent hover:bg-accent-muted transition-colors cursor-pointer"
+                          style={{ left: `${endPos() * scale() + 8}px` }}
+                          aria-label="Add scene"
+                          onClick={() => ws.addScene(track.id, endPos())}
+                        >
+                          <IconPlus size={14} />
+                        </button>
+                      </div>
+                    </Show>
+                    <Show when={isCollapsed()}>
+                      <div class="relative flex-1 flex items-center px-2">
+                        <span class="text-[10px] text-fg-muted">{track.scenes.length} scenes</span>
+                      </div>
+                    </Show>
                   </div>
                 </ContextMenu>
               )
@@ -683,6 +902,21 @@ export function TimelinePanel() {
           setDeleteTrackId(null)
         }}
       />
+
+      {/* -- Hover tooltip ------------------------------------------------- */}
+      <Show when={tooltip()}>
+        {(tip) => (
+          <div
+            class="fixed z-50 max-w-xs px-3 py-2 rounded-lg bg-surface-raised border border-border-default shadow-xl shadow-canvas/50 pointer-events-none"
+            style={{ left: `${tip().x}px`, top: `${tip().y}px` }}
+          >
+            <p class="text-xs font-medium text-fg mb-0.5">{tip().title}</p>
+            <Show when={tip().summary}>
+              <p class="text-[11px] text-fg-muted leading-snug">{tip().summary}</p>
+            </Show>
+          </div>
+        )}
+      </Show>
     </div>
   )
 }

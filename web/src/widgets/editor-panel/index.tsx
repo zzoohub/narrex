@@ -28,6 +28,65 @@ export function EditorPanel() {
   const [aiDirection, setAiDirection] = createSignal('')
   const [showRegenDialog, setShowRegenDialog] = createSignal(false)
 
+  // ---- Undo/Redo stack (per scene) ----------------------------------------
+
+  const undoStacks = new Map<string, string[]>()
+  const redoStacks = new Map<string, string[]>()
+  const MAX_UNDO = 50
+
+  function pushUndo(sceneId: string, content: string) {
+    let stack = undoStacks.get(sceneId)
+    if (!stack) { stack = []; undoStacks.set(sceneId, stack) }
+    if (stack[stack.length - 1] === content) return
+    stack.push(content)
+    if (stack.length > MAX_UNDO) stack.shift()
+    // Clear redo on new edit
+    redoStacks.set(sceneId, [])
+  }
+
+  function undo() {
+    const s = scene()
+    if (!s) return
+    const stack = undoStacks.get(s.id)
+    if (!stack || stack.length < 2) return
+    const current = stack.pop()!
+    let redo = redoStacks.get(s.id)
+    if (!redo) { redo = []; redoStacks.set(s.id, redo) }
+    redo.push(current)
+    const prev = stack[stack.length - 1]!
+    ws.setDraftContent(s.id, prev)
+    if (editorEl) editorEl.textContent = prev
+  }
+
+  function redo() {
+    const s = scene()
+    if (!s) return
+    const stack = redoStacks.get(s.id)
+    if (!stack || stack.length === 0) return
+    const next = stack.pop()!
+    let undoStack = undoStacks.get(s.id)
+    if (!undoStack) { undoStack = []; undoStacks.set(s.id, undoStack) }
+    undoStack.push(next)
+    ws.setDraftContent(s.id, next)
+    if (editorEl) editorEl.textContent = next
+  }
+
+  // Keyboard shortcut for undo/redo
+  function handleUndoRedoKey(e: KeyboardEvent) {
+    const meta = e.metaKey || e.ctrlKey
+    if (!meta) return
+    if (e.key === 'z' && !e.shiftKey) {
+      e.preventDefault()
+      undo()
+    } else if ((e.key === 'z' && e.shiftKey) || e.key === 'y') {
+      e.preventDefault()
+      redo()
+    }
+  }
+
+  document.addEventListener('keydown', handleUndoRedoKey)
+  onCleanup(() => document.removeEventListener('keydown', handleUndoRedoKey))
+
   // ---- Derived --------------------------------------------------------------
 
   const scene = () => ws.selectedScene()
@@ -83,6 +142,10 @@ export function EditorPanel() {
     // Only update DOM if it doesn't match (avoids clobbering cursor position)
     if (editorEl.textContent !== content) {
       editorEl.textContent = content
+    }
+    // Seed undo stack with initial content
+    if (content && !undoStacks.has(s.id)) {
+      undoStacks.set(s.id, [content])
     }
   })
 
@@ -192,10 +255,11 @@ export function EditorPanel() {
     const s = scene()
     if (!s || !editorEl) return
     const text = editorEl.textContent ?? ''
+    pushUndo(s.id, text)
     ws.setDraftContent(s.id, text)
     // Mark as edited on first manual edit after AI draft
     if (s.status === 'ai_draft') {
-      ws.updateScene(s.id, { title: s.title } as any)
+      ws.markSceneEdited(s.id)
     }
   }
 

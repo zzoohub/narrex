@@ -1,7 +1,7 @@
 use uuid::Uuid;
 
 use super::error::AuthError;
-use super::models::{AuthTokens, GoogleUserInfo, User};
+use super::models::{AuthTokens, GoogleUserInfo, UpdateProfile, User};
 use super::ports::{TokenService, UserRepository};
 
 #[derive(Clone)]
@@ -45,18 +45,26 @@ impl<U: UserRepository, T: TokenService> AuthServiceImpl<U, T> {
         self.token_svc.verify_access_token(token).await
     }
 
-    /// Get the current user by ID (after token verification).
-    pub async fn get_current_user(
+    /// Get user by ID.
+    pub async fn get_user(&self, user_id: Uuid) -> Result<User, AuthError> {
+        self.user_repo
+            .find_by_id(user_id)
+            .await?
+            .ok_or(AuthError::UserNotFound)
+    }
+
+    /// Update user profile.
+    pub async fn update_profile(
         &self,
-        token: &str,
+        user_id: Uuid,
+        update: &UpdateProfile,
     ) -> Result<User, AuthError> {
-        let user_id = self.token_svc.verify_access_token(token).await?;
-        // We look up by google_id but we only have user_id here,
-        // so we need the user repo to support find by id as well.
-        // For now, the token encodes user_id, and the inbound layer
-        // can use it directly. This method is a convenience wrapper.
-        let _ = user_id;
-        Err(AuthError::UserNotFound)
+        // Verify user exists.
+        self.user_repo
+            .find_by_id(user_id)
+            .await?
+            .ok_or(AuthError::UserNotFound)?;
+        self.user_repo.update_profile(user_id, update).await
     }
 }
 
@@ -70,18 +78,28 @@ mod tests {
 
     #[derive(Clone)]
     struct MockUserRepo {
+        user: std::sync::Arc<Mutex<Option<User>>>,
         upsert_result: std::sync::Arc<Mutex<Option<Result<User, AuthError>>>>,
     }
 
     impl MockUserRepo {
         fn with_user(user: User) -> Self {
             Self {
+                user: std::sync::Arc::new(Mutex::new(Some(user.clone()))),
                 upsert_result: std::sync::Arc::new(Mutex::new(Some(Ok(user)))),
+            }
+        }
+
+        fn new_empty() -> Self {
+            Self {
+                user: std::sync::Arc::new(Mutex::new(None)),
+                upsert_result: std::sync::Arc::new(Mutex::new(None)),
             }
         }
 
         fn failing(err: AuthError) -> Self {
             Self {
+                user: std::sync::Arc::new(Mutex::new(None)),
                 upsert_result: std::sync::Arc::new(Mutex::new(Some(Err(err)))),
             }
         }
@@ -101,8 +119,12 @@ mod tests {
 
     #[async_trait::async_trait]
     impl UserRepository for MockUserRepo {
+        async fn find_by_id(&self, _id: Uuid) -> Result<Option<User>, AuthError> {
+            Ok(self.user.lock().unwrap().clone())
+        }
+
         async fn find_by_google_id(&self, _google_id: &str) -> Result<Option<User>, AuthError> {
-            Ok(None) // Not used in these tests
+            Ok(None)
         }
 
         async fn upsert_from_google(&self, _info: &GoogleUserInfo) -> Result<User, AuthError> {
@@ -110,6 +132,17 @@ mod tests {
             match result {
                 Some(r) => r,
                 None => Err(AuthError::Unknown(anyhow::anyhow!("no mock result"))),
+            }
+        }
+
+        async fn update_profile(
+            &self,
+            _id: Uuid,
+            _update: &UpdateProfile,
+        ) -> Result<User, AuthError> {
+            match self.user.lock().unwrap().clone() {
+                Some(u) => Ok(u),
+                None => Err(AuthError::UserNotFound),
             }
         }
     }
@@ -265,27 +298,55 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn get_current_user_always_returns_not_found() {
+    async fn get_user_not_found() {
         let user_id = Uuid::new_v4();
-        let repo = MockUserRepo::with_user(make_user(user_id));
+        let repo = MockUserRepo::new_empty();
         let token_svc = MockTokenSvc::new(user_id);
         let svc = AuthServiceImpl::new(repo, token_svc);
 
-        let result = svc.get_current_user("valid-token").await;
+        let result = svc.get_user(user_id).await;
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), AuthError::UserNotFound));
     }
 
     #[tokio::test]
-    async fn get_current_user_propagates_token_error() {
+    async fn get_user_success() {
         let user_id = Uuid::new_v4();
-        let repo = MockUserRepo::with_user(make_user(user_id));
-        let token_svc = MockTokenSvc::new(user_id)
-            .with_verify_access_err(AuthError::InvalidToken("nope".into()));
+        let user = make_user(user_id);
+        let repo = MockUserRepo::with_user(user.clone());
+        let token_svc = MockTokenSvc::new(user_id);
         let svc = AuthServiceImpl::new(repo, token_svc);
 
-        let result = svc.get_current_user("bad-token").await;
-        assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), AuthError::InvalidToken(_)));
+        let result = svc.get_user(user_id).await.unwrap();
+        assert_eq!(result.id, user_id);
+        assert_eq!(result.email, user.email);
+    }
+
+    #[tokio::test]
+    async fn update_profile_success() {
+        let user_id = Uuid::new_v4();
+        let user = make_user(user_id);
+        let repo = MockUserRepo::with_user(user);
+        let token_svc = MockTokenSvc::new(user_id);
+        let svc = AuthServiceImpl::new(repo, token_svc);
+
+        let update = UpdateProfile {
+            display_name: Some(Some("New Name".into())),
+            ..Default::default()
+        };
+        let result = svc.update_profile(user_id, &update).await.unwrap();
+        assert_eq!(result.id, user_id);
+    }
+
+    #[tokio::test]
+    async fn update_profile_user_not_found() {
+        let user_id = Uuid::new_v4();
+        let repo = MockUserRepo::new_empty();
+        let token_svc = MockTokenSvc::new(user_id);
+        let svc = AuthServiceImpl::new(repo, token_svc);
+
+        let update = UpdateProfile::default();
+        let result = svc.update_profile(user_id, &update).await;
+        assert!(matches!(result.unwrap_err(), AuthError::UserNotFound));
     }
 }

@@ -1,4 +1,4 @@
-import { createSignal, Show, For, onCleanup } from 'solid-js'
+import { createSignal, Show, For, onCleanup, onMount } from 'solid-js'
 import { Link, useNavigate } from '@tanstack/solid-router'
 import { useI18n } from '@/shared/lib/i18n'
 import {
@@ -21,9 +21,38 @@ const processingSteps = [
   'creation.processing.world',
 ] as const
 
+/** Extract text content from a .zip file (Notion export: find .md files inside). */
+async function extractZipText(file: File): Promise<string> {
+  const { BlobReader, ZipReader, TextWriter } = await import('@zip.js/zip.js')
+  const reader = new ZipReader(new BlobReader(file))
+  const entries = await reader.getEntries()
+  const mdFiles = entries.filter(
+    (e) => !e.directory && (e.filename.endsWith('.md') || e.filename.endsWith('.txt')),
+  )
+  const parts: string[] = []
+  for (const entry of mdFiles) {
+    if (entry.getData) {
+      const text = await entry.getData(new TextWriter())
+      parts.push(text)
+    }
+  }
+  await reader.close()
+  return parts.join('\n\n---\n\n')
+}
+
 export function ProjectCreationView() {
   const { t } = useI18n()
   const navigate = useNavigate()
+
+  // ── Responsive check ──
+  const [isMobile, setIsMobile] = createSignal(false)
+  onMount(() => {
+    const check = () => setIsMobile(window.innerWidth < 768)
+    check()
+    window.addEventListener('resize', check)
+    onCleanup(() => window.removeEventListener('resize', check))
+  })
+
   const [state, setState] = createSignal<CreationState>('input')
   const [text, setText] = createSignal('')
   const [file, setFile] = createSignal<File | null>(null)
@@ -69,15 +98,24 @@ export function ProjectCreationView() {
     }
   }
 
-  function readFileContent(f: File) {
-    const reader = new FileReader()
-    reader.onload = () => {
-      setFileContent(reader.result as string)
+  async function readFileContent(f: File) {
+    if (f.name.endsWith('.zip')) {
+      try {
+        const text = await extractZipText(f)
+        setFileContent(text)
+      } catch {
+        setFileContent(null)
+      }
+    } else {
+      const reader = new FileReader()
+      reader.onload = () => {
+        setFileContent(reader.result as string)
+      }
+      reader.onerror = () => {
+        setFileContent(null)
+      }
+      reader.readAsText(f)
     }
-    reader.onerror = () => {
-      setFileContent(null)
-    }
-    reader.readAsText(f)
   }
 
   function removeFile() {
@@ -159,6 +197,16 @@ export function ProjectCreationView() {
   }
 
   return (
+    <Show
+      when={!isMobile()}
+      fallback={
+        <div class="h-screen flex items-center justify-center bg-canvas px-8">
+          <p class="text-center text-fg-secondary text-sm leading-relaxed">
+            Narrex는 데스크톱용으로 설계되었습니다. 더 넓은 화면의 기기를 사용하세요.
+          </p>
+        </div>
+      }
+    >
     <div class="min-h-screen bg-canvas">
       {/* ── Top bar ──────────────────────────────────────────────── */}
       <header class="flex items-center px-6 h-14 border-b border-border-default bg-surface/80 backdrop-blur-sm">
@@ -402,5 +450,6 @@ export function ProjectCreationView() {
         </Show>
       </main>
     </div>
+    </Show>
   )
 }

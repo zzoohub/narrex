@@ -12,8 +12,23 @@ use crate::inbound::http::middleware::auth::AuthUser;
 use crate::inbound::http::response::{ApiSuccess, Created};
 use crate::inbound::http::server::AppState;
 
-use super::request::{EditDraftHttpRequest, SaveDraftRequest};
-use super::response::{DraftResponse, DraftSummaryResponse};
+/// Verify a scene belongs to the given project. Returns `ApiError::NotFound` if not.
+async fn verify_scene_ownership(
+    state: &AppState,
+    project_id: Uuid,
+    scene_id: Uuid,
+) -> Result<(), ApiError> {
+    let scene = state.timeline_service().get_scene(scene_id).await?;
+    if scene.project_id != project_id {
+        return Err(ApiError::NotFound("scene not found in this project".into()));
+    }
+    Ok(())
+}
+
+use super::request::{EditDraftHttpRequest, SaveDraftRequest, UpsertSceneSummaryRequest};
+use super::response::{
+    CostSummaryResponse, DraftResponse, DraftSummaryResponse, SceneSummaryResponse,
+};
 
 /// `POST /v1/projects/{projectId}/scenes/{sceneId}/generate` — generate AI draft (SSE).
 pub async fn generate_scene_draft(
@@ -21,11 +36,12 @@ pub async fn generate_scene_draft(
     auth: AuthUser,
     Path((project_id, scene_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Sse<impl futures::Stream<Item = Result<Event, Infallible>>>, ApiError> {
-    // Verify project ownership.
+    // Verify project ownership and scene belongs to project.
     state
         .project_service()
         .get_project(project_id, auth.user_id)
         .await?;
+    verify_scene_ownership(&state, project_id, scene_id).await?;
 
     let stream = state
         .ai_service()
@@ -51,6 +67,7 @@ pub async fn edit_scene_draft(
         .project_service()
         .get_project(project_id, auth.user_id)
         .await?;
+    verify_scene_ownership(&state, project_id, scene_id).await?;
 
     let edit_req = body.into();
     let stream = state
@@ -77,6 +94,7 @@ pub async fn save_draft(
         .project_service()
         .get_project(project_id, auth.user_id)
         .await?;
+    verify_scene_ownership(&state, project_id, scene_id).await?;
 
     let input = body.into();
     let draft = state
@@ -97,6 +115,7 @@ pub async fn list_drafts(
         .project_service()
         .get_project(project_id, auth.user_id)
         .await?;
+    verify_scene_ownership(&state, project_id, scene_id).await?;
 
     let drafts = state.ai_service().list_drafts(scene_id).await?;
     let data: Vec<DraftSummaryResponse> = drafts.iter().map(DraftSummaryResponse::from).collect();
@@ -114,10 +133,78 @@ pub async fn get_draft(
         .project_service()
         .get_project(project_id, auth.user_id)
         .await?;
+    verify_scene_ownership(&state, project_id, scene_id).await?;
 
     let draft = state.ai_service().get_draft(scene_id, version).await?;
 
     Ok(ApiSuccess::new(DraftResponse::from(&draft)))
+}
+
+/// `GET /v1/projects/{projectId}/scenes/{sceneId}/summary` — get scene summary.
+pub async fn get_scene_summary(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path((project_id, scene_id)): Path<(Uuid, Uuid)>,
+) -> Result<ApiSuccess<SceneSummaryResponse>, ApiError> {
+    state
+        .project_service()
+        .get_project(project_id, auth.user_id)
+        .await?;
+    verify_scene_ownership(&state, project_id, scene_id).await?;
+
+    let summary = state.ai_service().get_scene_summary(scene_id).await?;
+    Ok(ApiSuccess::new(SceneSummaryResponse::from(&summary)))
+}
+
+/// `GET /v1/me/costs` — get cost summary for the current user.
+pub async fn get_user_costs(
+    State(state): State<AppState>,
+    auth: AuthUser,
+) -> Result<ApiSuccess<CostSummaryResponse>, ApiError> {
+    let summary = state
+        .ai_service()
+        .user_cost_summary(auth.user_id)
+        .await?;
+    Ok(ApiSuccess::new(CostSummaryResponse::from(&summary)))
+}
+
+/// `GET /v1/projects/{projectId}/costs` — get cost summary for a project.
+pub async fn get_project_costs(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(project_id): Path<Uuid>,
+) -> Result<ApiSuccess<CostSummaryResponse>, ApiError> {
+    state
+        .project_service()
+        .get_project(project_id, auth.user_id)
+        .await?;
+
+    let summary = state
+        .ai_service()
+        .project_cost_summary(project_id)
+        .await?;
+    Ok(ApiSuccess::new(CostSummaryResponse::from(&summary)))
+}
+
+/// `PUT /v1/projects/{projectId}/scenes/{sceneId}/summary` — upsert scene summary.
+pub async fn upsert_scene_summary(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path((project_id, scene_id)): Path<(Uuid, Uuid)>,
+    Json(body): Json<UpsertSceneSummaryRequest>,
+) -> Result<ApiSuccess<SceneSummaryResponse>, ApiError> {
+    state
+        .project_service()
+        .get_project(project_id, auth.user_id)
+        .await?;
+    verify_scene_ownership(&state, project_id, scene_id).await?;
+
+    let summary = state
+        .ai_service()
+        .upsert_scene_summary(scene_id, body.draft_version, &body.summary_text, None)
+        .await?;
+
+    Ok(ApiSuccess::new(SceneSummaryResponse::from(&summary)))
 }
 
 // ---------------------------------------------------------------------------

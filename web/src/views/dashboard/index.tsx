@@ -1,4 +1,4 @@
-import { createResource, For, Show, Suspense } from 'solid-js'
+import { createResource, createSignal, For, Show, Suspense } from 'solid-js'
 import { Link } from '@tanstack/solid-router'
 import { useI18n } from '@/shared/lib/i18n'
 import { useTheme } from '@/shared/stores/theme'
@@ -13,12 +13,14 @@ import {
 } from '@/shared/ui'
 import { listProjects } from '@/entities/project'
 import type { ProjectSummary } from '@/entities/project'
+import { useAuth } from '@/shared/stores/auth'
 
 export function DashboardView() {
   const { t } = useI18n()
   const { theme, toggle } = useTheme()
+  const { state: authState, user, loginWithGoogle, logout } = useAuth()
 
-  const [projects] = createResource(async () => {
+  const [projects, { refetch }] = createResource(async () => {
     const res = await listProjects()
     return res.data
   })
@@ -31,7 +33,25 @@ export function DashboardView() {
     })
   }
 
+  // ── Responsive check ──
+  const [isMobile, setIsMobile] = createSignal(false)
+  if (typeof window !== 'undefined') {
+    const check = () => setIsMobile(window.innerWidth < 768)
+    check()
+    window.addEventListener('resize', check)
+  }
+
   return (
+    <Show
+      when={!isMobile()}
+      fallback={
+        <div class="h-screen flex items-center justify-center bg-canvas px-8">
+          <p class="text-center text-fg-secondary text-sm leading-relaxed">
+            Narrex는 데스크톱용으로 설계되었습니다. 더 넓은 화면의 기기를 사용하세요.
+          </p>
+        </div>
+      }
+    >
     <div class="min-h-screen bg-canvas">
       {/* ── Top bar ──────────────────────────────────────────────── */}
       <header class="flex items-center justify-between px-6 h-14 border-b border-border-default bg-surface/80 backdrop-blur-sm sticky top-0 z-40">
@@ -49,13 +69,37 @@ export function DashboardView() {
               <IconSun size={18} />
             </Show>
           </button>
-          <button
-            type="button"
-            class="p-2 rounded-lg text-fg-muted hover:text-fg hover:bg-surface-raised transition-colors cursor-pointer"
-            aria-label={t('nav.account')}
+          <Show
+            when={authState() === 'authenticated'}
+            fallback={
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={loginWithGoogle}
+              >
+                Sign in
+              </Button>
+            }
           >
-            <IconUser size={18} />
-          </button>
+            <button
+              type="button"
+              class="p-2 rounded-lg text-fg-muted hover:text-fg hover:bg-surface-raised transition-colors cursor-pointer"
+              aria-label={t('nav.account')}
+              onClick={logout}
+              title={user()?.name ?? ''}
+            >
+              <Show
+                when={user()?.profileImageUrl}
+                fallback={<IconUser size={18} />}
+              >
+                <img
+                  src={user()!.profileImageUrl!}
+                  alt=""
+                  class="w-5 h-5 rounded-full"
+                />
+              </Show>
+            </button>
+          </Show>
         </div>
       </header>
 
@@ -97,7 +141,7 @@ export function DashboardView() {
               <p class="text-sm text-fg-muted mb-4">
                 {t('creation.error')}
               </p>
-              <Button variant="secondary" onClick={() => projects.latest}>
+              <Button variant="secondary" onClick={() => refetch()}>
                 {t('creation.errorRetry')}
               </Button>
             </div>
@@ -153,11 +197,33 @@ export function DashboardView() {
                           {project.title}
                         </h3>
 
-                        {/* Genre tag */}
-                        <Show when={project.genre}>
-                          <span class="self-start text-xs font-medium px-2 py-0.5 rounded-md bg-accent-muted text-accent">
-                            {project.genre}
-                          </span>
+                        {/* Genre tag + progress */}
+                        <div class="flex items-center gap-2">
+                          <Show when={project.genre}>
+                            <span class="text-xs font-medium px-2 py-0.5 rounded-md bg-accent-muted text-accent">
+                              {project.genre}
+                            </span>
+                          </Show>
+                          <Show when={project.sceneCount > 0}>
+                            <span class="text-xs text-fg-muted">
+                              {t('dashboard.card.scenes', {
+                                drafted: project.draftedSceneCount,
+                                total: project.sceneCount,
+                              })}
+                            </span>
+                          </Show>
+                        </div>
+
+                        {/* Progress bar */}
+                        <Show when={project.sceneCount > 0}>
+                          <div class="w-full h-1.5 rounded-full bg-surface-raised overflow-hidden">
+                            <div
+                              class="h-full rounded-full bg-accent transition-all duration-300"
+                              style={{
+                                width: `${Math.round((project.draftedSceneCount / project.sceneCount) * 100)}%`,
+                              }}
+                            />
+                          </div>
                         </Show>
 
                         {/* Dates */}
@@ -186,5 +252,6 @@ export function DashboardView() {
         </Suspense>
       </main>
     </div>
+    </Show>
   )
 }

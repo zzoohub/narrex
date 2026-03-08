@@ -1,12 +1,14 @@
 use uuid::Uuid;
 
 use super::error::AuthError;
-use super::models::{AuthTokens, GoogleUserInfo, User};
+use super::models::{AuthTokens, GoogleUserInfo, UpdateProfile, User};
 
 #[async_trait::async_trait]
 pub trait UserRepository: Clone + Send + Sync + 'static {
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<User>, AuthError>;
     async fn find_by_google_id(&self, google_id: &str) -> Result<Option<User>, AuthError>;
     async fn upsert_from_google(&self, info: &GoogleUserInfo) -> Result<User, AuthError>;
+    async fn update_profile(&self, id: Uuid, update: &UpdateProfile) -> Result<User, AuthError>;
 }
 
 #[async_trait::async_trait]

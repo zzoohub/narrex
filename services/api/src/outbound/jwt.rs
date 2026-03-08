@@ -1,5 +1,5 @@
 use chrono::{Duration, Utc};
-use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
+use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -58,7 +58,7 @@ impl JwtTokenService {
     }
 
     fn verify_token(&self, token: &str, expected_kind: &str) -> Result<Uuid, AuthError> {
-        let mut validation = Validation::default();
+        let mut validation = Validation::new(Algorithm::HS256);
         validation.validate_exp = true;
 
         let token_data = decode::<Claims>(token, &self.decoding_key(), &validation)
