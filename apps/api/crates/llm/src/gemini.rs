@@ -20,7 +20,7 @@ impl GeminiFlashProvider {
         Self {
             client: Client::new(),
             api_key,
-            model: "gemini-2.0-flash".to_string(),
+            model: "gemini-2.5-flash".to_string(),
         }
     }
 
@@ -285,7 +285,7 @@ mod tests {
     #[test]
     fn default_model() {
         let p = make_provider();
-        assert_eq!(p.model, "gemini-2.0-flash");
+        assert_eq!(p.model, "gemini-2.5-flash");
     }
 
     #[test]
@@ -298,7 +298,7 @@ mod tests {
     fn endpoint_non_streaming() {
         let p = make_provider();
         let ep = p.endpoint(false);
-        assert!(ep.contains("gemini-2.0-flash"));
+        assert!(ep.contains("gemini-2.5-flash"));
         assert!(ep.contains("generateContent"));
         assert!(!ep.contains("stream"));
     }
@@ -307,7 +307,7 @@ mod tests {
     fn endpoint_streaming() {
         let p = make_provider();
         let ep = p.endpoint(true);
-        assert!(ep.contains("gemini-2.0-flash"));
+        assert!(ep.contains("gemini-2.5-flash"));
         assert!(ep.contains("streamGenerateContent"));
         assert!(ep.contains("alt=sse"));
     }
@@ -317,7 +317,7 @@ mod tests {
         let p = make_provider().with_model("gemini-pro".into());
         let ep = p.endpoint(false);
         assert!(ep.contains("gemini-pro"));
-        assert!(!ep.contains("gemini-2.0-flash"));
+        assert!(!ep.contains("gemini-2.5-flash"));
     }
 
     #[test]
