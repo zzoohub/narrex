@@ -73,6 +73,21 @@ describe('ProjectCreationView', () => {
     expect(screen.getByText('Browse Files')).toBeInTheDocument()
   })
 
+  it('renders sample prompt chips', () => {
+    renderCreation()
+    expect(screen.getByText('Try an example')).toBeInTheDocument()
+    // At least one sample prompt should be visible
+    expect(screen.getByText(/reborn as the villainess/i)).toBeInTheDocument()
+  })
+
+  it('fills textarea when a sample prompt is clicked', async () => {
+    renderCreation()
+    const chip = screen.getByText(/reborn as the villainess/i)
+    await fireEvent.click(chip)
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement
+    expect(textarea.value.length).toBeGreaterThan(0)
+  })
+
   it('shows mobile fallback on small screens', () => {
     Object.defineProperty(window, 'innerWidth', { value: 500, writable: true })
     render(() => (
