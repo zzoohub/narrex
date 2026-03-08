@@ -77,6 +77,34 @@ function sceneTooltip(t: (k: string) => string, status: string): string {
   }
 }
 
+/** Compute scale so all scenes fit within the visible viewport. */
+export function computeFitScale(
+  viewportWidth: number,
+  trackLabelWidth: number,
+  tracks: Array<{ scenes: Array<{ startPosition: number; duration: number }> }>,
+  minScale: number,
+  maxScale: number,
+  defaultScale: number,
+): number {
+  let maxEnd = 0
+  let hasScenes = false
+  for (const track of tracks) {
+    for (const scene of track.scenes) {
+      hasScenes = true
+      const end = scene.startPosition + scene.duration
+      if (end > maxEnd) maxEnd = end
+    }
+  }
+  if (!hasScenes || maxEnd <= 0) return defaultScale
+
+  const padding = 48
+  const availableWidth = viewportWidth - trackLabelWidth - padding
+  if (availableWidth <= 0) return defaultScale
+
+  const idealScale = availableWidth / maxEnd
+  return Math.min(maxScale, Math.max(minScale, idealScale))
+}
+
 /** Compute the end position of the last scene across all tracks. */
 function computeTimelineEnd(tracks: Array<{ scenes: Scene[] }>): number {
   let max = 0
@@ -174,7 +202,12 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
     setScale((s) => Math.max(MIN_SCALE, s - SCALE_STEP))
   }
   function zoomFit() {
-    setScale(DEFAULT_SCALE)
+    const viewportWidth = timelineBodyRef?.clientWidth ?? 0
+    const newScale = computeFitScale(viewportWidth, TRACK_LABEL_WIDTH, ws.trackScenes(), MIN_SCALE, MAX_SCALE, DEFAULT_SCALE)
+    setScale(newScale)
+    if (timelineBodyRef) {
+      timelineBodyRef.scrollLeft = 0
+    }
   }
 
   function handleWheel(e: WheelEvent) {
@@ -857,7 +890,7 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
                   >
                     {/* Track label */}
                     <div
-                      class="flex-shrink-0 flex items-center gap-1 justify-end pr-3 border-r border-border-subtle"
+                      class="flex-shrink-0 flex items-center gap-1.5 px-2 border-r border-border-subtle"
                       style={{ width: `${TRACK_LABEL_WIDTH}px` }}
                     >
                       <button
@@ -875,7 +908,7 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
                         when={renamingTrackId() === track.id}
                         fallback={
                           <span
-                            class="text-xs font-medium text-fg-secondary truncate cursor-default"
+                            class="text-xs font-medium text-fg-secondary truncate cursor-default min-w-0"
                             onDblClick={() => startRenamingTrack(track.id, track.label)}
                           >
                             {track.label ?? `Track ${trackIndex() + 1}`}

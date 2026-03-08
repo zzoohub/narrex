@@ -7,7 +7,7 @@ use tracing::{info, warn};
 
 use crate::provider::{GenerateRequest, GenerateResponse, LlmError, LlmProvider, StreamChunk};
 
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub struct LlmGateway {
     primary: Box<dyn LlmProvider>,

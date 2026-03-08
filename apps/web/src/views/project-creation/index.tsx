@@ -11,7 +11,7 @@ import {
   IconSparkles,
 } from '@/shared/ui'
 import { streamStructure, type StructureRequest } from '@/features/structuring'
-import type { SSEClarificationEvent, SSECompletedEvent, SSEErrorEvent, SSEProgressEvent } from '@/shared/api/sse'
+import type { SSEClarificationEvent, SSECompletedEvent, SSEErrorEvent, SSEProgressEvent, SSETokenEvent } from '@/shared/api/sse'
 
 type CreationState = 'input' | 'clarify' | 'processing' | 'error'
 
@@ -105,6 +105,26 @@ const processingSteps = [
   'creation.processing.world',
 ] as const
 
+const processingStepKeys = [
+  'creation.processing.step.characters',
+  'creation.processing.step.timeline',
+  'creation.processing.step.world',
+] as const
+
+const phaseHeadingKeys = [
+  'creation.processing.phase.characters',
+  'creation.processing.phase.timeline',
+  'creation.processing.phase.world',
+] as const
+
+const ESTIMATED_TOKENS_PER_PHASE = 50
+
+function formatElapsed(secs: number): string {
+  const m = Math.floor(secs / 60)
+  const s = secs % 60
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
 /** Extract text content from a .zip file (Notion export: find .md files inside). */
 async function extractZipText(file: File): Promise<string> {
   const { BlobReader, ZipReader, TextWriter } = await import('@zip.js/zip.js')
@@ -149,10 +169,40 @@ export function ProjectCreationView() {
   >([])
   const [clarificationAnswers, setClarificationAnswers] = createSignal<Record<string, string>>({})
 
+  // ── Live preview signals ──
+  const [activePhase, setActivePhase] = createSignal(-1)
+  const [phaseTexts, setPhaseTexts] = createSignal<Record<number, string>>({})
+  const [phaseTokenCount, setPhaseTokenCount] = createSignal(0)
+  const [lastRawTokens, setLastRawTokens] = createSignal('')
+  const [elapsedSecs, setElapsedSecs] = createSignal(0)
+  const [completionData, setCompletionData] = createSignal<{
+    projectId: string
+    characterCount?: number
+    sceneCount?: number
+    trackCount?: number
+  } | null>(null)
+
   let abortStream: (() => void) | null = null
+  let elapsedTimer: ReturnType<typeof setInterval> | null = null
+  let completionPauseTimer: ReturnType<typeof setTimeout> | null = null
+  let autoNavTimer: ReturnType<typeof setTimeout> | null = null
+
+  const progress = () => {
+    if (completionData()) return 100
+    const completed = completedSteps()
+    const base = completed * 33.3
+    let inPhase = 0
+    if (activePhase() >= 0 && activePhase() === completed) {
+      inPhase = Math.min(phaseTokenCount() / ESTIMATED_TOKENS_PER_PHASE, 0.95) * 33.3
+    }
+    return Math.max(5, Math.min(base + inPhase, 99.9))
+  }
 
   onCleanup(() => {
     if (abortStream) abortStream()
+    if (elapsedTimer) clearInterval(elapsedTimer)
+    if (completionPauseTimer) clearTimeout(completionPauseTimer)
+    if (autoNavTimer) clearTimeout(autoNavTimer)
   })
 
   const canSubmit = () => text().trim().length > 0 || file() !== null
@@ -213,6 +263,16 @@ export function ProjectCreationView() {
   async function handleSubmit() {
     setState('processing')
     setCompletedSteps(0)
+    setActivePhase(-1)
+    setPhaseTexts({})
+    setPhaseTokenCount(0)
+    setLastRawTokens('')
+    setElapsedSecs(0)
+    setCompletionData(null)
+
+    // Start elapsed timer
+    if (elapsedTimer) clearInterval(elapsedTimer)
+    elapsedTimer = setInterval(() => setElapsedSecs((s) => s + 1), 1000)
 
     const sourceInput = fileContent() ?? text()
     const answers = Object.values(clarificationAnswers()).filter(Boolean)
@@ -227,40 +287,80 @@ export function ProjectCreationView() {
         switch (event.event) {
           case 'progress': {
             const progressData = event.data as SSEProgressEvent
-            // Map progress messages to step completion
             const msg = progressData.message?.toLowerCase() ?? ''
             if (msg.includes('character') || msg.includes('등장인물')) {
-              setCompletedSteps((s) => Math.max(s, 1))
+              if (activePhase() < 0) {
+                setActivePhase(0)
+                setPhaseTokenCount(0)
+              }
             } else if (msg.includes('timeline') || msg.includes('타임라인') || msg.includes('plot')) {
-              setCompletedSteps((s) => Math.max(s, 2))
+              setActivePhase(1)
+              setCompletedSteps((s) => Math.max(s, 1))
+              setPhaseTokenCount(0)
             } else if (msg.includes('world') || msg.includes('세계')) {
-              setCompletedSteps((s) => Math.max(s, 3))
+              setActivePhase(2)
+              setCompletedSteps((s) => Math.max(s, 2))
+              setPhaseTokenCount(0)
+            }
+            break
+          }
+          case 'token': {
+            const tokenData = event.data as SSETokenEvent
+            const phase = activePhase()
+            if (phase >= 0 && tokenData.text) {
+              setPhaseTexts((prev) => ({
+                ...prev,
+                [phase]: (prev[phase] ?? '') + tokenData.text,
+              }))
+              setPhaseTokenCount((c) => c + 1)
+              setLastRawTokens(tokenData.text.slice(-80))
             }
             break
           }
           case 'clarification': {
             const clarData = event.data as SSEClarificationEvent
             setClarificationQuestions(clarData.questions)
+            if (elapsedTimer) clearInterval(elapsedTimer)
             setState('clarify')
             return
           }
           case 'completed': {
             setCompletedSteps(processingSteps.length)
+            if (elapsedTimer) clearInterval(elapsedTimer)
+
             const completedData = event.data as SSECompletedEvent
-            const workspace = completedData.data as { project?: { id: string } } | undefined
-            const projectId = workspace?.project?.id
-            if (projectId) {
-              // Small delay so user sees the completion state
-              setTimeout(() => {
-                navigate({ to: '/project/$id', params: { id: projectId } })
-              }, 600)
-            }
+            const workspace = completedData.data as {
+              project?: { id: string }
+              characterCount?: number
+              sceneCount?: number
+              trackCount?: number
+            } | undefined
+            const projectId = workspace?.project?.id ?? ''
+
+            // Show completion card after brief pause
+            completionPauseTimer = setTimeout(() => {
+              completionPauseTimer = null
+              setCompletionData({
+                projectId,
+                characterCount: workspace?.characterCount,
+                sceneCount: workspace?.sceneCount,
+                trackCount: workspace?.trackCount,
+              })
+
+              // Auto-navigate after 2s
+              if (projectId) {
+                autoNavTimer = setTimeout(() => {
+                  navigate({ to: '/project/$id', params: { id: projectId } })
+                }, 2000)
+              }
+            }, 800)
             return
           }
           case 'error': {
             const errorData = event.data as SSEErrorEvent
             const msg = typeof errorData?.message === 'string' ? errorData.message : JSON.stringify(event.data)
             console.error('SSE error:', msg)
+            if (elapsedTimer) clearInterval(elapsedTimer)
             setErrorDetail(msg)
             setState('error')
             return
@@ -268,12 +368,49 @@ export function ProjectCreationView() {
         }
       }
     } catch (err) {
+      // Don't show error for user-initiated cancellation
+      if (err instanceof DOMException && err.name === 'AbortError') return
       const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err)
       console.error('Stream error:', msg, err)
+      if (elapsedTimer) clearInterval(elapsedTimer)
       setErrorDetail(msg)
       setState('error')
     } finally {
       abortStream = null
+    }
+  }
+
+  function handleCancel() {
+    if (abortStream) {
+      abortStream()
+      abortStream = null
+    }
+    if (elapsedTimer) {
+      clearInterval(elapsedTimer)
+      elapsedTimer = null
+    }
+    if (completionPauseTimer) {
+      clearTimeout(completionPauseTimer)
+      completionPauseTimer = null
+    }
+    if (autoNavTimer) {
+      clearTimeout(autoNavTimer)
+      autoNavTimer = null
+    }
+    setActivePhase(-1)
+    setPhaseTexts({})
+    setPhaseTokenCount(0)
+    setElapsedSecs(0)
+    setCompletionData(null)
+    setCompletedSteps(0)
+    setState('input')
+  }
+
+  function handleOpenWorkspace() {
+    if (autoNavTimer) clearTimeout(autoNavTimer)
+    const data = completionData()
+    if (data?.projectId) {
+      navigate({ to: '/project/$id', params: { id: data.projectId } })
     }
   }
 
@@ -306,7 +443,7 @@ export function ProjectCreationView() {
       </header>
 
       {/* ── Content ──────────────────────────────────────────────── */}
-      <main class="max-w-2xl mx-auto px-6 py-16">
+      <main class={`mx-auto px-6 py-16 ${state() === 'processing' ? 'max-w-5xl' : 'max-w-2xl'}`}>
         {/* ── Input state ───────────────────────────────────────── */}
         <Show when={state() === 'input'}>
           <div class="animate-fade-in">
@@ -475,65 +612,149 @@ export function ProjectCreationView() {
 
         {/* ── Processing state ───────────────────────────────────── */}
         <Show when={state() === 'processing'}>
-          <div class="flex flex-col items-center justify-center py-24 animate-fade-in">
-            {/* Animated orb */}
-            <div class="relative w-24 h-24 mb-10">
-              <div class="absolute inset-0 rounded-full bg-accent/20 animate-ping" style={{ "animation-duration": "2s" }} />
-              <div class="absolute inset-2 rounded-full bg-accent/10" />
-              <div class="absolute inset-4 rounded-full bg-accent/20 flex items-center justify-center">
-                <IconSparkles size={28} class="text-accent" />
-              </div>
-            </div>
-
-            <h2 class="text-xl font-display font-semibold text-fg mb-8">
-              {t('creation.processing.title')}
-            </h2>
-
-            {/* Steps */}
-            <div class="space-y-4 w-full max-w-xs">
-              <For each={processingSteps}>
-                {(step, i) => {
-                  const done = () => completedSteps() > i()
-                  const active = () => completedSteps() === i()
-                  return (
-                    <div class="flex items-center gap-3">
-                      <div
-                        class={[
-                          'w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-300',
-                          done()
-                            ? 'bg-success text-white'
-                            : active()
-                              ? 'bg-accent text-accent-fg'
-                              : 'bg-surface-raised text-fg-muted',
-                        ].join(' ')}
-                      >
-                        <Show when={done()} fallback={
-                          <Show when={active()} fallback={<span class="text-xs">{i() + 1}</span>}>
+          <div class="flex gap-8 animate-fade-in">
+            {/* ── Live preview area ── */}
+            <div
+              class="flex-1 min-w-0 overflow-y-auto pr-2"
+              style={{ "max-height": "calc(100vh - 200px)" }}
+            >
+              <Show
+                when={!completionData()}
+                fallback={
+                  <div class="flex flex-col items-center justify-center py-16 animate-fade-in">
+                    <div class="w-16 h-16 rounded-2xl bg-accent/10 flex items-center justify-center mb-6">
+                      <IconCheck size={28} class="text-accent" />
+                    </div>
+                    <h2 class="text-2xl font-display font-semibold text-fg mb-6">
+                      {t('creation.completion.title')}
+                    </h2>
+                    <div class="space-y-2 text-sm text-fg-secondary text-center mb-8">
+                      <Show when={completionData()?.characterCount}>
+                        <p>{t('creation.completion.characters', { n: completionData()!.characterCount! })}</p>
+                      </Show>
+                      <Show when={completionData()?.sceneCount}>
+                        <p>{t('creation.completion.scenes', { n: completionData()!.sceneCount!, t: completionData()!.trackCount ?? 1 })}</p>
+                      </Show>
+                    </div>
+                    <Button variant="primary" size="lg" onClick={handleOpenWorkspace}>
+                      {t('creation.completion.cta')}
+                    </Button>
+                  </div>
+                }
+              >
+                {/* Phase sections with streaming text */}
+                <For each={[0, 1, 2]}>
+                  {(phaseIdx) => (
+                    <Show when={activePhase() >= phaseIdx || completedSteps() > phaseIdx}>
+                      <div class={phaseIdx > 0 ? 'mt-8' : ''}>
+                        <h3 class="text-sm font-semibold text-accent tracking-wider mb-3">
+                          {t(phaseHeadingKeys[phaseIdx])}
+                        </h3>
+                        <div class="text-sm text-fg leading-relaxed whitespace-pre-wrap">
+                          {phaseTexts()[phaseIdx] ?? ''}
+                          <Show when={activePhase() === phaseIdx && !completionData()}>
                             <span
-                              class="block w-2 h-2 rounded-full bg-current"
-                              style={{ animation: 'pulse-dot 1.2s ease-in-out infinite' }}
+                              class="inline-block w-0.5 h-4 bg-accent align-text-bottom ml-px"
+                              style={{ animation: 'stream-cursor 0.8s ease-in-out infinite' }}
                             />
                           </Show>
-                        }>
-                          <IconCheck size={14} />
-                        </Show>
+                        </div>
                       </div>
-                      <span
-                        class={[
-                          'text-sm transition-colors',
-                          done()
-                            ? 'text-fg'
-                            : active()
-                              ? 'text-fg font-medium'
-                              : 'text-fg-muted',
-                        ].join(' ')}
-                      >
-                        {t(step)}
-                      </span>
-                    </div>
-                  )
-                }}
-              </For>
+                    </Show>
+                  )}
+                </For>
+
+                {/* Activity fallback line */}
+                <Show when={lastRawTokens()}>
+                  <div class="text-xs text-fg-muted/50 font-mono truncate mt-6 border-t border-border-default/30 pt-2">
+                    {lastRawTokens()}
+                  </div>
+                </Show>
+              </Show>
+            </div>
+
+            {/* ── Progress sidebar ── */}
+            <div class="w-[200px] flex-shrink-0 pl-6 border-l border-border-default/50 flex flex-col">
+              {/* Progress bar */}
+              <div
+                role="progressbar"
+                aria-valuenow={Math.round(progress())}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label="Story structuring progress"
+                class="h-2 rounded-full bg-surface-raised overflow-hidden"
+              >
+                <div
+                  class="h-full bg-accent rounded-full transition-all duration-500 ease-out"
+                  style={{ width: `${progress()}%` }}
+                />
+              </div>
+
+              {/* Percentage */}
+              <div class="text-2xl font-display font-semibold text-fg tabular-nums mt-3 mb-6">
+                {Math.round(progress())}%
+              </div>
+
+              {/* Step indicators */}
+              <div class="space-y-1">
+                <For each={processingStepKeys}>
+                  {(step, i) => {
+                    const done = () => completedSteps() > i()
+                    const active = () => activePhase() === i() && completedSteps() <= i()
+                    return (
+                      <div class="flex items-center gap-3">
+                        <div
+                          class={[
+                            'w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-300',
+                            done()
+                              ? 'bg-success text-white'
+                              : active()
+                                ? 'bg-accent text-accent-fg'
+                                : 'bg-surface-raised text-fg-muted',
+                          ].join(' ')}
+                        >
+                          <Show when={done()} fallback={
+                            <Show when={active()} fallback={<span class="text-xs">{i() + 1}</span>}>
+                              <span
+                                class="block w-2 h-2 rounded-full bg-current"
+                                style={{ animation: 'pulse-dot 1.2s ease-in-out infinite' }}
+                              />
+                            </Show>
+                          }>
+                            <IconCheck size={14} />
+                          </Show>
+                        </div>
+                        <span
+                          class={[
+                            'text-sm transition-colors',
+                            done()
+                              ? 'text-fg'
+                              : active()
+                                ? 'text-fg font-medium'
+                                : 'text-fg-muted',
+                          ].join(' ')}
+                        >
+                          {t(step)}
+                        </span>
+                      </div>
+                    )
+                  }}
+                </For>
+              </div>
+
+              {/* Elapsed time */}
+              <div class="text-xs text-fg-muted tabular-nums mt-6">
+                {formatElapsed(elapsedSecs())}
+              </div>
+
+              {/* Cancel button */}
+              <button
+                type="button"
+                onClick={handleCancel}
+                class="mt-auto pt-6 text-sm text-fg-muted hover:text-fg transition-colors cursor-pointer text-left"
+              >
+                {t('creation.processing.cancel')}
+              </button>
             </div>
           </div>
         </Show>

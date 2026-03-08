@@ -315,6 +315,34 @@ body {
   border-radius: 6px 6px 0 0;
 }
 
+/* Inner edge tabs (inside open panels — same shape, opposite direction) */
+.edge-tab--left-inner,
+.edge-tab--bottom-inner {
+  opacity: 0.5;
+}
+.edge-tab--left-inner:hover,
+.edge-tab--bottom-inner:hover {
+  opacity: 1;
+}
+.edge-tab--left-inner {
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 56px;
+  border-right: none;
+  border-radius: 6px 0 0 6px;
+}
+.edge-tab--bottom-inner {
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 56px;
+  height: 24px;
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+}
+
 /* ── Streaming cursor ──────────────────────────────────────────────────── */
 .stream-cursor::after {
   content: '';

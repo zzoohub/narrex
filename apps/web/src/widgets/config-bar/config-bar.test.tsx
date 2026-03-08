@@ -31,13 +31,11 @@ vi.mock('@/features/workspace', () => ({
 // ---------------------------------------------------------------------------
 
 function renderConfigBar(open = true) {
-  const onClose = vi.fn()
-  const result = render(() => (
+  return render(() => (
     <I18nProvider initial="en">
-      <ConfigBar open={open} onClose={onClose} />
+      <ConfigBar open={open} />
     </I18nProvider>
   ))
-  return { ...result, onClose }
 }
 
 // ---------------------------------------------------------------------------
@@ -49,19 +47,21 @@ describe('ConfigBar', () => {
     vi.clearAllMocks()
   })
 
-  it('renders nothing when closed', () => {
-    renderConfigBar(false)
-    expect(screen.queryByDisplayValue('Fantasy')).not.toBeInTheDocument()
+  it('collapses panel when closed (grid-template-rows: 0fr)', () => {
+    const { container } = renderConfigBar(false)
+    const panel = container.querySelector('[data-testid="config-panel"]') as HTMLElement
+    expect(panel).toBeInTheDocument()
+    expect(panel.style.gridTemplateRows).toBe('0fr')
   })
 
-  it('renders form fields when open', () => {
+  it('shows form fields when open', () => {
     renderConfigBar(true)
     expect(screen.getByDisplayValue('Fantasy')).toBeInTheDocument()
     expect(screen.getByDisplayValue('Power')).toBeInTheDocument()
     expect(screen.getByDisplayValue('Medieval')).toBeInTheDocument()
   })
 
-  it('renders tone tags when open', () => {
+  it('shows tone tags when open', () => {
     renderConfigBar(true)
     expect(screen.getByText('dark')).toBeInTheDocument()
     expect(screen.getByText('epic')).toBeInTheDocument()
@@ -74,10 +74,14 @@ describe('ConfigBar', () => {
     expect(mockUpdateProject).toHaveBeenCalledWith({ genre: 'Sci-Fi' })
   })
 
-  it('calls onClose when backdrop is clicked', async () => {
-    const { onClose } = renderConfigBar(true)
-    const backdrop = screen.getByTestId('config-backdrop')
-    await fireEvent.click(backdrop)
-    expect(onClose).toHaveBeenCalled()
+  it('does not render a backdrop overlay', () => {
+    renderConfigBar(true)
+    expect(screen.queryByTestId('config-backdrop')).not.toBeInTheDocument()
+  })
+
+  it('renders panel container even when closed (for animation)', () => {
+    const { container } = renderConfigBar(false)
+    const panel = container.querySelector('[data-testid="config-panel"]')
+    expect(panel).toBeInTheDocument()
   })
 })

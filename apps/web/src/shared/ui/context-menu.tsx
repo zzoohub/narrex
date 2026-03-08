@@ -52,6 +52,7 @@ export function ContextMenu(props: ContextMenuProps) {
 
   const handleContextMenu: JSX.EventHandler<HTMLDivElement, MouseEvent> = (e) => {
     e.preventDefault()
+    e.stopPropagation()
 
     // Clamp position so menu stays within viewport
     const x = Math.min(e.clientX, window.innerWidth - 200)

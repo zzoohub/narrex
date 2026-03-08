@@ -6,6 +6,7 @@ use futures::Stream;
 use uuid::Uuid;
 
 use narrex_llm::{GenerateRequest, LlmProvider};
+use tracing::warn;
 
 use super::error::AiError;
 use super::models::{
@@ -404,7 +405,7 @@ where
         let req = GenerateRequest {
             system_prompt: system,
             user_prompt: user,
-            max_tokens: Some(4096),
+            max_tokens: Some(8192),
             temperature: Some(0.7),
         };
 
@@ -415,8 +416,16 @@ where
             .map_err(|e| AiError::GenerationFailed(e.to_string()))?;
 
         // Try to extract JSON from response. LLM may wrap it in ```json ... ```
-        let json_text = extract_json(&response.text)
-            .ok_or_else(|| AiError::GenerationFailed("LLM did not return valid JSON".into()))?;
+        let json_text = extract_json(&response.text).ok_or_else(|| {
+            warn!(
+                provider = %response.provider,
+                model = %response.model,
+                raw_len = response.text.len(),
+                raw_preview = %response.text.chars().take(500).collect::<String>(),
+                "failed to extract JSON from LLM response"
+            );
+            AiError::GenerationFailed("LLM did not return valid JSON".into())
+        })?;
 
         let output: StructuredOutput = serde_json::from_str(&json_text)
             .map_err(|e| AiError::GenerationFailed(format!("failed to parse structure: {e}")))?;
@@ -436,7 +445,8 @@ where
     }
 }
 
-/// Extract JSON from LLM response text, handling optional markdown fences.
+/// Extract JSON from LLM response text, handling optional markdown fences
+/// and surrounding prose.
 fn extract_json(text: &str) -> Option<String> {
     // Try to find JSON block in ```json ... ``` fences
     if let Some(start) = text.find("```json") {
@@ -455,11 +465,63 @@ fn extract_json(text: &str) -> Option<String> {
             }
         }
     }
-    // Try raw text
-    let trimmed = text.trim();
-    if trimmed.starts_with('{') && trimmed.ends_with('}') {
-        return Some(trimmed.to_string());
+    // Find the outermost JSON object by brace-depth counting.
+    // Handles text before/after the JSON and nested braces inside strings.
+    find_outermost_json_object(text)
+}
+
+/// Locate the first top-level `{...}` in `text`, respecting JSON strings.
+fn find_outermost_json_object(text: &str) -> Option<String> {
+    let bytes = text.as_bytes();
+    let mut start: Option<usize> = None;
+    let mut depth: i32 = 0;
+    let mut in_string = false;
+    let mut escape = false;
+    let mut i = 0;
+
+    while i < bytes.len() {
+        let b = bytes[i];
+
+        if escape {
+            escape = false;
+            i += 1;
+            continue;
+        }
+
+        if b == b'\\' && in_string {
+            escape = true;
+            i += 1;
+            continue;
+        }
+
+        if b == b'"' {
+            in_string = !in_string;
+            i += 1;
+            continue;
+        }
+
+        if in_string {
+            i += 1;
+            continue;
+        }
+
+        if b == b'{' {
+            if depth == 0 {
+                start = Some(i);
+            }
+            depth += 1;
+        } else if b == b'}' {
+            depth -= 1;
+            if depth == 0 {
+                if let Some(s) = start {
+                    return Some(text[s..=i].to_string());
+                }
+            }
+        }
+
+        i += 1;
     }
+
     None
 }
 
@@ -519,6 +581,57 @@ mod tests {
         assert_eq!(parsed.title, "spaced");
     }
 
+    #[test]
+    fn extract_json_text_before_json() {
+        let raw = "여기 결과입니다:\n{\"title\": \"preamble\", \"characters\": [], \"relationships\": [], \"tracks\": []}";
+        let result = extract_json(raw).unwrap();
+        let parsed: StructuredOutput = serde_json::from_str(&result).unwrap();
+        assert_eq!(parsed.title, "preamble");
+    }
+
+    #[test]
+    fn extract_json_text_after_json() {
+        let raw = "{\"title\": \"postamble\", \"characters\": [], \"relationships\": [], \"tracks\": []}\n추가 설명이 있습니다.";
+        let result = extract_json(raw).unwrap();
+        let parsed: StructuredOutput = serde_json::from_str(&result).unwrap();
+        assert_eq!(parsed.title, "postamble");
+    }
+
+    #[test]
+    fn extract_json_text_before_and_after() {
+        let raw = "분석 결과:\n{\"title\": \"surrounded\", \"characters\": [{\"name\": \"A\"}], \"relationships\": [], \"tracks\": []}\n이상입니다.";
+        let result = extract_json(raw).unwrap();
+        let parsed: StructuredOutput = serde_json::from_str(&result).unwrap();
+        assert_eq!(parsed.title, "surrounded");
+        assert_eq!(parsed.characters.len(), 1);
+    }
+
+    #[test]
+    fn extract_json_nested_braces() {
+        let raw = "결과:\n{\"title\": \"nested\", \"characters\": [{\"name\": \"A\", \"personality\": \"brave\"}], \"relationships\": [], \"tracks\": [{\"scenes\": [{\"title\": \"S1\"}]}]}\n끝.";
+        let result = extract_json(raw).unwrap();
+        let parsed: StructuredOutput = serde_json::from_str(&result).unwrap();
+        assert_eq!(parsed.title, "nested");
+        assert_eq!(parsed.tracks.len(), 1);
+    }
+
+    #[test]
+    fn extract_json_fenced_without_closing_fence() {
+        // LLM response truncated — ```json present but no closing ```
+        let raw = "```json\n{\"title\": \"truncated fence\", \"characters\": [], \"relationships\": [], \"tracks\": []}";
+        let result = extract_json(raw).unwrap();
+        let parsed: StructuredOutput = serde_json::from_str(&result).unwrap();
+        assert_eq!(parsed.title, "truncated fence");
+    }
+
+    #[test]
+    fn extract_json_braces_in_strings_ignored() {
+        let raw = "{\"title\": \"has {braces} inside\", \"characters\": [], \"relationships\": [], \"tracks\": []}";
+        let result = extract_json(raw).unwrap();
+        let parsed: StructuredOutput = serde_json::from_str(&result).unwrap();
+        assert_eq!(parsed.title, "has {braces} inside");
+    }
+
     // ---- generate_structure tests ----
 
     #[tokio::test]
@@ -555,6 +668,20 @@ mod tests {
             .unwrap();
 
         assert_eq!(output.title, "Fenced");
+    }
+
+    #[tokio::test]
+    async fn generate_structure_with_text_wrapped_json() {
+        let llm_response_text = "분석 결과입니다:\n{\"title\": \"Wrapped\", \"characters\": [], \"relationships\": [], \"tracks\": []}\n이상입니다.";
+        let mock_llm = MockLlmProvider::new(llm_response_text.to_string());
+        let svc = build_test_ai_service(mock_llm);
+
+        let (output, _, _, _, _) = svc
+            .generate_structure("텍스트", None)
+            .await
+            .unwrap();
+
+        assert_eq!(output.title, "Wrapped");
     }
 
     #[tokio::test]

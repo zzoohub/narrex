@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@solidjs/testing-library'
 import { I18nProvider } from '@/shared/lib/i18n'
-import { TimelinePanel } from './index'
+import { TimelinePanel, computeFitScale } from './index'
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -155,6 +155,49 @@ describe('TimelinePanel', () => {
       const header = screen.getByTestId('timeline-header')
       const zoomToolbar = screen.getByTestId('timeline-zoom-toolbar')
       expect(header.contains(zoomToolbar)).toBe(true)
+    })
+  })
+
+  describe('computeFitScale', () => {
+    const defaults = { trackLabelWidth: 112, minScale: 60, maxScale: 240, defaultScale: 120 }
+
+    it('returns default scale when no scenes exist', () => {
+      expect(computeFitScale(800, defaults.trackLabelWidth, [], defaults.minScale, defaults.maxScale, defaults.defaultScale)).toBe(120)
+    })
+
+    it('returns default scale when viewport is too narrow for content area', () => {
+      const tracks = [{ scenes: [{ startPosition: 0, duration: 1 }] }]
+      // viewport=100, label=112 → available = 100 - 112 - 48 = -60 (negative)
+      expect(computeFitScale(100, defaults.trackLabelWidth, tracks, defaults.minScale, defaults.maxScale, defaults.defaultScale)).toBe(120)
+    })
+
+    it('computes scale to fit all scenes in viewport', () => {
+      const tracks = [
+        { scenes: [{ startPosition: 0, duration: 1 }, { startPosition: 2, duration: 1 }] },
+        { scenes: [{ startPosition: 0, duration: 2 }] },
+      ]
+      // viewport=800, label=112, padding=48 → available=640
+      // maxEnd=3 → idealScale = 640/3 ≈ 213.33
+      const result = computeFitScale(800, defaults.trackLabelWidth, tracks, defaults.minScale, defaults.maxScale, defaults.defaultScale)
+      expect(result).toBeCloseTo(640 / 3, 1)
+    })
+
+    it('clamps to max scale when content is very small', () => {
+      const tracks = [{ scenes: [{ startPosition: 0, duration: 0.5 }] }]
+      // available=640, maxEnd=0.5 → ideal=1280 → clamped to 240
+      expect(computeFitScale(800, defaults.trackLabelWidth, tracks, defaults.minScale, defaults.maxScale, defaults.defaultScale)).toBe(240)
+    })
+
+    it('clamps to min scale when content is very large', () => {
+      const tracks = [{ scenes: [{ startPosition: 0, duration: 100 }] }]
+      // available=640, maxEnd=100 → ideal=6.4 → clamped to 60
+      expect(computeFitScale(800, defaults.trackLabelWidth, tracks, defaults.minScale, defaults.maxScale, defaults.defaultScale)).toBe(60)
+    })
+
+    it('accounts for scene start positions beyond zero', () => {
+      const tracks = [{ scenes: [{ startPosition: 5, duration: 3 }] }]
+      // maxEnd=8 → ideal=640/8=80
+      expect(computeFitScale(800, defaults.trackLabelWidth, tracks, defaults.minScale, defaults.maxScale, defaults.defaultScale)).toBe(80)
     })
   })
 

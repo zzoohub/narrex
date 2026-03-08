@@ -1,4 +1,4 @@
-import { createSignal, Show, onMount, onCleanup } from 'solid-js'
+import { createSignal, createMemo, Show, For, onMount, onCleanup } from 'solid-js'
 import { useParams, Link } from '@tanstack/solid-router'
 import { useI18n } from '@/shared/lib/i18n'
 import { useTheme } from '@/shared/stores/theme'
@@ -7,12 +7,13 @@ import {
   IconChevronLeft,
   IconChevronRight,
   IconChevronUp,
+  IconChevronDown,
   IconMoon,
   IconSun,
   IconSliders,
   Dialog,
 } from '@/shared/ui'
-import { ConfigBar } from '@/widgets/config-bar'
+import { ConfigBar, POV_OPTIONS } from '@/widgets/config-bar'
 import { TimelinePanel } from '@/widgets/timeline-panel'
 import { CharacterMap } from '@/widgets/character-map'
 import { EditorPanel } from '@/widgets/editor-panel'
@@ -27,13 +28,41 @@ export function WorkspaceView() {
   )
 }
 
+// ---- Summary chip helpers ---------------------------------------------------
+
+function parseTonePreview(tone: string | null | undefined): string[] {
+  if (!tone) return []
+  return tone
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 2)
+}
+
+// ---- Layout -----------------------------------------------------------------
+
 function WorkspaceLayout() {
   const ws = useWorkspace()
   const { t } = useI18n()
   const { theme, toggle } = useTheme()
 
-  // ---- Config dropdown ----
+  // ---- Config panel ----
   const [configOpen, setConfigOpen] = createSignal(false)
+
+  // ---- Summary chips (derived) ----
+  const summaryItems = createMemo(() => {
+    const p = ws.state.project
+    if (!p) return []
+    const items: string[] = []
+    if (p.genre) items.push(p.genre)
+    if (p.pov) {
+      const opt = POV_OPTIONS.find((o) => o.value === p.pov)
+      if (opt) items.push(t(opt.labelKey))
+    }
+    const tones = parseTonePreview(p.tone)
+    items.push(...tones)
+    return items
+  })
 
   // ---- Panel visibility ----
   const [leftOpen, setLeftOpen] = createSignal(true)
@@ -102,8 +131,12 @@ function WorkspaceLayout() {
   function handleKeyDown(e: KeyboardEvent) {
     const meta = e.metaKey || e.ctrlKey
 
-    // Escape — close fullscreen first, then deselect scene
+    // Escape — close config first, then fullscreen, then deselect scene
     if (e.key === 'Escape') {
+      if (configOpen()) {
+        setConfigOpen(false)
+        return
+      }
       if (charMapFullscreen()) {
         setCharMapFullscreen(false)
         return
@@ -244,6 +277,15 @@ function WorkspaceLayout() {
     }
   }
 
+  function saveStatusColor() {
+    switch (ws.saveStatus()) {
+      case 'error':
+        return 'text-red-400'
+      default:
+        return 'text-fg-muted'
+    }
+  }
+
   // ---- Render ----
 
   return (
@@ -258,9 +300,9 @@ function WorkspaceLayout() {
       }
     >
       <div class="h-screen flex flex-col overflow-hidden bg-canvas">
-        {/* ── Top bar (single merged header) ──────────────────── */}
-        <header class="relative flex items-center justify-between px-4 h-11 border-b border-border-default bg-surface flex-shrink-0 z-30">
-          <div class="flex items-center gap-3">
+        {/* ── Top bar ──────────────────────────────────────────── */}
+        <header class="flex items-center justify-between px-4 h-11 border-b border-border-default bg-surface flex-shrink-0 z-30">
+          <div class="flex items-center gap-3 min-w-0">
             <Link
               to="/"
               class="p-1.5 rounded-md text-fg-muted hover:text-fg hover:bg-surface-raised transition-colors"
@@ -278,6 +320,7 @@ function WorkspaceLayout() {
 
           <div class="flex items-center gap-1">
             <Show when={ws.state.project}>
+              {/* Config toggle + summary chips */}
               <button
                 type="button"
                 onClick={() => setConfigOpen((v) => !v)}
@@ -291,7 +334,28 @@ function WorkspaceLayout() {
               >
                 <IconSliders size={14} />
                 <span class="hidden sm:inline">{t('config.title')}</span>
+                <IconChevronDown
+                  size={12}
+                  class={`transition-transform duration-200 ${configOpen() ? 'rotate-180' : ''}`}
+                />
               </button>
+
+              {/* Collapsed summary chips — visible when panel is closed */}
+              <Show when={!configOpen() && summaryItems().length > 0}>
+                <div class="hidden md:flex items-center gap-1 ml-1">
+                  <span class="text-fg-muted/40 text-xs">|</span>
+                  <For each={summaryItems()}>
+                    {(item, i) => (
+                      <>
+                        <Show when={i() > 0}>
+                          <span class="text-fg-muted/30 text-xs">·</span>
+                        </Show>
+                        <span class="text-xs text-fg-muted truncate max-w-24">{item}</span>
+                      </>
+                    )}
+                  </For>
+                </div>
+              </Show>
             </Show>
             <button
               type="button"
@@ -303,20 +367,20 @@ function WorkspaceLayout() {
                 <IconSun size={16} />
               </Show>
             </button>
-            <span class="text-xs text-fg-muted ml-2 hidden lg:inline">
+            <span class={`text-xs ml-2 hidden lg:inline ${saveStatusColor()}`}>
               {saveStatusText()}
             </span>
           </div>
-
-          {/* Config dropdown overlay */}
-          <ConfigBar open={configOpen()} onClose={() => setConfigOpen(false)} />
         </header>
+
+        {/* ── Config panel (inline push-down) ─────────────────── */}
+        <ConfigBar open={configOpen()} />
 
         {/* ── Workspace panels ───────────────────────────────────── */}
         <div class="flex-1 flex overflow-hidden min-h-0 relative">
           {/* Left panel — Character map */}
           <div
-            class="panel-collapsible flex-shrink-0 border-r border-border-default"
+            class="panel-collapsible flex-shrink-0 border-r border-border-default relative"
             data-collapsed={!leftOpen()}
             style={{
               width: leftOpen() ? `${leftWidth()}px` : '0px',
@@ -326,10 +390,18 @@ function WorkspaceLayout() {
           >
             <div style={{ width: `${leftWidth()}px`, height: '100%' }}>
               <CharacterMap
-                onCollapse={() => setLeftOpen(false)}
                 onEnterFullscreen={() => setCharMapFullscreen(true)}
               />
             </div>
+            <button
+              type="button"
+              class="edge-tab edge-tab--left-inner"
+              aria-label="Collapse character panel"
+              aria-expanded={true}
+              onClick={() => setLeftOpen(false)}
+            >
+              <IconChevronLeft size={14} />
+            </button>
           </div>
           <div
             class="resize-h panel-collapsible"
@@ -365,7 +437,7 @@ function WorkspaceLayout() {
               onPointerDown={handleBottomResize}
             />
             <div
-              class="panel-collapsible flex-shrink-0"
+              class="panel-collapsible flex-shrink-0 relative"
               data-collapsed={!bottomOpen()}
               style={{
                 height: bottomOpen() ? `${bottomHeight()}px` : '0px',
@@ -373,8 +445,17 @@ function WorkspaceLayout() {
               }}
             >
               <div style={{ height: `${bottomHeight()}px` }}>
-                <TimelinePanel onCollapse={() => setBottomOpen(false)} />
+                <TimelinePanel />
               </div>
+              <button
+                type="button"
+                class="edge-tab edge-tab--bottom-inner"
+                aria-label="Collapse timeline"
+                aria-expanded={true}
+                onClick={() => setBottomOpen(false)}
+              >
+                <IconChevronDown size={14} />
+              </button>
             </div>
 
             {/* Bottom edge tab (when collapsed) */}
