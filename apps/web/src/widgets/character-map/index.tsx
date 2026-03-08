@@ -1,8 +1,8 @@
-import { createSignal, createEffect, onMount, onCleanup, For, Show } from 'solid-js'
+import { createSignal, createEffect, onMount, onCleanup, untrack, For, Show } from 'solid-js'
 import { Portal } from 'solid-js/web'
 import { useI18n } from '@/shared/lib/i18n'
 import { useWorkspace } from '@/features/workspace'
-import { Button, IconPlus, IconArrowLeft, IconChevronLeft, IconTrash, IconPen, ContextMenu, type ContextMenuItem, Separator, Dialog } from '@/shared/ui'
+import { Button, IconPlus, IconArrowLeft, IconChevronLeft, IconTrash, IconPen, IconMaximize, IconMinimize, IconZoomIn, IconZoomOut, ContextMenu, type ContextMenuItem, Separator, Dialog } from '@/shared/ui'
 import * as d3 from 'd3'
 import type { Character, CharacterRelationship, RelationshipVisual } from '@/entities/character'
 
@@ -34,7 +34,12 @@ interface PopoverState {
 
 /* ── Main component ──────────────────────────────────────────────────── */
 
-export function CharacterMap(props: { onCollapse?: () => void }) {
+export function CharacterMap(props: {
+  onCollapse?: () => void
+  fullscreen?: boolean
+  onEnterFullscreen?: () => void
+  onExitFullscreen?: () => void
+}) {
   const { t } = useI18n()
   const ws = useWorkspace()
   const [selectedCharId, setSelectedCharId] = createSignal<string | null>(null)
@@ -50,7 +55,10 @@ export function CharacterMap(props: { onCollapse?: () => void }) {
           <GraphView
             t={t}
             onSelect={setSelectedCharId}
-            {...(props.onCollapse ? { onCollapse: props.onCollapse } : {})}
+            fullscreen={props.fullscreen}
+            onEnterFullscreen={props.onEnterFullscreen}
+            onExitFullscreen={props.onExitFullscreen}
+            {...(!props.fullscreen && props.onCollapse ? { onCollapse: props.onCollapse } : {})}
           />
         }
       >
@@ -60,7 +68,7 @@ export function CharacterMap(props: { onCollapse?: () => void }) {
             t={t}
             onBack={() => setSelectedCharId(null)}
             onDeleted={() => setSelectedCharId(null)}
-            {...(props.onCollapse ? { onCollapse: props.onCollapse } : {})}
+            {...(!props.fullscreen && props.onCollapse ? { onCollapse: props.onCollapse } : {})}
           />
         )}
       </Show>
@@ -74,6 +82,9 @@ function GraphView(props: {
   t: (k: string, params?: Record<string, string | number>) => string
   onSelect: (id: string) => void
   onCollapse?: () => void
+  fullscreen?: boolean
+  onEnterFullscreen?: () => void
+  onExitFullscreen?: () => void
 }) {
   const ws = useWorkspace()
 
@@ -81,6 +92,18 @@ function GraphView(props: {
 
   const [nodePositions, setNodePositions] = createSignal<Map<string, { x: number; y: number }>>(new Map())
   const [popover, setPopover] = createSignal<PopoverState | null>(null)
+
+  /* ── Zoom state (fullscreen only) ──────────────────────────────────── */
+  const [zoomScale, setZoomScale] = createSignal(1)
+  const [panX, setPanX] = createSignal(0)
+  const [panY, setPanY] = createSignal(0)
+
+  function handleZoomIn() {
+    setZoomScale((s) => Math.min(4, s * 1.3))
+  }
+  function handleZoomOut() {
+    setZoomScale((s) => Math.max(0.25, s / 1.3))
+  }
 
   /* drag-to-connect state */
   const [dragLine, setDragLine] = createSignal<{ fromId: string; x1: number; y1: number; x2: number; y2: number } | null>(null)
@@ -118,6 +141,8 @@ function GraphView(props: {
         target: r.characterBId,
       }))
 
+    const pad = 40 // padding from edges
+
     const sim = d3
       .forceSimulation<SimNode, SimLink>(nodes)
       .force(
@@ -125,14 +150,20 @@ function GraphView(props: {
         d3
           .forceLink<SimNode, SimLink>(links)
           .id((d) => d.id)
-          .distance(120),
+          .distance(60),
       )
-      .force('charge', d3.forceManyBody().strength(-300))
-      .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collide', d3.forceCollide(45))
+      .force('charge', d3.forceManyBody().strength(-160))
+      .force('x', d3.forceX(width / 2).strength(0.08))
+      .force('y', d3.forceY(height / 2).strength(0.08))
+      .force('collide', d3.forceCollide(40))
       .on('tick', () => {
         const map = new Map<string, { x: number; y: number }>()
-        sim.nodes().forEach((n) => map.set(n.id, { x: n.x!, y: n.y! }))
+        sim.nodes().forEach((n) => {
+          // Clamp nodes within viewport
+          n.x = Math.max(pad, Math.min(width - pad, n.x!))
+          n.y = Math.max(pad, Math.min(height - pad, n.y!))
+          map.set(n.id, { x: n.x, y: n.y })
+        })
         setNodePositions(map)
       })
 
@@ -143,14 +174,16 @@ function GraphView(props: {
     rebuildSimulation()
   })
 
-  /* Rebuild when characters or relationships change */
+  /* Rebuild only when characters/relationships are added or removed */
   createEffect(() => {
-    // Access reactive arrays to subscribe
     const _chars = ws.state.characters.length
     const _rels = ws.state.relationships.length
     void _chars
     void _rels
-    rebuildSimulation()
+    // untrack: rebuildSimulation reads ws.state.characters internally —
+    // without untrack, property edits (graphX/graphY, name, etc.) would
+    // also trigger a full rebuild, causing the "burst" on drag release.
+    untrack(() => rebuildSimulation())
   })
 
   onCleanup(() => {
@@ -158,6 +191,8 @@ function GraphView(props: {
   })
 
   /* ── Node dragging (d3-drag on SVG) ─────────────────────────────── */
+
+  let didDrag = false
 
   function handleNodePointerDown(charId: string, e: PointerEvent) {
     e.stopPropagation()
@@ -170,8 +205,8 @@ function GraphView(props: {
     const startY = e.clientY
     const origX = simNode.x!
     const origY = simNode.y!
+    didDrag = false
 
-    // Fix the node during drag
     simNode.fx = origX
     simNode.fy = origY
     simulation.alphaTarget(0.3).restart()
@@ -179,6 +214,7 @@ function GraphView(props: {
     const onMove = (ev: PointerEvent) => {
       const dx = ev.clientX - startX
       const dy = ev.clientY - startY
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) didDrag = true
       simNode.fx = origX + dx
       simNode.fy = origY + dy
     }
@@ -187,7 +223,6 @@ function GraphView(props: {
       document.removeEventListener('pointermove', onMove)
       document.removeEventListener('pointerup', onUp)
 
-      // Persist position
       const finalX = simNode.fx!
       const finalY = simNode.fy!
       simNode.fx = null
@@ -401,7 +436,53 @@ function GraphView(props: {
           >
             {props.t('characters.add')}
           </Button>
-          <Show when={props.onCollapse}>
+
+          {/* Zoom controls — fullscreen only */}
+          <Show when={props.fullscreen}>
+            <button
+              type="button"
+              onClick={handleZoomOut}
+              class="p-1 rounded-md text-fg-muted hover:text-fg hover:bg-surface-raised transition-colors cursor-pointer"
+              aria-label={props.t('characters.zoomOut')}
+            >
+              <IconZoomOut size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={handleZoomIn}
+              class="p-1 rounded-md text-fg-muted hover:text-fg hover:bg-surface-raised transition-colors cursor-pointer"
+              aria-label={props.t('characters.zoomIn')}
+            >
+              <IconZoomIn size={14} />
+            </button>
+          </Show>
+
+          {/* Maximize — panel mode only */}
+          <Show when={!props.fullscreen && props.onEnterFullscreen}>
+            <button
+              type="button"
+              onClick={props.onEnterFullscreen}
+              class="p-1 rounded-md text-fg-muted hover:text-fg hover:bg-surface-raised transition-colors cursor-pointer"
+              aria-label={props.t('characters.fullscreen')}
+            >
+              <IconMaximize size={14} />
+            </button>
+          </Show>
+
+          {/* Minimize — fullscreen mode only */}
+          <Show when={props.fullscreen && props.onExitFullscreen}>
+            <button
+              type="button"
+              onClick={props.onExitFullscreen}
+              class="p-1 rounded-md text-fg-muted hover:text-fg hover:bg-surface-raised transition-colors cursor-pointer"
+              aria-label={props.t('characters.exitFullscreen')}
+            >
+              <IconMinimize size={14} />
+            </button>
+          </Show>
+
+          {/* Collapse — panel mode only */}
+          <Show when={!props.fullscreen && props.onCollapse}>
             <button
               type="button"
               onClick={props.onCollapse}
@@ -455,6 +536,9 @@ function GraphView(props: {
                 <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--fg-muted)" />
               </marker>
             </defs>
+
+            {/* Zoom/pan transform group */}
+            <g transform={props.fullscreen ? `translate(${panX()},${panY()}) scale(${zoomScale()})` : undefined}>
 
             {/* Relationship lines */}
             <For each={ws.state.relationships}>
@@ -570,7 +654,7 @@ function GraphView(props: {
                             onPointerDown={(e) => handleNodePointerDown(char.id, e)}
                             onClick={(e) => {
                               e.stopPropagation()
-                              props.onSelect(char.id)
+                              if (!didDrag) props.onSelect(char.id)
                             }}
                           />
 
@@ -613,6 +697,7 @@ function GraphView(props: {
                 )
               }}
             </For>
+            </g>
           </svg>
         </Show>
       </div>

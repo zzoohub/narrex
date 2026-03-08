@@ -48,6 +48,9 @@ function WorkspaceLayout() {
   // ---- Resize-in-progress flag (disables CSS transitions) ----
   const [isResizing, setIsResizing] = createSignal(false)
 
+  // ---- Fullscreen character map ----
+  const [charMapFullscreen, setCharMapFullscreen] = createSignal(false)
+
   // ---- Delete confirmation ----
   const [showDeleteDialog, setShowDeleteDialog] = createSignal(false)
 
@@ -99,10 +102,21 @@ function WorkspaceLayout() {
   function handleKeyDown(e: KeyboardEvent) {
     const meta = e.metaKey || e.ctrlKey
 
-    // Escape — deselect scene
+    // Escape — close fullscreen first, then deselect scene
     if (e.key === 'Escape') {
+      if (charMapFullscreen()) {
+        setCharMapFullscreen(false)
+        return
+      }
       ws.selectScene(null)
       setRightOpen(false)
+      return
+    }
+
+    // Cmd+Shift+F — toggle fullscreen character map
+    if (meta && e.shiftKey && (e.key === 'F' || e.key === 'f')) {
+      setCharMapFullscreen((v) => !v)
+      e.preventDefault()
       return
     }
 
@@ -311,7 +325,10 @@ function WorkspaceLayout() {
             }}
           >
             <div style={{ width: `${leftWidth()}px`, height: '100%' }}>
-              <CharacterMap onCollapse={() => setLeftOpen(false)} />
+              <CharacterMap
+                onCollapse={() => setLeftOpen(false)}
+                onEnterFullscreen={() => setCharMapFullscreen(true)}
+              />
             </div>
           </div>
           <div
@@ -385,6 +402,20 @@ function WorkspaceLayout() {
               style={{ width: `${rightWidth()}px` }}
             >
               <SceneDetail />
+            </div>
+          </Show>
+
+          {/* ── Fullscreen character map overlay ─────────────────── */}
+          <Show when={charMapFullscreen()}>
+            <div
+              class="absolute inset-0 z-40 bg-surface animate-scale-in"
+              role="dialog"
+              aria-label={t('characters.fullscreen')}
+            >
+              <CharacterMap
+                fullscreen={true}
+                onExitFullscreen={() => setCharMapFullscreen(false)}
+              />
             </div>
           </Show>
         </div>

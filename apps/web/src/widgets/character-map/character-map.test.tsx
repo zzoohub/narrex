@@ -67,6 +67,8 @@ vi.mock('d3', () => ({
   }),
   forceManyBody: () => ({ strength: vi.fn().mockReturnThis() }),
   forceCenter: () => ({}),
+  forceX: () => ({ strength: vi.fn().mockReturnThis() }),
+  forceY: () => ({ strength: vi.fn().mockReturnThis() }),
   forceCollide: () => ({ radius: vi.fn().mockReturnThis() }),
   drag: () => ({
     on: vi.fn().mockReturnThis(),
@@ -77,10 +79,10 @@ vi.mock('d3', () => ({
 // Helpers
 // ---------------------------------------------------------------------------
 
-function renderCharacterMap() {
+function renderCharacterMap(props: { fullscreen?: boolean; onExitFullscreen?: () => void; onEnterFullscreen?: () => void } = {}) {
   return render(() => (
     <I18nProvider initial="en">
-      <CharacterMap />
+      <CharacterMap {...props} />
     </I18nProvider>
   ))
 }
@@ -109,5 +111,55 @@ describe('CharacterMap', () => {
     const addBtn = screen.getByText('Add Character')
     await fireEvent.click(addBtn)
     expect(mockAddCharacter).toHaveBeenCalled()
+  })
+
+  // ── Fullscreen feature ──────────────────────────────────────────────
+
+  describe('fullscreen mode', () => {
+    it('shows maximize button in panel mode', () => {
+      renderCharacterMap({ onEnterFullscreen: vi.fn() })
+      expect(screen.getByLabelText('View fullscreen')).toBeInTheDocument()
+    })
+
+    it('calls onEnterFullscreen when maximize button clicked', async () => {
+      const onEnter = vi.fn()
+      renderCharacterMap({ onEnterFullscreen: onEnter })
+      await fireEvent.click(screen.getByLabelText('View fullscreen'))
+      expect(onEnter).toHaveBeenCalledOnce()
+    })
+
+    it('shows minimize button in fullscreen mode', () => {
+      renderCharacterMap({ fullscreen: true, onExitFullscreen: vi.fn() })
+      expect(screen.getByLabelText('Back to panel view')).toBeInTheDocument()
+    })
+
+    it('does not show maximize button in fullscreen mode', () => {
+      renderCharacterMap({ fullscreen: true, onExitFullscreen: vi.fn() })
+      expect(screen.queryByLabelText('View fullscreen')).not.toBeInTheDocument()
+    })
+
+    it('calls onExitFullscreen when minimize button clicked', async () => {
+      const onExit = vi.fn()
+      renderCharacterMap({ fullscreen: true, onExitFullscreen: onExit })
+      await fireEvent.click(screen.getByLabelText('Back to panel view'))
+      expect(onExit).toHaveBeenCalledOnce()
+    })
+
+    it('shows zoom controls in fullscreen mode', () => {
+      renderCharacterMap({ fullscreen: true, onExitFullscreen: vi.fn() })
+      expect(screen.getByLabelText('Zoom in')).toBeInTheDocument()
+      expect(screen.getByLabelText('Zoom out')).toBeInTheDocument()
+    })
+
+    it('does not show zoom controls in panel mode', () => {
+      renderCharacterMap()
+      expect(screen.queryByLabelText('Zoom in')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Zoom out')).not.toBeInTheDocument()
+    })
+
+    it('does not show collapse button in fullscreen mode', () => {
+      renderCharacterMap({ fullscreen: true, onCollapse: vi.fn() as any, onExitFullscreen: vi.fn() })
+      expect(screen.queryByLabelText('Collapse character panel')).not.toBeInTheDocument()
+    })
   })
 })
