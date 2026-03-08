@@ -15,8 +15,20 @@ default:
 log:
     git log --graph --oneline --all --decorate --color -20
 
-push branch="main" msg="update":
-    git add . && git commit -m "{{ msg }}" && git push origin {{ branch }}
+push branch="main" type="chore" msg="":
+    #!/usr/bin/env sh
+    if [ -n "{{ msg }}" ]; then
+        msg="{{ msg }}"
+    else
+        case "{{ type }}" in
+            feat)     msg="feat: add new features and enhancements" ;;
+            fix)      msg="fix: resolve bugs and minor issues" ;;
+            docs)     msg="docs: update documentation and comments" ;;
+            refactor) msg="refactor: clean up and improve code structure" ;;
+            *)        msg="chore: apply general updates and improvements" ;;
+        esac
+    fi
+    git add . && git commit -m "$msg" && git push origin {{ branch }}
 
 # ─── DB ───────────────────────────────────────────────────────────────────────
 

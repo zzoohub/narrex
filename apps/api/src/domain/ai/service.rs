@@ -11,6 +11,7 @@ use super::error::AiError;
 use super::models::{
     CostSummary, CreateDraftParams, CreateManualDraft, Draft, DraftSource, DraftSummary,
     EditDraftRequest, GenerationLog, GenerationStatus, GenerationType, SceneSummary,
+    StructuredOutput,
 };
 use super::ports::{
     ContextAssemblyRepository, DraftRepository, GenerationLogRepository, SceneSummaryRepository,
@@ -390,6 +391,76 @@ where
     ) -> Result<CostSummary, AiError> {
         self.log_repo.cost_summary_by_project(project_id).await
     }
+
+    /// Call LLM to generate structured project data from raw text (non-streaming).
+    /// Returns (StructuredOutput, model, provider, tokens_in, tokens_out).
+    pub async fn generate_structure(
+        &self,
+        source_input: &str,
+        clarification_answers: Option<&[String]>,
+    ) -> Result<(StructuredOutput, String, String, u32, u32), AiError> {
+        let system = PromptBuilder::structure_system_prompt();
+        let user = PromptBuilder::structure_user_prompt(source_input, clarification_answers);
+        let req = GenerateRequest {
+            system_prompt: system,
+            user_prompt: user,
+            max_tokens: Some(4096),
+            temperature: Some(0.7),
+        };
+
+        let response = self
+            .llm
+            .generate(req)
+            .await
+            .map_err(|e| AiError::GenerationFailed(e.to_string()))?;
+
+        // Try to extract JSON from response. LLM may wrap it in ```json ... ```
+        let json_text = extract_json(&response.text)
+            .ok_or_else(|| AiError::GenerationFailed("LLM did not return valid JSON".into()))?;
+
+        let output: StructuredOutput = serde_json::from_str(&json_text)
+            .map_err(|e| AiError::GenerationFailed(format!("failed to parse structure: {e}")))?;
+
+        Ok((
+            output,
+            response.model,
+            response.provider,
+            response.token_count_input,
+            response.token_count_output,
+        ))
+    }
+
+    /// Log a generation event.
+    pub async fn log_generation(&self, log: &GenerationLog) -> Result<(), AiError> {
+        self.log_repo.create(log).await
+    }
+}
+
+/// Extract JSON from LLM response text, handling optional markdown fences.
+fn extract_json(text: &str) -> Option<String> {
+    // Try to find JSON block in ```json ... ``` fences
+    if let Some(start) = text.find("```json") {
+        let after = &text[start + 7..];
+        if let Some(end) = after.find("```") {
+            return Some(after[..end].trim().to_string());
+        }
+    }
+    // Try to find JSON block in ``` ... ``` fences
+    if let Some(start) = text.find("```") {
+        let after = &text[start + 3..];
+        if let Some(end) = after.find("```") {
+            let candidate = after[..end].trim();
+            if candidate.starts_with('{') {
+                return Some(candidate.to_string());
+            }
+        }
+    }
+    // Try raw text
+    let trimmed = text.trim();
+    if trimmed.starts_with('{') && trimmed.ends_with('}') {
+        return Some(trimmed.to_string());
+    }
+    None
 }
 
 /// SSE event types emitted by generation/edit streams.
@@ -397,5 +468,306 @@ where
 pub enum SseEvent {
     Token { text: String },
     Completed { draft: Draft },
+    Progress { message: String },
+    StructuringCompleted { workspace: crate::domain::project::models::Workspace },
     Error { message: String },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::ai::models::StructuredOutput;
+
+    // ---- extract_json tests ----
+
+    #[test]
+    fn extract_json_raw_json() {
+        let raw = r#"{"title": "test", "characters": [], "relationships": [], "tracks": []}"#;
+        let result = extract_json(raw).unwrap();
+        assert!(result.starts_with('{'));
+        let parsed: StructuredOutput = serde_json::from_str(&result).unwrap();
+        assert_eq!(parsed.title, "test");
+    }
+
+    #[test]
+    fn extract_json_fenced_json() {
+        let raw = "Some preamble\n```json\n{\"title\": \"fenced\", \"characters\": [], \"relationships\": [], \"tracks\": []}\n```\nSome postamble";
+        let result = extract_json(raw).unwrap();
+        let parsed: StructuredOutput = serde_json::from_str(&result).unwrap();
+        assert_eq!(parsed.title, "fenced");
+    }
+
+    #[test]
+    fn extract_json_generic_fence() {
+        let raw = "Here:\n```\n{\"title\": \"generic\", \"characters\": [], \"relationships\": [], \"tracks\": []}\n```\n";
+        let result = extract_json(raw).unwrap();
+        let parsed: StructuredOutput = serde_json::from_str(&result).unwrap();
+        assert_eq!(parsed.title, "generic");
+    }
+
+    #[test]
+    fn extract_json_no_json() {
+        let raw = "This is just plain text without any JSON.";
+        assert!(extract_json(raw).is_none());
+    }
+
+    #[test]
+    fn extract_json_whitespace_around_raw() {
+        let raw = "  \n  {\"title\": \"spaced\", \"characters\": [], \"relationships\": [], \"tracks\": []}  \n  ";
+        let result = extract_json(raw).unwrap();
+        let parsed: StructuredOutput = serde_json::from_str(&result).unwrap();
+        assert_eq!(parsed.title, "spaced");
+    }
+
+    // ---- generate_structure tests ----
+
+    #[tokio::test]
+    async fn generate_structure_success() {
+        let llm_response_text = r#"{"title": "AI 프로젝트", "genre": "SF", "theme": "인공지능", "characters": [{"name": "로봇"}], "relationships": [], "tracks": [{"scenes": [{"title": "시작"}]}]}"#;
+        let mock_llm = MockLlmProvider::new(llm_response_text.to_string());
+        let svc = build_test_ai_service(mock_llm);
+
+        let (output, model, provider, tokens_in, tokens_out) = svc
+            .generate_structure("나의 이야기", None)
+            .await
+            .unwrap();
+
+        assert_eq!(output.title, "AI 프로젝트");
+        assert_eq!(output.genre.as_deref(), Some("SF"));
+        assert_eq!(output.characters.len(), 1);
+        assert_eq!(output.characters[0].name, "로봇");
+        assert_eq!(output.tracks.len(), 1);
+        assert_eq!(model, "test-model");
+        assert_eq!(provider, "test-provider");
+        assert_eq!(tokens_in, 100);
+        assert_eq!(tokens_out, 200);
+    }
+
+    #[tokio::test]
+    async fn generate_structure_with_fenced_response() {
+        let llm_response_text = "Here is the structure:\n```json\n{\"title\": \"Fenced\", \"characters\": [], \"relationships\": [], \"tracks\": []}\n```";
+        let mock_llm = MockLlmProvider::new(llm_response_text.to_string());
+        let svc = build_test_ai_service(mock_llm);
+
+        let (output, _, _, _, _) = svc
+            .generate_structure("텍스트", None)
+            .await
+            .unwrap();
+
+        assert_eq!(output.title, "Fenced");
+    }
+
+    #[tokio::test]
+    async fn generate_structure_invalid_json_errors() {
+        let mock_llm = MockLlmProvider::new("not json at all".to_string());
+        let svc = build_test_ai_service(mock_llm);
+
+        let err = svc.generate_structure("텍스트", None).await.unwrap_err();
+        match err {
+            AiError::GenerationFailed(msg) => assert!(msg.contains("valid JSON")),
+            other => panic!("expected GenerationFailed, got: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn generate_structure_llm_error_propagates() {
+        let mock_llm = MockLlmProvider::failing();
+        let svc = build_test_ai_service(mock_llm);
+
+        let err = svc.generate_structure("텍스트", None).await.unwrap_err();
+        match err {
+            AiError::GenerationFailed(msg) => assert!(msg.contains("provider unavailable")),
+            other => panic!("expected GenerationFailed, got: {other:?}"),
+        }
+    }
+
+    // ---- log_generation tests ----
+
+    #[tokio::test]
+    async fn log_generation_delegates_to_repo() {
+        let mock_llm = MockLlmProvider::new("{}".to_string());
+        let svc = build_test_ai_service(mock_llm);
+
+        let log = GenerationLog {
+            id: uuid::Uuid::new_v4(),
+            user_id: uuid::Uuid::new_v4(),
+            project_id: Some(uuid::Uuid::new_v4()),
+            scene_id: None,
+            generation_type: GenerationType::Structuring,
+            status: GenerationStatus::Success,
+            model: "test".into(),
+            provider: "test".into(),
+            duration_ms: 100,
+            token_count_input: 10,
+            token_count_output: 20,
+            cost_usd: 0.0,
+            error_message: None,
+            created_at: chrono::Utc::now(),
+        };
+
+        // Should not error
+        svc.log_generation(&log).await.unwrap();
+    }
+
+    // ---- Test helpers ----
+
+    use std::pin::Pin;
+    use std::sync::Arc;
+
+    #[derive(Clone)]
+    struct MockLlmProvider {
+        response: Option<String>,
+    }
+
+    impl MockLlmProvider {
+        fn new(text: String) -> Arc<Self> {
+            Arc::new(Self { response: Some(text) })
+        }
+        fn failing() -> Arc<Self> {
+            Arc::new(Self { response: None })
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl narrex_llm::LlmProvider for MockLlmProvider {
+        async fn generate(&self, _req: narrex_llm::GenerateRequest) -> Result<narrex_llm::GenerateResponse, narrex_llm::LlmError> {
+            match &self.response {
+                Some(text) => Ok(narrex_llm::GenerateResponse {
+                    text: text.clone(),
+                    model: "test-model".into(),
+                    provider: "test-provider".into(),
+                    token_count_input: 100,
+                    token_count_output: 200,
+                }),
+                None => Err(narrex_llm::LlmError::Unavailable("provider unavailable".into())),
+            }
+        }
+
+        async fn generate_stream(
+            &self,
+            _req: narrex_llm::GenerateRequest,
+        ) -> Result<Pin<Box<dyn futures::Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>, narrex_llm::LlmError> {
+            Err(narrex_llm::LlmError::Unavailable("not used in test".into()))
+        }
+
+        fn name(&self) -> &str {
+            "mock"
+        }
+    }
+
+    // Mock repositories for AiServiceImpl
+
+    #[derive(Clone)]
+    struct MockDraftRepo;
+
+    #[async_trait::async_trait]
+    impl crate::domain::ai::ports::DraftRepository for MockDraftRepo {
+        async fn create(&self, _params: &CreateDraftParams) -> Result<Draft, AiError> {
+            unimplemented!()
+        }
+        async fn find_latest_by_scene(&self, _scene_id: uuid::Uuid) -> Result<Option<Draft>, AiError> {
+            Ok(None)
+        }
+        async fn find_by_version(&self, _scene_id: uuid::Uuid, _version: i32) -> Result<Option<Draft>, AiError> {
+            Ok(None)
+        }
+        async fn list_by_scene(&self, _scene_id: uuid::Uuid) -> Result<Vec<DraftSummary>, AiError> {
+            Ok(vec![])
+        }
+        async fn next_version(&self, _scene_id: uuid::Uuid) -> Result<i32, AiError> {
+            Ok(1)
+        }
+    }
+
+    #[derive(Clone)]
+    struct MockSummaryRepo;
+
+    #[async_trait::async_trait]
+    impl crate::domain::ai::ports::SceneSummaryRepository for MockSummaryRepo {
+        async fn upsert(&self, _: uuid::Uuid, _: i32, _: &str, _: Option<&str>) -> Result<SceneSummary, AiError> {
+            unimplemented!()
+        }
+        async fn find_by_scene(&self, _: uuid::Uuid) -> Result<Option<SceneSummary>, AiError> {
+            Ok(None)
+        }
+        async fn find_preceding(&self, _: uuid::Uuid, _: f64) -> Result<Vec<SceneSummary>, AiError> {
+            Ok(vec![])
+        }
+    }
+
+    #[derive(Clone)]
+    struct MockLogRepo {
+        logs: std::sync::Arc<std::sync::Mutex<Vec<GenerationLog>>>,
+    }
+
+    impl MockLogRepo {
+        fn new() -> Self {
+            Self { logs: std::sync::Arc::new(std::sync::Mutex::new(vec![])) }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl crate::domain::ai::ports::GenerationLogRepository for MockLogRepo {
+        async fn create(&self, log: &GenerationLog) -> Result<(), AiError> {
+            self.logs.lock().unwrap().push(log.clone());
+            Ok(())
+        }
+        async fn cost_summary_by_user(&self, _: uuid::Uuid) -> Result<CostSummary, AiError> {
+            Ok(CostSummary { total_generations: 0, total_tokens_input: 0, total_tokens_output: 0, total_cost_usd: 0.0 })
+        }
+        async fn cost_summary_by_project(&self, _: uuid::Uuid) -> Result<CostSummary, AiError> {
+            Ok(CostSummary { total_generations: 0, total_tokens_input: 0, total_tokens_output: 0, total_cost_usd: 0.0 })
+        }
+    }
+
+    #[derive(Clone)]
+    struct MockContextRepo;
+
+    #[async_trait::async_trait]
+    impl crate::domain::ai::ports::ContextAssemblyRepository for MockContextRepo {
+        async fn assemble_context(&self, _: uuid::Uuid, _: uuid::Uuid) -> Result<crate::domain::ai::models::GenerationContext, AiError> {
+            unimplemented!()
+        }
+    }
+
+    #[derive(Clone)]
+    struct MockSceneRepo;
+
+    #[async_trait::async_trait]
+    impl crate::domain::timeline::ports::SceneRepository for MockSceneRepo {
+        async fn create(&self, _: uuid::Uuid, _: &crate::domain::timeline::models::CreateScene) -> Result<crate::domain::timeline::models::Scene, crate::domain::timeline::error::TimelineError> {
+            unimplemented!()
+        }
+        async fn find_by_id(&self, _: uuid::Uuid) -> Result<Option<crate::domain::timeline::models::Scene>, crate::domain::timeline::error::TimelineError> {
+            Ok(None)
+        }
+        async fn find_detail_by_id(&self, _: uuid::Uuid) -> Result<Option<crate::domain::timeline::models::SceneDetail>, crate::domain::timeline::error::TimelineError> {
+            Ok(None)
+        }
+        async fn update(&self, _: uuid::Uuid, _: &crate::domain::timeline::models::UpdateScene) -> Result<crate::domain::timeline::models::Scene, crate::domain::timeline::error::TimelineError> {
+            unimplemented!()
+        }
+        async fn delete(&self, _: uuid::Uuid) -> Result<(), crate::domain::timeline::error::TimelineError> {
+            Ok(())
+        }
+        async fn find_max_position(&self, _: uuid::Uuid) -> Result<f64, crate::domain::timeline::error::TimelineError> {
+            Ok(0.0)
+        }
+        async fn mark_needs_revision(&self, _: uuid::Uuid) -> Result<(), crate::domain::timeline::error::TimelineError> {
+            Ok(())
+        }
+    }
+
+    fn build_test_ai_service(
+        llm: Arc<dyn narrex_llm::LlmProvider>,
+    ) -> AiServiceImpl<MockDraftRepo, MockSummaryRepo, MockLogRepo, MockContextRepo, MockSceneRepo> {
+        AiServiceImpl::new(
+            MockDraftRepo,
+            MockSummaryRepo,
+            MockLogRepo::new(),
+            MockContextRepo,
+            MockSceneRepo,
+            llm,
+        )
+    }
 }

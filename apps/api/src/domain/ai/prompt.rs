@@ -182,6 +182,57 @@ impl PromptBuilder {
         parts.join("\n")
     }
 
+    /// System prompt for project structuring — instructs LLM to output JSON.
+    pub fn structure_system_prompt() -> String {
+        "당신은 이야기 구조 분석 전문가입니다. \
+         사용자의 이야기 아이디어를 분석하여 구조화된 요소를 추출합니다.\n\n\
+         ## 규칙\n\
+         - 유효한 JSON만 출력 (마크다운, 설명 없이)\n\
+         - JSON 스키마: { \"title\": string, \"genre\": string|null, \"theme\": string|null, \
+           \"era_location\": string|null, \
+           \"pov\": \"first_person\"|\"third_limited\"|\"third_omniscient\"|null, \
+           \"tone\": string|null, \
+           \"characters\": [{\"name\": string, \"personality\": string|null, \
+           \"appearance\": string|null, \"secrets\": string|null, \"motivation\": string|null}], \
+           \"relationships\": [{\"character_a\": string, \"character_b\": string, \
+           \"label\": string, \"direction\": \"bidirectional\"|\"a_to_b\"|\"b_to_a\"|null}], \
+           \"tracks\": [{\"label\": string|null, \
+           \"scenes\": [{\"title\": string, \"plot_summary\": string|null, \
+           \"location\": string|null, \"mood_tags\": [string]|null, \
+           \"characters\": [string]|null}]}] }\n\
+         - 이야기에 맞춰 3-8명의 등장인물 생성\n\
+         - 1-3개의 트랙(병렬 스토리라인) 생성\n\
+         - 트랙당 3-10개의 장면 생성\n\
+         - 텍스트에서 장르, 주제, 시대/배경, 시점, 톤을 추론"
+            .to_string()
+    }
+
+    /// Build a user prompt for project structuring.
+    pub fn structure_user_prompt(
+        source_input: &str,
+        clarification_answers: Option<&[String]>,
+    ) -> String {
+        let mut parts = vec![
+            "## 원본 텍스트".to_string(),
+            source_input.to_string(),
+        ];
+
+        if let Some(answers) = clarification_answers {
+            if !answers.is_empty() {
+                parts.push("\n## 추가 답변".to_string());
+                for (i, answer) in answers.iter().enumerate() {
+                    parts.push(format!("{}. {}", i + 1, answer));
+                }
+            }
+        }
+
+        parts.push(
+            "\n위 텍스트를 분석하여 구조화된 JSON을 출력해주세요.".to_string(),
+        );
+
+        parts.join("\n")
+    }
+
     /// Build prompts for scene summary generation.
     pub fn summary_system_prompt() -> String {
         "당신은 소설 장면 요약 전문가입니다. \
@@ -439,5 +490,52 @@ mod tests {
         assert!(prompt.contains("1화"));
         assert!(prompt.contains("긴 본문..."));
         assert!(prompt.contains("2-3문장으로 요약"));
+    }
+
+    // ---- structure prompts ----
+
+    #[test]
+    fn structure_system_prompt_contains_analyst_role() {
+        let prompt = PromptBuilder::structure_system_prompt();
+        assert!(prompt.contains("구조 분석"));
+    }
+
+    #[test]
+    fn structure_system_prompt_contains_json_instruction() {
+        let prompt = PromptBuilder::structure_system_prompt();
+        assert!(prompt.contains("JSON"));
+    }
+
+    #[test]
+    fn structure_system_prompt_contains_schema_fields() {
+        let prompt = PromptBuilder::structure_system_prompt();
+        assert!(prompt.contains("title"));
+        assert!(prompt.contains("characters"));
+        assert!(prompt.contains("tracks"));
+        assert!(prompt.contains("scenes"));
+        assert!(prompt.contains("relationships"));
+    }
+
+    #[test]
+    fn structure_user_prompt_contains_source_input() {
+        let prompt = PromptBuilder::structure_user_prompt("나의 이야기 텍스트입니다", None);
+        assert!(prompt.contains("나의 이야기 텍스트입니다"));
+    }
+
+    #[test]
+    fn structure_user_prompt_without_clarifications() {
+        let prompt = PromptBuilder::structure_user_prompt("텍스트", None);
+        assert!(prompt.contains("텍스트"));
+        // Should not contain clarification section
+        assert!(!prompt.contains("추가 답변"));
+    }
+
+    #[test]
+    fn structure_user_prompt_with_clarifications() {
+        let answers = vec!["답변1".to_string(), "답변2".to_string()];
+        let prompt = PromptBuilder::structure_user_prompt("텍스트", Some(&answers));
+        assert!(prompt.contains("텍스트"));
+        assert!(prompt.contains("답변1"));
+        assert!(prompt.contains("답변2"));
     }
 }

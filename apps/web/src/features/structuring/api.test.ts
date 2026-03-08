@@ -21,7 +21,7 @@ describe('structuring API', () => {
 
       const body = { sourceInput: 'A knight returns to his childhood...' }
       const result = streamStructure(body)
-      expect(mockCreateSSEStream).toHaveBeenCalledWith('/v1/projects', { body })
+      expect(mockCreateSSEStream).toHaveBeenCalledWith('/v1/projects/structure', { body })
       expect(result).toBe(mockStream)
     })
 
@@ -30,14 +30,14 @@ describe('structuring API', () => {
 
       const body = { sourceInput: 'Fantasy story', clarificationAnswers: ['Fantasy', 'A knight', 'Betrayal'] }
       streamStructure(body)
-      expect(mockCreateSSEStream).toHaveBeenCalledWith('/v1/projects', { body })
+      expect(mockCreateSSEStream).toHaveBeenCalledWith('/v1/projects/structure', { body })
     })
 
     it('works with minimal sourceInput only', () => {
       mockCreateSSEStream.mockReturnValue({ stream: {} as AsyncIterable<unknown>, abort: vi.fn() })
 
       streamStructure({ sourceInput: 'minimal' })
-      expect(mockCreateSSEStream).toHaveBeenCalledWith('/v1/projects', { body: { sourceInput: 'minimal' } })
+      expect(mockCreateSSEStream).toHaveBeenCalledWith('/v1/projects/structure', { body: { sourceInput: 'minimal' } })
     })
   })
 })

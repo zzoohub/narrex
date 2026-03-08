@@ -4,6 +4,8 @@ use std::str::FromStr;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
+use serde::Deserialize;
+
 use crate::domain::character::models::{Character, CharacterRelationship};
 use crate::domain::project::models::Project;
 use crate::domain::timeline::models::Scene;
@@ -232,6 +234,56 @@ pub struct CostSummary {
     pub total_cost_usd: f64,
 }
 
+// ---------------------------------------------------------------------------
+// StructuredOutput (LLM JSON response for project structuring)
+// ---------------------------------------------------------------------------
+
+/// LLM JSON output schema for project structuring.
+#[derive(Debug, Clone, Deserialize)]
+pub struct StructuredOutput {
+    pub title: String,
+    pub genre: Option<String>,
+    pub theme: Option<String>,
+    pub era_location: Option<String>,
+    pub pov: Option<String>,
+    pub tone: Option<String>,
+    pub characters: Vec<StructuredCharacter>,
+    pub relationships: Vec<StructuredRelationship>,
+    pub tracks: Vec<StructuredTrack>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct StructuredCharacter {
+    pub name: String,
+    pub personality: Option<String>,
+    pub appearance: Option<String>,
+    pub secrets: Option<String>,
+    pub motivation: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct StructuredRelationship {
+    pub character_a: String,
+    pub character_b: String,
+    pub label: String,
+    pub direction: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct StructuredTrack {
+    pub label: Option<String>,
+    pub scenes: Vec<StructuredScene>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct StructuredScene {
+    pub title: String,
+    pub plot_summary: Option<String>,
+    pub location: Option<String>,
+    pub mood_tags: Option<Vec<String>>,
+    pub characters: Option<Vec<String>>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -337,5 +389,123 @@ mod tests {
         };
         assert_eq!(cs.total_generations, 0);
         assert_eq!(cs.total_cost_usd, 0.0);
+    }
+
+    // --- StructuredOutput deserialization ---
+
+    #[test]
+    fn structured_output_deserialize_full() {
+        let json = r#"{
+            "title": "운명의 칼날",
+            "genre": "판타지",
+            "theme": "복수와 용서",
+            "era_location": "중세 유럽",
+            "pov": "third_limited",
+            "tone": "어둡고 긴장감 있는",
+            "characters": [
+                {
+                    "name": "이수현",
+                    "personality": "냉정하지만 속은 따뜻한",
+                    "appearance": "검은 머리, 날카로운 눈",
+                    "secrets": "과거에 가족을 잃은 트라우마",
+                    "motivation": "복수"
+                }
+            ],
+            "relationships": [
+                {
+                    "character_a": "이수현",
+                    "character_b": "박지훈",
+                    "label": "라이벌",
+                    "direction": "bidirectional"
+                }
+            ],
+            "tracks": [
+                {
+                    "label": "메인 스토리",
+                    "scenes": [
+                        {
+                            "title": "시작",
+                            "plot_summary": "주인공이 모험을 시작한다",
+                            "location": "마을 광장",
+                            "mood_tags": ["긴장", "결의"],
+                            "characters": ["이수현"]
+                        }
+                    ]
+                }
+            ]
+        }"#;
+
+        let output: StructuredOutput = serde_json::from_str(json).unwrap();
+        assert_eq!(output.title, "운명의 칼날");
+        assert_eq!(output.genre.as_deref(), Some("판타지"));
+        assert_eq!(output.theme.as_deref(), Some("복수와 용서"));
+        assert_eq!(output.era_location.as_deref(), Some("중세 유럽"));
+        assert_eq!(output.pov.as_deref(), Some("third_limited"));
+        assert_eq!(output.tone.as_deref(), Some("어둡고 긴장감 있는"));
+        assert_eq!(output.characters.len(), 1);
+        assert_eq!(output.characters[0].name, "이수현");
+        assert_eq!(output.characters[0].personality.as_deref(), Some("냉정하지만 속은 따뜻한"));
+        assert_eq!(output.relationships.len(), 1);
+        assert_eq!(output.relationships[0].label, "라이벌");
+        assert_eq!(output.tracks.len(), 1);
+        assert_eq!(output.tracks[0].scenes.len(), 1);
+        assert_eq!(output.tracks[0].scenes[0].title, "시작");
+        assert_eq!(output.tracks[0].scenes[0].mood_tags.as_ref().unwrap().len(), 2);
+        assert_eq!(output.tracks[0].scenes[0].characters.as_ref().unwrap(), &vec!["이수현".to_string()]);
+    }
+
+    #[test]
+    fn structured_output_deserialize_minimal() {
+        let json = r#"{
+            "title": "최소 프로젝트",
+            "characters": [],
+            "relationships": [],
+            "tracks": []
+        }"#;
+
+        let output: StructuredOutput = serde_json::from_str(json).unwrap();
+        assert_eq!(output.title, "최소 프로젝트");
+        assert!(output.genre.is_none());
+        assert!(output.theme.is_none());
+        assert!(output.era_location.is_none());
+        assert!(output.pov.is_none());
+        assert!(output.tone.is_none());
+        assert!(output.characters.is_empty());
+        assert!(output.relationships.is_empty());
+        assert!(output.tracks.is_empty());
+    }
+
+    #[test]
+    fn structured_output_deserialize_missing_optional_fields() {
+        let json = r#"{
+            "title": "테스트",
+            "characters": [
+                { "name": "캐릭터A" }
+            ],
+            "relationships": [
+                { "character_a": "캐릭터A", "character_b": "캐릭터B", "label": "친구" }
+            ],
+            "tracks": [
+                {
+                    "scenes": [
+                        { "title": "장면1" }
+                    ]
+                }
+            ]
+        }"#;
+
+        let output: StructuredOutput = serde_json::from_str(json).unwrap();
+        assert_eq!(output.title, "테스트");
+        assert_eq!(output.characters[0].name, "캐릭터A");
+        assert!(output.characters[0].personality.is_none());
+        assert!(output.characters[0].appearance.is_none());
+        assert!(output.characters[0].secrets.is_none());
+        assert!(output.characters[0].motivation.is_none());
+        assert!(output.relationships[0].direction.is_none());
+        assert!(output.tracks[0].label.is_none());
+        assert!(output.tracks[0].scenes[0].plot_summary.is_none());
+        assert!(output.tracks[0].scenes[0].location.is_none());
+        assert!(output.tracks[0].scenes[0].mood_tags.is_none());
+        assert!(output.tracks[0].scenes[0].characters.is_none());
     }
 }

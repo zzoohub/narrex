@@ -7,5 +7,5 @@ export interface StructureRequest {
 }
 
 export function streamStructure(body: StructureRequest): SSEStream {
-  return createSSEStream('/v1/projects', { body })
+  return createSSEStream('/v1/projects/structure', { body })
 }

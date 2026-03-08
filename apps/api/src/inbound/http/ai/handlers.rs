@@ -222,6 +222,15 @@ fn map_sse_event(event: SseEvent) -> Event {
                 .event("completed")
                 .data(serde_json::json!({"draft": draft_resp}).to_string())
         }
+        SseEvent::Progress { message } => Event::default()
+            .event("progress")
+            .data(serde_json::json!({"message": message}).to_string()),
+        SseEvent::StructuringCompleted { workspace } => {
+            let ws_resp = crate::inbound::http::project::response::WorkspaceResponse::from(&workspace);
+            Event::default()
+                .event("completed")
+                .data(serde_json::json!({"workspace": ws_resp}).to_string())
+        }
         SseEvent::Error { message } => Event::default()
             .event("error")
             .data(serde_json::json!({"message": message}).to_string()),

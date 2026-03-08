@@ -195,6 +195,10 @@ fn build_router(state: AppState, cors_origin: &str) -> Router {
         .route("/v1/me/costs", get(ai_handlers::get_user_costs))
         // Projects
         .route(
+            "/v1/projects/structure",
+            post(project_handlers::structure_project),
+        )
+        .route(
             "/v1/projects",
             get(project_handlers::list_projects).post(project_handlers::create_project),
         )
