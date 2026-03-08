@@ -159,6 +159,7 @@ pub async fn structure_project(
     auth: AuthUser,
     Json(body): Json<CreateProjectTextRequest>,
 ) -> Result<Sse<impl futures::Stream<Item = Result<Event, Infallible>>>, ApiError> {
+    tracing::info!(user_id = %auth.user_id, input_len = body.source_input.len(), "structure_project: started");
     let source_input = body.source_input.clone();
     let clarification_answers = body.clarification_answers.clone();
 
@@ -176,8 +177,12 @@ pub async fn structure_project(
         let result = state.ai_service().generate_structure(&source_input, answers_ref).await;
 
         let (output, model, provider, tokens_in, tokens_out) = match result {
-            Ok(v) => v,
+            Ok(v) => {
+                tracing::info!(model = %v.1, provider = %v.2, tokens_in = v.3, tokens_out = v.4, "structure_project: LLM succeeded");
+                v
+            }
             Err(e) => {
+                tracing::error!(error = %e, "structure_project: LLM failed");
                 yield Ok(Event::default()
                     .event("error")
                     .data(serde_json::json!({"message": e.to_string()}).to_string()));
