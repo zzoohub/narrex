@@ -21,12 +21,16 @@ push branch="main" msg="update":
 # ─── DB ───────────────────────────────────────────────────────────────────────
 
 db-migrate:
-    cd db && echo "TODO: run migrations"
+    sqlx migrate run --source db/migrations
+
+db-revert:
+    sqlx migrate revert --source db/migrations
 
 db-seed:
-    cd db && echo "TODO: run seeds"
+    @for f in db/seeds/*.sql; do echo "▶ $f"; docker exec -i narrex-db-1 psql -U postgres -d narrex -f - < "$f"; done
 
-db-reset: db-migrate db-seed
+db-reset:
+    sqlx database reset -y --source db/migrations
 
 # ─── API (Rust / Axum) ──────────────────────────────────────────────────────
 

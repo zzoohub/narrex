@@ -1,1 +1,1 @@
-export type Locale = 'ko' | 'en' | 'es' | 'pt-BR' | 'id' | 'ja'
+export type Locale = 'ko' | 'en'
