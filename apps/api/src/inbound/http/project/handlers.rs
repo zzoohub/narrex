@@ -155,8 +155,8 @@ pub async fn get_workspace(
 
 /// `POST /v1/projects/structure` — AI-powered project structuring (SSE).
 ///
-/// Two-phase streaming: characters → timeline, each streamed token-by-token
-/// with Phase 1 output chained as context into Phase 2.
+/// Three-phase streaming: World → Characters → Timeline, each streamed
+/// token-by-token with previous outputs chained as context.
 pub async fn structure_project(
     State(state): State<AppState>,
     auth: AuthUser,
@@ -173,7 +173,7 @@ pub async fn structure_project(
     let stream = async_stream::stream! {
         use std::time::Instant;
         use futures::StreamExt;
-        use crate::domain::ai::service::{parse_characters_output, parse_timeline_output};
+        use crate::domain::ai::service::{parse_world_output, parse_characters_output, parse_timeline_output};
 
         let start = Instant::now();
         let mut total_model = String::new();
@@ -181,13 +181,98 @@ pub async fn structure_project(
         let mut total_tokens_in: u32 = 0;
         let mut total_tokens_out: u32 = 0;
 
-        // ── Phase 1: Characters ─────────────────────────────────────
+        // ── Phase 1: World ──────────────────────────────────────────
+        yield Ok(Event::default()
+            .event("progress")
+            .data(serde_json::json!({"message": "작품 세계를 설정하는 중"}).to_string()));
+
+        let answers_ref = clarification_answers.as_deref();
+        let world_stream = match state.ai_service().stream_world(&source_input, answers_ref, &locale).await {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::error!(error = %e, "structure_project: world stream failed");
+                yield Ok(Event::default().event("error")
+                    .data(serde_json::json!({"message": e.to_string()}).to_string()));
+                return;
+            }
+        };
+
+        let mut world_buffer = String::new();
+        let mut world_stream = Box::pin(world_stream);
+        while let Some(result) = world_stream.next().await {
+            match result {
+                Ok(chunk) => {
+                    if chunk.done {
+                        if let Some(ref usage) = chunk.usage {
+                            total_model = usage.model.clone();
+                            total_provider = usage.provider.clone();
+                            total_tokens_in += usage.token_count_input;
+                            total_tokens_out += usage.token_count_output;
+                        }
+                    } else {
+                        world_buffer.push_str(&chunk.text);
+                        yield Ok(Event::default().event("token")
+                            .data(serde_json::json!({"text": chunk.text}).to_string()));
+                    }
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, "structure_project: world stream error");
+                    yield Ok(Event::default().event("error")
+                        .data(serde_json::json!({"message": e.to_string()}).to_string()));
+                    return;
+                }
+            }
+        }
+
+        tracing::info!(model = %total_model, provider = %total_provider, "structure_project: Phase 1 (world) done");
+
+        let world_output = match parse_world_output(&world_buffer) {
+            Ok(o) => o,
+            Err(e) => {
+                tracing::error!(error = %e, "structure_project: world parse failed");
+                yield Ok(Event::default().event("error")
+                    .data(serde_json::json!({"message": e.to_string()}).to_string()));
+                return;
+            }
+        };
+
+        // Create project from world output
+        let pov = world_output.pov.as_deref().and_then(|s| s.parse().ok());
+        let project = Project {
+            id: uuid::Uuid::new_v4(),
+            user_id: auth.user_id,
+            title: world_output.title.clone(),
+            genre: world_output.genre.clone(),
+            theme: world_output.theme.clone(),
+            era_location: world_output.era_location.clone(),
+            pov,
+            tone: world_output.tone.clone(),
+            source_type: Some(SourceType::FreeText),
+            source_input: Some(source_input.clone()),
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+
+        let project = match state.project_service().create_project(&project, auth.user_id).await {
+            Ok(p) => p,
+            Err(e) => {
+                yield Ok(Event::default().event("error")
+                    .data(serde_json::json!({"message": e.to_string()}).to_string()));
+                return;
+            }
+        };
+        let project_id = project.id;
+
+        // Extract JSON for context chaining
+        let world_json_for_context = crate::domain::ai::service::extract_json_from_raw(&world_buffer)
+            .unwrap_or_else(|| world_buffer.clone());
+
+        // ── Phase 2: Characters ─────────────────────────────────────
         yield Ok(Event::default()
             .event("progress")
             .data(serde_json::json!({"message": "등장인물과 관계를 찾는 중"}).to_string()));
 
-        let answers_ref = clarification_answers.as_deref();
-        let char_stream = match state.ai_service().stream_characters(&source_input, answers_ref, &locale).await {
+        let char_stream = match state.ai_service().stream_characters(&source_input, &world_json_for_context, &locale).await {
             Ok(s) => s,
             Err(e) => {
                 tracing::error!(error = %e, "structure_project: characters stream failed");
@@ -224,7 +309,7 @@ pub async fn structure_project(
             }
         }
 
-        tracing::info!(model = %total_model, provider = %total_provider, "structure_project: Phase 1 done");
+        tracing::info!(model = %total_model, provider = %total_provider, "structure_project: Phase 2 (characters) done");
 
         let char_output = match parse_characters_output(&char_buffer) {
             Ok(o) => o,
@@ -235,33 +320,6 @@ pub async fn structure_project(
                 return;
             }
         };
-
-        // Create project
-        let pov = char_output.pov.as_deref().and_then(|s| s.parse().ok());
-        let project = Project {
-            id: uuid::Uuid::new_v4(),
-            user_id: auth.user_id,
-            title: char_output.title.clone(),
-            genre: char_output.genre.clone(),
-            theme: char_output.theme.clone(),
-            era_location: char_output.era_location.clone(),
-            pov,
-            tone: char_output.tone.clone(),
-            source_type: Some(SourceType::FreeText),
-            source_input: Some(source_input.clone()),
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
-        };
-
-        let project = match state.project_service().create_project(&project, auth.user_id).await {
-            Ok(p) => p,
-            Err(e) => {
-                yield Ok(Event::default().event("error")
-                    .data(serde_json::json!({"message": e.to_string()}).to_string()));
-                return;
-            }
-        };
-        let project_id = project.id;
 
         // Create characters
         let mut char_name_to_id = std::collections::HashMap::new();
@@ -314,16 +372,16 @@ pub async fn structure_project(
             }
         }
 
-        // ── Phase 2: Timeline ───────────────────────────────────────
+        // Extract characters JSON for context chaining
+        let char_json_for_context = crate::domain::ai::service::extract_json_from_raw(&char_buffer)
+            .unwrap_or_else(|| char_buffer.clone());
+
+        // ── Phase 3: Timeline ───────────────────────────────────────
         yield Ok(Event::default()
             .event("progress")
             .data(serde_json::json!({"message": "줄거리를 타임라인으로 정리하는 중"}).to_string()));
 
-        // Extract the JSON portion of Phase 1 output for context chaining
-        let char_json_for_context = crate::domain::ai::service::extract_json_from_raw(&char_buffer)
-            .unwrap_or_else(|| char_buffer.clone());
-
-        let timeline_stream = match state.ai_service().stream_timeline(&source_input, &char_json_for_context, &locale).await {
+        let timeline_stream = match state.ai_service().stream_timeline(&source_input, &world_json_for_context, &char_json_for_context, &locale).await {
             Ok(s) => s,
             Err(e) => {
                 tracing::error!(error = %e, "structure_project: timeline stream failed");
@@ -360,7 +418,7 @@ pub async fn structure_project(
             }
         }
 
-        tracing::info!(model = %total_model, provider = %total_provider, "structure_project: Phase 2 done");
+        tracing::info!(model = %total_model, provider = %total_provider, "structure_project: Phase 3 (timeline) done");
 
         let timeline_output = match parse_timeline_output(&timeline_buffer) {
             Ok(o) => o,
@@ -371,11 +429,6 @@ pub async fn structure_project(
                 return;
             }
         };
-
-        // ── Phase 3: Save world (DB operations) ─────────────────────
-        yield Ok(Event::default()
-            .event("progress")
-            .data(serde_json::json!({"message": "작품 세계를 설정하는 중"}).to_string()));
 
         // Create tracks and scenes
         for (track_idx, track_data) in timeline_output.tracks.iter().enumerate() {

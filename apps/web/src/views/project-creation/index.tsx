@@ -100,21 +100,21 @@ const samplePrompts = [
 ] as const
 
 const processingSteps = [
+  'creation.processing.world',
   'creation.processing.characters',
   'creation.processing.timeline',
-  'creation.processing.world',
 ] as const
 
 const processingStepKeys = [
+  'creation.processing.step.world',
   'creation.processing.step.characters',
   'creation.processing.step.timeline',
-  'creation.processing.step.world',
 ] as const
 
 const phaseHeadingKeys = [
+  'creation.processing.phase.world',
   'creation.processing.phase.characters',
   'creation.processing.phase.timeline',
-  'creation.processing.phase.world',
 ] as const
 
 /** Asymptotic progress: fast start, slows approaching max. */
@@ -283,16 +283,16 @@ export function ProjectCreationView() {
           case 'progress': {
             const progressData = event.data as SSEProgressEvent
             const msg = progressData.message?.toLowerCase() ?? ''
-            if (msg.includes('character') || msg.includes('등장인물')) {
+            if (msg.includes('world') || msg.includes('세계')) {
               if (activePhase() < 0) {
                 setActivePhase(0)
                 setPhaseTokenCount(0)
               }
-            } else if (msg.includes('timeline') || msg.includes('타임라인') || msg.includes('plot')) {
+            } else if (msg.includes('character') || msg.includes('등장인물')) {
               setActivePhase(1)
               setCompletedSteps((s) => Math.max(s, 1))
               setPhaseTokenCount(0)
-            } else if (msg.includes('world') || msg.includes('세계')) {
+            } else if (msg.includes('timeline') || msg.includes('타임라인') || msg.includes('plot')) {
               setActivePhase(2)
               setCompletedSteps((s) => Math.max(s, 2))
               setPhaseTokenCount(0)

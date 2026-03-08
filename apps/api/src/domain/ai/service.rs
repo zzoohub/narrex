@@ -12,7 +12,7 @@ use super::error::AiError;
 use super::models::{
     CharactersOutput, CostSummary, CreateDraftParams, CreateManualDraft, Draft, DraftSource,
     DraftSummary, EditDraftRequest, GenerationLog, GenerationStatus, GenerationType,
-    SceneSummary, StructuredOutput, TimelineOutput,
+    SceneSummary, StructuredOutput, TimelineOutput, WorldOutput,
 };
 use super::ports::{
     ContextAssemblyRepository, DraftRepository, GenerationLogRepository, SceneSummaryRepository,
@@ -440,16 +440,38 @@ where
         ))
     }
 
-    /// Stream Phase 1: characters + project metadata.
+    /// Stream Phase 1: world/setting (title, genre, theme, era, pov, tone).
     /// Returns an LLM token stream for the caller to consume.
-    pub async fn stream_characters(
+    pub async fn stream_world(
         &self,
         source_input: &str,
         clarification_answers: Option<&[String]>,
         locale: &str,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>, AiError> {
+        let system = PromptBuilder::world_system_prompt(locale);
+        let user = PromptBuilder::world_user_prompt(source_input, clarification_answers);
+        let req = GenerateRequest {
+            system_prompt: system,
+            user_prompt: user,
+            max_tokens: Some(2048),
+            temperature: Some(0.7),
+        };
+        self.llm
+            .generate_stream(req)
+            .await
+            .map_err(|e| AiError::GenerationFailed(e.to_string()))
+    }
+
+    /// Stream Phase 2: characters + relationships.
+    /// `world_context` is the raw JSON from Phase 1 for context chaining.
+    pub async fn stream_characters(
+        &self,
+        source_input: &str,
+        world_context: &str,
+        locale: &str,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>, AiError> {
         let system = PromptBuilder::characters_system_prompt(locale);
-        let user = PromptBuilder::characters_user_prompt(source_input, clarification_answers);
+        let user = PromptBuilder::characters_user_prompt(source_input, world_context);
         let req = GenerateRequest {
             system_prompt: system,
             user_prompt: user,
@@ -462,17 +484,18 @@ where
             .map_err(|e| AiError::GenerationFailed(e.to_string()))
     }
 
-    /// Stream Phase 2: timeline tracks + scenes.
-    /// `characters_context` is the raw JSON from Phase 1 for context chaining.
+    /// Stream Phase 3: timeline tracks + scenes.
+    /// `world_context` and `characters_context` are raw JSON from Phases 1 & 2.
     /// Uses 8192 max_tokens — timeline JSON with multiple tracks/scenes is large.
     pub async fn stream_timeline(
         &self,
         source_input: &str,
+        world_context: &str,
         characters_context: &str,
         locale: &str,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>, AiError> {
         let system = PromptBuilder::timeline_system_prompt(locale);
-        let user = PromptBuilder::timeline_user_prompt(source_input, characters_context);
+        let user = PromptBuilder::timeline_user_prompt(source_input, world_context, characters_context);
         let req = GenerateRequest {
             system_prompt: system,
             user_prompt: user,
@@ -491,7 +514,17 @@ where
     }
 }
 
-/// Parse raw LLM text into CharactersOutput (Phase 1).
+/// Parse raw LLM text into WorldOutput (Phase 1).
+pub fn parse_world_output(raw_text: &str) -> Result<WorldOutput, AiError> {
+    let json = extract_json(raw_text).ok_or_else(|| {
+        warn!(raw_preview = %raw_text.chars().take(200).collect::<String>(), "world: no valid JSON");
+        AiError::GenerationFailed("World: LLM did not return valid JSON".into())
+    })?;
+    serde_json::from_str(&json)
+        .map_err(|e| AiError::GenerationFailed(format!("World: parse error: {e}")))
+}
+
+/// Parse raw LLM text into CharactersOutput (Phase 2).
 pub fn parse_characters_output(raw_text: &str) -> Result<CharactersOutput, AiError> {
     let json = extract_json(raw_text).ok_or_else(|| {
         warn!(raw_preview = %raw_text.chars().take(200).collect::<String>(), "characters: no valid JSON");
@@ -501,7 +534,7 @@ pub fn parse_characters_output(raw_text: &str) -> Result<CharactersOutput, AiErr
         .map_err(|e| AiError::GenerationFailed(format!("Characters: parse error: {e}")))
 }
 
-/// Parse raw LLM text into TimelineOutput (Phase 2).
+/// Parse raw LLM text into TimelineOutput (Phase 3).
 pub fn parse_timeline_output(raw_text: &str) -> Result<TimelineOutput, AiError> {
     let json = extract_json(raw_text).ok_or_else(|| {
         warn!(raw_preview = %raw_text.chars().take(200).collect::<String>(), "timeline: no valid JSON");
@@ -779,21 +812,46 @@ mod tests {
         }
     }
 
+    // ---- parse_world_output tests ----
+
+    #[test]
+    fn parse_world_output_success() {
+        let raw = r#"{"title": "테스트", "genre": "SF", "theme": "AI", "era_location": "미래", "pov": "1인칭", "tone": "긴장감"}"#;
+        let output = parse_world_output(raw).unwrap();
+        assert_eq!(output.title, "테스트");
+        assert_eq!(output.genre.as_deref(), Some("SF"));
+    }
+
+    #[test]
+    fn parse_world_output_with_fences() {
+        let raw = "결과:\n```json\n{\"title\": \"Fenced\", \"genre\": \"Fantasy\"}\n```";
+        let output = parse_world_output(raw).unwrap();
+        assert_eq!(output.title, "Fenced");
+    }
+
+    #[test]
+    fn parse_world_output_invalid_json() {
+        let err = parse_world_output("not json").unwrap_err();
+        match err {
+            AiError::GenerationFailed(msg) => assert!(msg.contains("valid JSON")),
+            other => panic!("expected GenerationFailed, got: {other:?}"),
+        }
+    }
+
     // ---- parse_characters_output tests ----
 
     #[test]
     fn parse_characters_output_success() {
-        let raw = r#"{"title": "테스트", "genre": "SF", "characters": [{"name": "A"}], "relationships": []}"#;
+        let raw = r#"{"characters": [{"name": "A"}], "relationships": []}"#;
         let output = parse_characters_output(raw).unwrap();
-        assert_eq!(output.title, "테스트");
         assert_eq!(output.characters.len(), 1);
     }
 
     #[test]
     fn parse_characters_output_with_fences() {
-        let raw = "결과:\n```json\n{\"title\": \"Fenced\", \"characters\": [], \"relationships\": []}\n```";
+        let raw = "결과:\n```json\n{\"characters\": [], \"relationships\": []}\n```";
         let output = parse_characters_output(raw).unwrap();
-        assert_eq!(output.title, "Fenced");
+        assert_eq!(output.characters.len(), 0);
     }
 
     #[test]
@@ -824,20 +882,20 @@ mod tests {
         }
     }
 
-    // ---- stream_characters / stream_timeline tests ----
+    // ---- stream_world / stream_characters / stream_timeline tests ----
 
     #[tokio::test]
-    async fn stream_characters_calls_generate_stream() {
+    async fn stream_world_calls_generate_stream() {
         let mock_llm = MockStreamingLlmProvider::new(vec![
             narrex_llm::StreamChunk { text: "{\"title\":\"T\",".into(), done: false, usage: None },
-            narrex_llm::StreamChunk { text: "\"characters\":[],\"relationships\":[]}".into(), done: false, usage: None },
+            narrex_llm::StreamChunk { text: "\"genre\":\"SF\"}".into(), done: false, usage: None },
             narrex_llm::StreamChunk { text: String::new(), done: true, usage: Some(narrex_llm::StreamUsage {
                 model: "m".into(), provider: "p".into(), token_count_input: 10, token_count_output: 20,
             })},
         ]);
         let svc = build_test_ai_service(mock_llm);
 
-        let stream = svc.stream_characters("test input", None, "ko").await.unwrap();
+        let stream = svc.stream_world("test input", None, "ko").await.unwrap();
         let chunks: Vec<_> = {
             use futures::StreamExt;
             Box::pin(stream).collect::<Vec<_>>().await
@@ -848,7 +906,25 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn stream_timeline_includes_character_context() {
+    async fn stream_characters_uses_world_context() {
+        let mock_llm = MockStreamingLlmProvider::new(vec![
+            narrex_llm::StreamChunk { text: "{\"characters\":[],\"relationships\":[]}".into(), done: false, usage: None },
+            narrex_llm::StreamChunk { text: String::new(), done: true, usage: Some(narrex_llm::StreamUsage {
+                model: "m".into(), provider: "p".into(), token_count_input: 10, token_count_output: 20,
+            })},
+        ]);
+        let svc = build_test_ai_service(mock_llm);
+
+        let stream = svc.stream_characters("test input", "{\"title\":\"T\"}", "ko").await.unwrap();
+        let chunks: Vec<_> = {
+            use futures::StreamExt;
+            Box::pin(stream).collect::<Vec<_>>().await
+        };
+        assert_eq!(chunks.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn stream_timeline_includes_world_and_character_context() {
         let mock_llm = MockStreamingLlmProvider::new(vec![
             narrex_llm::StreamChunk { text: "{\"tracks\":[]}".into(), done: false, usage: None },
             narrex_llm::StreamChunk { text: String::new(), done: true, usage: Some(narrex_llm::StreamUsage {
@@ -857,7 +933,7 @@ mod tests {
         ]);
         let svc = build_test_ai_service(mock_llm);
 
-        let stream = svc.stream_timeline("input", "{\"characters\":[]}", "ko").await.unwrap();
+        let stream = svc.stream_timeline("input", "{\"title\":\"T\"}", "{\"characters\":[]}", "ko").await.unwrap();
         let chunks: Vec<_> = {
             use futures::StreamExt;
             Box::pin(stream).collect::<Vec<_>>().await

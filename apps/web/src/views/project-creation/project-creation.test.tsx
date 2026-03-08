@@ -172,15 +172,15 @@ describe('ProjectCreationView', () => {
       })
     })
 
-    it('shows step indicators in progress sidebar', async () => {
+    it('shows step indicators in progress sidebar (world → characters → timeline)', async () => {
       vi.mocked(streamStructure).mockReturnValue(createHangingStream())
       renderCreation()
       await enterTextAndSubmit()
 
       await waitFor(() => {
+        expect(screen.getByText('Setting up world')).toBeInTheDocument()
         expect(screen.getByText('Finding characters')).toBeInTheDocument()
         expect(screen.getByText('Building timeline')).toBeInTheDocument()
-        expect(screen.getByText('Setting up world')).toBeInTheDocument()
       })
     })
 
@@ -197,29 +197,29 @@ describe('ProjectCreationView', () => {
     it('displays phase heading when progress event arrives', async () => {
       vi.mocked(streamStructure).mockReturnValue(
         createHangingStream([
-          { event: 'progress', data: { message: 'Finding characters' } },
+          { event: 'progress', data: { message: 'Setting up world' } },
         ]),
       )
       renderCreation()
       await enterTextAndSubmit()
 
       await waitFor(() => {
-        expect(screen.getByText('Characters')).toBeInTheDocument()
+        expect(screen.getByText('Story World')).toBeInTheDocument()
       })
     })
 
     it('shows streaming token text in preview area', async () => {
       vi.mocked(streamStructure).mockReturnValue(
         createHangingStream([
-          { event: 'progress', data: { message: 'Finding characters' } },
-          { event: 'token', data: { text: 'Camilla is a cunning villainess' } },
+          { event: 'progress', data: { message: 'Setting up world' } },
+          { event: 'token', data: { text: 'A medieval kingdom shrouded in mist' } },
         ]),
       )
       renderCreation()
       await enterTextAndSubmit()
 
       await waitFor(() => {
-        const matches = screen.getAllByText(/Camilla is a cunning villainess/)
+        const matches = screen.getAllByText(/A medieval kingdom shrouded in mist/)
         expect(matches.length).toBeGreaterThan(0)
       })
     })
@@ -299,9 +299,10 @@ describe('ProjectCreationView', () => {
       )
     })
 
-    it('advances step completion on phase transitions', async () => {
+    it('advances step completion on phase transitions (world → characters → timeline)', async () => {
       vi.mocked(streamStructure).mockReturnValue(
         createHangingStream([
+          { event: 'progress', data: { message: 'Setting up world' } },
           { event: 'progress', data: { message: 'Finding characters' } },
           { event: 'progress', data: { message: 'Building timeline' } },
         ]),
@@ -310,10 +311,9 @@ describe('ProjectCreationView', () => {
       await enterTextAndSubmit()
 
       await waitFor(() => {
-        // Timeline phase heading should appear
-        expect(screen.getByText('Timeline')).toBeInTheDocument()
-        // Characters phase heading should also be visible
+        expect(screen.getByText('Story World')).toBeInTheDocument()
         expect(screen.getByText('Characters')).toBeInTheDocument()
+        expect(screen.getByText('Timeline')).toBeInTheDocument()
       })
     })
   })

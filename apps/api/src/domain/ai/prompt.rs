@@ -241,38 +241,32 @@ impl PromptBuilder {
         parts.join("\n")
     }
 
-    /// Phase 1 system prompt: extract characters + project meta.
-    /// Outputs natural language summary first, then JSON in fenced block.
-    pub fn characters_system_prompt(locale: &str) -> String {
+    /// Phase 1 system prompt: extract world/setting metadata.
+    pub fn world_system_prompt(locale: &str) -> String {
         let lang_instruction = match locale {
             "ko" => "- 모든 텍스트는 반드시 한국어로 작성",
             _ => "- All text MUST be written in English",
         };
 
         format!(
-            "당신은 이야기 구조 분석 전문가입니다. \
-             사용자의 이야기 아이디어에서 등장인물과 관계를 추출합니다.\n\n\
+            "당신은 이야기 세계관 분석 전문가입니다. \
+             사용자의 이야기 아이디어에서 작품의 세계관과 설정을 추출합니다.\n\n\
              ## 규칙\n\
              {lang_instruction}\n\
-             - 이야기에 맞춰 3-8명의 등장인물 생성\n\
-             - 등장인물 간 핵심 관계를 모두 추출\n\
-             - 텍스트에서 장르, 주제, 시대/배경, 시점, 톤을 추론\n\n\
+             - 텍스트에서 장르, 주제, 시대/배경, 시점, 톤을 추론\n\
+             - 작품 제목을 이야기에 맞게 생성\n\n\
              ## 출력 형식\n\
-             1. 먼저 분석 결과를 자연스러운 문장으로 설명 (작품 제목, 장르, 등장인물 소개, 관계 설명)\n\
+             1. 먼저 분석한 세계관을 자연스러운 문장으로 설명 (배경, 시대, 분위기, 장르적 특성)\n\
              2. 마지막에 ```json 블록으로 구조화된 JSON 출력\n\n\
              JSON 스키마: {{ \"title\": string, \"genre\": string|null, \"theme\": string|null, \
                \"era_location\": string|null, \
                \"pov\": \"first_person\"|\"third_limited\"|\"third_omniscient\"|null, \
-               \"tone\": string|null, \
-               \"characters\": [{{\"name\": string, \"personality\": string|null, \
-               \"appearance\": string|null, \"secrets\": string|null, \"motivation\": string|null}}], \
-               \"relationships\": [{{\"character_a\": string, \"character_b\": string, \
-               \"label\": string, \"direction\": \"bidirectional\"|\"a_to_b\"|\"b_to_a\"|null}}] }}"
+               \"tone\": string|null }}"
         )
     }
 
     /// Phase 1 user prompt: source text + optional clarifications.
-    pub fn characters_user_prompt(
+    pub fn world_user_prompt(
         source_input: &str,
         clarification_answers: Option<&[String]>,
     ) -> String {
@@ -291,14 +285,53 @@ impl PromptBuilder {
         }
 
         parts.push(
-            "\n위 텍스트에서 등장인물과 관계를 분석하여 JSON을 출력해주세요.".to_string(),
+            "\n위 텍스트의 세계관과 설정을 분석하여 출력해주세요.".to_string(),
         );
 
         parts.join("\n")
     }
 
-    /// Phase 2 system prompt: create timeline tracks + scenes.
-    /// Outputs natural language summary first, then JSON in fenced block.
+    /// Phase 2 system prompt: extract characters + relationships using world context.
+    pub fn characters_system_prompt(locale: &str) -> String {
+        let lang_instruction = match locale {
+            "ko" => "- 모든 텍스트는 반드시 한국어로 작성",
+            _ => "- All text MUST be written in English",
+        };
+
+        format!(
+            "당신은 이야기 등장인물 분석 전문가입니다. \
+             주어진 세계관과 이야기에서 등장인물과 관계를 추출합니다.\n\n\
+             ## 규칙\n\
+             {lang_instruction}\n\
+             - 세계관에 맞는 3-8명의 등장인물 생성\n\
+             - 등장인물 간 핵심 관계를 모두 추출\n\
+             - 세계관의 시대/배경에 어울리는 캐릭터 설계\n\n\
+             ## 출력 형식\n\
+             1. 먼저 등장인물과 관계를 자연스러운 문장으로 설명\n\
+             2. 마지막에 ```json 블록으로 구조화된 JSON 출력\n\n\
+             JSON 스키마: {{ \
+               \"characters\": [{{\"name\": string, \"personality\": string|null, \
+               \"appearance\": string|null, \"secrets\": string|null, \"motivation\": string|null}}], \
+               \"relationships\": [{{\"character_a\": string, \"character_b\": string, \
+               \"label\": string, \"direction\": \"bidirectional\"|\"a_to_b\"|\"b_to_a\"|null}}] }}"
+        )
+    }
+
+    /// Phase 2 user prompt: source text + world context from Phase 1.
+    pub fn characters_user_prompt(
+        source_input: &str,
+        world_context: &str,
+    ) -> String {
+        vec![
+            "## 원본 텍스트".to_string(),
+            source_input.to_string(),
+            "\n## 세계관 (Phase 1 결과)".to_string(),
+            world_context.to_string(),
+            "\n위 세계관과 스토리에서 등장인물과 관계를 분석하여 출력해주세요.".to_string(),
+        ].join("\n")
+    }
+
+    /// Phase 3 system prompt: create timeline tracks + scenes.
     pub fn timeline_system_prompt(locale: &str) -> String {
         let lang_instruction = match locale {
             "ko" => "- 모든 텍스트는 반드시 한국어로 작성",
@@ -307,13 +340,13 @@ impl PromptBuilder {
 
         format!(
             "당신은 이야기 타임라인 구성 전문가입니다. \
-             주어진 등장인물과 이야기를 바탕으로 타임라인을 구성합니다.\n\n\
+             주어진 세계관, 등장인물, 이야기를 바탕으로 타임라인을 구성합니다.\n\n\
              ## 규칙\n\
              {lang_instruction}\n\
              - 1-3개의 트랙(병렬 스토리라인) 생성\n\
              - 트랙당 3-10개의 장면 생성\n\
              - characters 배열에는 등장인물 이름 목록 포함\n\
-             - 앞서 제공된 등장인물 정보와 일치하는 이름 사용\n\n\
+             - 앞서 제공된 등장인물 이름과 일치하는 이름 사용\n\n\
              ## 출력 형식\n\
              1. 먼저 구성한 타임라인을 자연스러운 문장으로 설명 (트랙 구성, 주요 장면 흐름)\n\
              2. 마지막에 ```json 블록으로 구조화된 JSON 출력\n\n\
@@ -324,20 +357,21 @@ impl PromptBuilder {
         )
     }
 
-    /// Phase 2 user prompt: source text + characters context from Phase 1.
+    /// Phase 3 user prompt: source text + world context + characters context.
     pub fn timeline_user_prompt(
         source_input: &str,
+        world_context: &str,
         characters_context: &str,
     ) -> String {
-        let parts = vec![
+        vec![
             "## 원본 텍스트".to_string(),
             source_input.to_string(),
-            "\n## 등장인물 (Phase 1 결과)".to_string(),
+            "\n## 세계관 (Phase 1 결과)".to_string(),
+            world_context.to_string(),
+            "\n## 등장인물 (Phase 2 결과)".to_string(),
             characters_context.to_string(),
-            "\n위 등장인물과 스토리를 바탕으로 타임라인 구조를 JSON으로 출력해주세요.".to_string(),
-        ];
-
-        parts.join("\n")
+            "\n위 세계관과 등장인물을 바탕으로 타임라인 구조를 출력해주세요.".to_string(),
+        ].join("\n")
     }
 
     /// Build prompts for scene summary generation.
@@ -601,47 +635,72 @@ mod tests {
 
     // ---- structure prompts ----
 
+    // ---- world phase prompts ----
+
+    #[test]
+    fn world_system_prompt_ko_contains_role() {
+        let prompt = PromptBuilder::world_system_prompt("ko");
+        assert!(prompt.contains("세계관"));
+    }
+
+    #[test]
+    fn world_system_prompt_ko_instructs_korean() {
+        let prompt = PromptBuilder::world_system_prompt("ko");
+        assert!(prompt.contains("한국어"));
+    }
+
+    #[test]
+    fn world_system_prompt_en_instructs_english() {
+        let prompt = PromptBuilder::world_system_prompt("en");
+        assert!(prompt.contains("English"));
+    }
+
+    #[test]
+    fn world_system_prompt_has_schema_without_characters() {
+        let prompt = PromptBuilder::world_system_prompt("ko");
+        assert!(prompt.contains("title"));
+        assert!(prompt.contains("genre"));
+        assert!(!prompt.contains("characters"));
+        assert!(!prompt.contains("tracks"));
+    }
+
+    #[test]
+    fn world_user_prompt_contains_source() {
+        let prompt = PromptBuilder::world_user_prompt("테스트 스토리", None);
+        assert!(prompt.contains("테스트 스토리"));
+    }
+
+    #[test]
+    fn world_user_prompt_with_clarifications() {
+        let answers = vec!["답변1".to_string()];
+        let prompt = PromptBuilder::world_user_prompt("텍스트", Some(&answers));
+        assert!(prompt.contains("답변1"));
+    }
+
     // ---- characters phase prompts ----
 
     #[test]
     fn characters_system_prompt_ko_contains_role() {
         let prompt = PromptBuilder::characters_system_prompt("ko");
-        assert!(prompt.contains("구조 분석"));
         assert!(prompt.contains("등장인물"));
     }
 
     #[test]
-    fn characters_system_prompt_ko_instructs_korean() {
-        let prompt = PromptBuilder::characters_system_prompt("ko");
-        assert!(prompt.contains("한국어"));
-    }
-
-    #[test]
-    fn characters_system_prompt_en_instructs_english() {
-        let prompt = PromptBuilder::characters_system_prompt("en");
-        assert!(prompt.contains("English"));
-    }
-
-    #[test]
-    fn characters_system_prompt_has_json_schema() {
+    fn characters_system_prompt_has_schema_without_tracks() {
         let prompt = PromptBuilder::characters_system_prompt("ko");
         assert!(prompt.contains("characters"));
         assert!(prompt.contains("relationships"));
-        // Should NOT contain tracks (that's Phase 2)
         assert!(!prompt.contains("tracks"));
+        // Should NOT contain title/genre (that's Phase 1 World)
+        assert!(!prompt.contains("\"title\""));
     }
 
     #[test]
-    fn characters_user_prompt_contains_source() {
-        let prompt = PromptBuilder::characters_user_prompt("테스트 스토리", None);
-        assert!(prompt.contains("테스트 스토리"));
-    }
-
-    #[test]
-    fn characters_user_prompt_with_clarifications() {
-        let answers = vec!["답변1".to_string()];
-        let prompt = PromptBuilder::characters_user_prompt("텍스트", Some(&answers));
-        assert!(prompt.contains("답변1"));
+    fn characters_user_prompt_contains_world_context() {
+        let prompt = PromptBuilder::characters_user_prompt("스토리", "{\"title\": \"test\"}");
+        assert!(prompt.contains("스토리"));
+        assert!(prompt.contains("세계관"));
+        assert!(prompt.contains("test"));
     }
 
     // ---- timeline phase prompts ----
@@ -660,10 +719,11 @@ mod tests {
     }
 
     #[test]
-    fn timeline_user_prompt_contains_source_and_context() {
-        let prompt = PromptBuilder::timeline_user_prompt("스토리", "{\"characters\": []}");
+    fn timeline_user_prompt_contains_both_contexts() {
+        let prompt = PromptBuilder::timeline_user_prompt("스토리", "{\"title\":\"W\"}", "{\"characters\":[]}");
         assert!(prompt.contains("스토리"));
-        assert!(prompt.contains("characters"));
+        assert!(prompt.contains("세계관"));
+        assert!(prompt.contains("등장인물"));
     }
 
     // ---- structure prompts (legacy, kept for backward compat) ----
