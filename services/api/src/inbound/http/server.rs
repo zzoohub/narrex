@@ -6,7 +6,8 @@ use axum::Router;
 use sqlx::PgPool;
 use tokio::net::TcpListener;
 use tokio::signal;
-use tower_http::cors::{AllowHeaders, AllowMethods, CorsLayer};
+use axum::http::{header, Method};
+use tower_http::cors::CorsLayer;
 use tower_http::timeout::TimeoutLayer;
 use tower_http::trace::TraceLayer;
 use tracing::info;
@@ -156,8 +157,18 @@ fn build_router(state: AppState, cors_origin: &str) -> Router {
                 .parse::<axum::http::HeaderValue>()
                 .expect("valid CORS origin"),
         )
-        .allow_methods(AllowMethods::any())
-        .allow_headers(AllowHeaders::any())
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PATCH,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
+        .allow_headers([
+            header::AUTHORIZATION,
+            header::CONTENT_TYPE,
+            header::ACCEPT,
+        ])
         .allow_credentials(true);
 
     // ---- Public routes (no auth) ----

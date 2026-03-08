@@ -10,6 +10,7 @@ path = "src/main.rs"
 [dependencies]
 narrex-llm = { path = "../crates/llm" }
 anyhow = "1"
+dotenvy = "0.15"
 async-stream = "0.3"
 async-trait = "0.1"
 axum = { version = "0.8", features = ["macros", "multipart"] }
