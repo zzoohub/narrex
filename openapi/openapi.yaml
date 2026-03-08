@@ -170,6 +170,64 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+    delete:
+      operationId: deleteAccount
+      tags: [auth]
+      summary: Delete current user's account and all data
+      description: |
+        Permanently deletes the authenticated user's account and all associated
+        data (projects, scenes, characters, drafts, generation logs).
+        Clears the refresh token cookie. Irreversible.
+      responses:
+        '204':
+          description: Account deleted
+          headers:
+            Set-Cookie:
+              description: Clears the refresh token cookie
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/auth/me/avatar:
+    post:
+      operationId: uploadAvatar
+      tags: [auth]
+      summary: Upload profile avatar image
+      description: |
+        Accepts a multipart file upload (field name: `avatar`).
+        Supported formats: JPEG, PNG, WebP. Max size: 2MB.
+        The image is stored in R2 and the user's profileImageUrl is updated.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [avatar]
+              properties:
+                avatar:
+                  type: string
+                  format: binary
+                  description: Image file (JPEG, PNG, or WebP, max 2MB)
+      responses:
+        '200':
+          description: Updated user with new avatar URL
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   /v1/me/costs:
     get:
       operationId: getUserCosts
@@ -1276,7 +1334,7 @@ components:
 
     User:
       type: object
-      required: [id, email, displayName, createdAt, updatedAt]
+      required: [id, email, displayName, themePreference, languagePreference, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -1293,6 +1351,16 @@ components:
             - string
             - 'null'
           format: uri
+        themePreference:
+          type: string
+          enum: [system, light, dark]
+          default: system
+          description: User's theme preference
+        languagePreference:
+          type: string
+          enum: [ko, en]
+          default: ko
+          description: User's language preference
         createdAt:
           type: string
           format: date-time
@@ -1314,6 +1382,12 @@ components:
             - string
             - 'null'
           format: uri
+        themePreference:
+          type: string
+          enum: [system, light, dark]
+        languagePreference:
+          type: string
+          enum: [ko, en]
 
     AuthTokens:
       type: object

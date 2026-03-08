@@ -10,9 +10,9 @@ use tracing::warn;
 
 use super::error::AiError;
 use super::models::{
-    CostSummary, CreateDraftParams, CreateManualDraft, Draft, DraftSource, DraftSummary,
-    EditDraftRequest, GenerationLog, GenerationStatus, GenerationType, SceneSummary,
-    StructuredOutput,
+    CharactersOutput, CostSummary, CreateDraftParams, CreateManualDraft, Draft, DraftSource,
+    DraftSummary, EditDraftRequest, GenerationLog, GenerationStatus, GenerationType,
+    SceneSummary, StructuredOutput, TimelineOutput,
 };
 use super::ports::{
     ContextAssemblyRepository, DraftRepository, GenerationLogRepository, SceneSummaryRepository,
@@ -440,10 +440,79 @@ where
         ))
     }
 
+    /// Stream Phase 1: characters + project metadata.
+    /// Returns an LLM token stream for the caller to consume.
+    pub async fn stream_characters(
+        &self,
+        source_input: &str,
+        clarification_answers: Option<&[String]>,
+        locale: &str,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>, AiError> {
+        let system = PromptBuilder::characters_system_prompt(locale);
+        let user = PromptBuilder::characters_user_prompt(source_input, clarification_answers);
+        let req = GenerateRequest {
+            system_prompt: system,
+            user_prompt: user,
+            max_tokens: Some(4096),
+            temperature: Some(0.7),
+        };
+        self.llm
+            .generate_stream(req)
+            .await
+            .map_err(|e| AiError::GenerationFailed(e.to_string()))
+    }
+
+    /// Stream Phase 2: timeline tracks + scenes.
+    /// `characters_context` is the raw JSON from Phase 1 for context chaining.
+    pub async fn stream_timeline(
+        &self,
+        source_input: &str,
+        characters_context: &str,
+        locale: &str,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>, AiError> {
+        let system = PromptBuilder::timeline_system_prompt(locale);
+        let user = PromptBuilder::timeline_user_prompt(source_input, characters_context);
+        let req = GenerateRequest {
+            system_prompt: system,
+            user_prompt: user,
+            max_tokens: Some(4096),
+            temperature: Some(0.7),
+        };
+        self.llm
+            .generate_stream(req)
+            .await
+            .map_err(|e| AiError::GenerationFailed(e.to_string()))
+    }
+
     /// Log a generation event.
     pub async fn log_generation(&self, log: &GenerationLog) -> Result<(), AiError> {
         self.log_repo.create(log).await
     }
+}
+
+/// Parse raw LLM text into CharactersOutput (Phase 1).
+pub fn parse_characters_output(raw_text: &str) -> Result<CharactersOutput, AiError> {
+    let json = extract_json(raw_text).ok_or_else(|| {
+        warn!(raw_preview = %raw_text.chars().take(200).collect::<String>(), "characters: no valid JSON");
+        AiError::GenerationFailed("Characters: LLM did not return valid JSON".into())
+    })?;
+    serde_json::from_str(&json)
+        .map_err(|e| AiError::GenerationFailed(format!("Characters: parse error: {e}")))
+}
+
+/// Parse raw LLM text into TimelineOutput (Phase 2).
+pub fn parse_timeline_output(raw_text: &str) -> Result<TimelineOutput, AiError> {
+    let json = extract_json(raw_text).ok_or_else(|| {
+        warn!(raw_preview = %raw_text.chars().take(200).collect::<String>(), "timeline: no valid JSON");
+        AiError::GenerationFailed("Timeline: LLM did not return valid JSON".into())
+    })?;
+    serde_json::from_str(&json)
+        .map_err(|e| AiError::GenerationFailed(format!("Timeline: parse error: {e}")))
+}
+
+/// Public accessor for extract_json (used by handler for context chaining).
+pub fn extract_json_from_raw(text: &str) -> Option<String> {
+    extract_json(text)
 }
 
 /// Extract JSON from LLM response text, handling optional markdown fences
@@ -709,6 +778,92 @@ mod tests {
         }
     }
 
+    // ---- parse_characters_output tests ----
+
+    #[test]
+    fn parse_characters_output_success() {
+        let raw = r#"{"title": "테스트", "genre": "SF", "characters": [{"name": "A"}], "relationships": []}"#;
+        let output = parse_characters_output(raw).unwrap();
+        assert_eq!(output.title, "테스트");
+        assert_eq!(output.characters.len(), 1);
+    }
+
+    #[test]
+    fn parse_characters_output_with_fences() {
+        let raw = "결과:\n```json\n{\"title\": \"Fenced\", \"characters\": [], \"relationships\": []}\n```";
+        let output = parse_characters_output(raw).unwrap();
+        assert_eq!(output.title, "Fenced");
+    }
+
+    #[test]
+    fn parse_characters_output_invalid_json() {
+        let err = parse_characters_output("not json").unwrap_err();
+        match err {
+            AiError::GenerationFailed(msg) => assert!(msg.contains("valid JSON")),
+            other => panic!("expected GenerationFailed, got: {other:?}"),
+        }
+    }
+
+    // ---- parse_timeline_output tests ----
+
+    #[test]
+    fn parse_timeline_output_success() {
+        let raw = r#"{"tracks": [{"label": "메인", "scenes": [{"title": "시작"}]}]}"#;
+        let output = parse_timeline_output(raw).unwrap();
+        assert_eq!(output.tracks.len(), 1);
+        assert_eq!(output.tracks[0].scenes[0].title, "시작");
+    }
+
+    #[test]
+    fn parse_timeline_output_invalid_json() {
+        let err = parse_timeline_output("garbage").unwrap_err();
+        match err {
+            AiError::GenerationFailed(msg) => assert!(msg.contains("valid JSON")),
+            other => panic!("expected GenerationFailed, got: {other:?}"),
+        }
+    }
+
+    // ---- stream_characters / stream_timeline tests ----
+
+    #[tokio::test]
+    async fn stream_characters_calls_generate_stream() {
+        let mock_llm = MockStreamingLlmProvider::new(vec![
+            narrex_llm::StreamChunk { text: "{\"title\":\"T\",".into(), done: false, usage: None },
+            narrex_llm::StreamChunk { text: "\"characters\":[],\"relationships\":[]}".into(), done: false, usage: None },
+            narrex_llm::StreamChunk { text: String::new(), done: true, usage: Some(narrex_llm::StreamUsage {
+                model: "m".into(), provider: "p".into(), token_count_input: 10, token_count_output: 20,
+            })},
+        ]);
+        let svc = build_test_ai_service(mock_llm);
+
+        let stream = svc.stream_characters("test input", None, "ko").await.unwrap();
+        let chunks: Vec<_> = {
+            use futures::StreamExt;
+            Box::pin(stream).collect::<Vec<_>>().await
+        };
+        assert_eq!(chunks.len(), 3);
+        assert!(!chunks[0].as_ref().unwrap().done);
+        assert!(chunks[2].as_ref().unwrap().done);
+    }
+
+    #[tokio::test]
+    async fn stream_timeline_includes_character_context() {
+        let mock_llm = MockStreamingLlmProvider::new(vec![
+            narrex_llm::StreamChunk { text: "{\"tracks\":[]}".into(), done: false, usage: None },
+            narrex_llm::StreamChunk { text: String::new(), done: true, usage: Some(narrex_llm::StreamUsage {
+                model: "m".into(), provider: "p".into(), token_count_input: 10, token_count_output: 20,
+            })},
+        ]);
+        let svc = build_test_ai_service(mock_llm);
+
+        let stream = svc.stream_timeline("input", "{\"characters\":[]}", "ko").await.unwrap();
+        let chunks: Vec<_> = {
+            use futures::StreamExt;
+            Box::pin(stream).collect::<Vec<_>>().await
+        };
+        assert_eq!(chunks.len(), 2);
+    }
+
     // ---- log_generation tests ----
 
     #[tokio::test]
@@ -780,6 +935,38 @@ mod tests {
 
         fn name(&self) -> &str {
             "mock"
+        }
+    }
+
+    /// Mock LLM that supports generate_stream, yielding pre-defined chunks.
+    #[derive(Clone)]
+    struct MockStreamingLlmProvider {
+        chunks: Vec<narrex_llm::StreamChunk>,
+    }
+
+    impl MockStreamingLlmProvider {
+        fn new(chunks: Vec<narrex_llm::StreamChunk>) -> Arc<Self> {
+            Arc::new(Self { chunks })
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl narrex_llm::LlmProvider for MockStreamingLlmProvider {
+        async fn generate(&self, _req: narrex_llm::GenerateRequest) -> Result<narrex_llm::GenerateResponse, narrex_llm::LlmError> {
+            Err(narrex_llm::LlmError::Unavailable("use generate_stream".into()))
+        }
+
+        async fn generate_stream(
+            &self,
+            _req: narrex_llm::GenerateRequest,
+        ) -> Result<Pin<Box<dyn futures::Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>, narrex_llm::LlmError> {
+            let chunks = self.chunks.clone();
+            let stream = futures::stream::iter(chunks.into_iter().map(Ok));
+            Ok(Box::pin(stream))
+        }
+
+        fn name(&self) -> &str {
+            "mock-streaming"
         }
     }
 

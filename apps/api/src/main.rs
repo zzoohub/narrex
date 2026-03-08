@@ -11,6 +11,7 @@ use narrex_api::domain::timeline::service::TimelineServiceImpl;
 use narrex_api::inbound::http::server::{AppState, HttpServer};
 use narrex_api::outbound::jwt::JwtTokenService;
 use narrex_api::outbound::postgres::Postgres;
+use narrex_api::outbound::storage::R2Storage;
 
 use narrex_llm::{CfWorkersAiProvider, GeminiFlashProvider, LlmGateway};
 
@@ -46,8 +47,17 @@ async fn main() -> anyhow::Result<()> {
     // 5. Create JwtTokenService.
     let token_service = JwtTokenService::new(&config.jwt_secret);
 
-    // 6. Assemble domain services with adapters.
-    let auth_service = AuthServiceImpl::new(postgres.clone(), token_service);
+    // 6. Create R2 storage adapter.
+    let r2_storage = R2Storage::new(
+        &config.r2_account_id,
+        &config.r2_access_key_id,
+        &config.r2_secret_access_key,
+        &config.r2_bucket_name,
+        &config.r2_public_url,
+    );
+
+    // 7. Assemble domain services with adapters.
+    let auth_service = AuthServiceImpl::new(postgres.clone(), token_service, r2_storage);
     let project_service = ProjectServiceImpl::new(postgres.clone());
     let timeline_service = TimelineServiceImpl::new(
         postgres.clone(),
@@ -65,7 +75,7 @@ async fn main() -> anyhow::Result<()> {
         llm,
     );
 
-    // 7. Build application state.
+    // 8. Build application state.
     let state = AppState::new(
         auth_service,
         project_service,
@@ -76,7 +86,7 @@ async fn main() -> anyhow::Result<()> {
         config,
     );
 
-    // 8. Create and run HTTP server with graceful shutdown.
+    // 9. Create and run HTTP server with graceful shutdown.
     let server = HttpServer::new(state).await?;
     server.run().await
 }

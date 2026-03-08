@@ -241,6 +241,99 @@ impl PromptBuilder {
         parts.join("\n")
     }
 
+    /// Phase 1 system prompt: extract characters + project meta.
+    pub fn characters_system_prompt(locale: &str) -> String {
+        let lang_instruction = match locale {
+            "ko" => "- 모든 텍스트 값(title, personality 등)은 반드시 한국어로 작성",
+            _ => "- All text values (title, personality, etc.) MUST be written in English",
+        };
+
+        format!(
+            "당신은 이야기 구조 분석 전문가입니다. \
+             사용자의 이야기 아이디어에서 등장인물과 관계를 추출합니다.\n\n\
+             ## 규칙\n\
+             - 유효한 JSON만 출력 (마크다운, 설명 없이)\n\
+             {lang_instruction}\n\
+             - JSON 스키마: {{ \"title\": string, \"genre\": string|null, \"theme\": string|null, \
+               \"era_location\": string|null, \
+               \"pov\": \"first_person\"|\"third_limited\"|\"third_omniscient\"|null, \
+               \"tone\": string|null, \
+               \"characters\": [{{\"name\": string, \"personality\": string|null, \
+               \"appearance\": string|null, \"secrets\": string|null, \"motivation\": string|null}}], \
+               \"relationships\": [{{\"character_a\": string, \"character_b\": string, \
+               \"label\": string, \"direction\": \"bidirectional\"|\"a_to_b\"|\"b_to_a\"|null}}] }}\n\
+             - 이야기에 맞춰 3-8명의 등장인물 생성\n\
+             - 등장인물 간 핵심 관계를 모두 추출\n\
+             - 텍스트에서 장르, 주제, 시대/배경, 시점, 톤을 추론"
+        )
+    }
+
+    /// Phase 1 user prompt: source text + optional clarifications.
+    pub fn characters_user_prompt(
+        source_input: &str,
+        clarification_answers: Option<&[String]>,
+    ) -> String {
+        let mut parts = vec![
+            "## 원본 텍스트".to_string(),
+            source_input.to_string(),
+        ];
+
+        if let Some(answers) = clarification_answers {
+            if !answers.is_empty() {
+                parts.push("\n## 추가 답변".to_string());
+                for (i, answer) in answers.iter().enumerate() {
+                    parts.push(format!("{}. {}", i + 1, answer));
+                }
+            }
+        }
+
+        parts.push(
+            "\n위 텍스트에서 등장인물과 관계를 분석하여 JSON을 출력해주세요.".to_string(),
+        );
+
+        parts.join("\n")
+    }
+
+    /// Phase 2 system prompt: create timeline tracks + scenes.
+    pub fn timeline_system_prompt(locale: &str) -> String {
+        let lang_instruction = match locale {
+            "ko" => "- 모든 텍스트 값(title, plot_summary 등)은 반드시 한국어로 작성",
+            _ => "- All text values (title, plot_summary, etc.) MUST be written in English",
+        };
+
+        format!(
+            "당신은 이야기 타임라인 구성 전문가입니다. \
+             주어진 등장인물과 이야기를 바탕으로 타임라인을 구성합니다.\n\n\
+             ## 규칙\n\
+             - 유효한 JSON만 출력 (마크다운, 설명 없이)\n\
+             {lang_instruction}\n\
+             - JSON 스키마: {{ \"tracks\": [{{\"label\": string|null, \
+               \"scenes\": [{{\"title\": string, \"plot_summary\": string|null, \
+               \"location\": string|null, \"mood_tags\": [string]|null, \
+               \"characters\": [string]|null}}]}}] }}\n\
+             - 1-3개의 트랙(병렬 스토리라인) 생성\n\
+             - 트랙당 3-10개의 장면 생성\n\
+             - characters 배열에는 등장인물 이름 목록 포함\n\
+             - 앞서 제공된 등장인물 정보와 일치하는 이름 사용"
+        )
+    }
+
+    /// Phase 2 user prompt: source text + characters context from Phase 1.
+    pub fn timeline_user_prompt(
+        source_input: &str,
+        characters_context: &str,
+    ) -> String {
+        let parts = vec![
+            "## 원본 텍스트".to_string(),
+            source_input.to_string(),
+            "\n## 등장인물 (Phase 1 결과)".to_string(),
+            characters_context.to_string(),
+            "\n위 등장인물과 스토리를 바탕으로 타임라인 구조를 JSON으로 출력해주세요.".to_string(),
+        ];
+
+        parts.join("\n")
+    }
+
     /// Build prompts for scene summary generation.
     pub fn summary_system_prompt() -> String {
         "당신은 소설 장면 요약 전문가입니다. \
@@ -501,6 +594,73 @@ mod tests {
     }
 
     // ---- structure prompts ----
+
+    // ---- characters phase prompts ----
+
+    #[test]
+    fn characters_system_prompt_ko_contains_role() {
+        let prompt = PromptBuilder::characters_system_prompt("ko");
+        assert!(prompt.contains("구조 분석"));
+        assert!(prompt.contains("등장인물"));
+    }
+
+    #[test]
+    fn characters_system_prompt_ko_instructs_korean() {
+        let prompt = PromptBuilder::characters_system_prompt("ko");
+        assert!(prompt.contains("한국어"));
+    }
+
+    #[test]
+    fn characters_system_prompt_en_instructs_english() {
+        let prompt = PromptBuilder::characters_system_prompt("en");
+        assert!(prompt.contains("English"));
+    }
+
+    #[test]
+    fn characters_system_prompt_has_json_schema() {
+        let prompt = PromptBuilder::characters_system_prompt("ko");
+        assert!(prompt.contains("characters"));
+        assert!(prompt.contains("relationships"));
+        // Should NOT contain tracks (that's Phase 2)
+        assert!(!prompt.contains("tracks"));
+    }
+
+    #[test]
+    fn characters_user_prompt_contains_source() {
+        let prompt = PromptBuilder::characters_user_prompt("테스트 스토리", None);
+        assert!(prompt.contains("테스트 스토리"));
+    }
+
+    #[test]
+    fn characters_user_prompt_with_clarifications() {
+        let answers = vec!["답변1".to_string()];
+        let prompt = PromptBuilder::characters_user_prompt("텍스트", Some(&answers));
+        assert!(prompt.contains("답변1"));
+    }
+
+    // ---- timeline phase prompts ----
+
+    #[test]
+    fn timeline_system_prompt_ko_contains_role() {
+        let prompt = PromptBuilder::timeline_system_prompt("ko");
+        assert!(prompt.contains("타임라인"));
+    }
+
+    #[test]
+    fn timeline_system_prompt_has_tracks_schema() {
+        let prompt = PromptBuilder::timeline_system_prompt("ko");
+        assert!(prompt.contains("tracks"));
+        assert!(prompt.contains("scenes"));
+    }
+
+    #[test]
+    fn timeline_user_prompt_contains_source_and_context() {
+        let prompt = PromptBuilder::timeline_user_prompt("스토리", "{\"characters\": []}");
+        assert!(prompt.contains("스토리"));
+        assert!(prompt.contains("characters"));
+    }
+
+    // ---- structure prompts (legacy, kept for backward compat) ----
 
     #[test]
     fn structure_system_prompt_ko_contains_analyst_role() {

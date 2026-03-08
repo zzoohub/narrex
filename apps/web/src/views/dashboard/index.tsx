@@ -11,6 +11,8 @@ import {
   IconMoon,
   IconSun,
   IconTrash,
+  IconSettings,
+  IconLogOut,
   ContextMenu,
   Separator,
   Dialog,
@@ -145,14 +147,24 @@ export function DashboardView() {
                     <p class="text-xs text-fg-muted truncate">{user()?.email}</p>
                   </div>
                   <div class="my-1 mx-2 h-px bg-border-default" />
+                  <Link
+                    to="/settings"
+                    class="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-fg hover:bg-surface transition-colors cursor-pointer"
+                    onClick={() => setProfileOpen(false)}
+                  >
+                    <IconSettings size={14} />
+                    {t('nav.settings')}
+                  </Link>
+                  <div class="my-1 mx-2 h-px bg-border-default" />
                   <button
                     type="button"
                     class="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-fg hover:bg-surface transition-colors cursor-pointer"
                     onClick={() => {
                       setProfileOpen(false)
-                      logout()
+                      void logout()
                     }}
                   >
+                    <IconLogOut size={14} />
                     {t('nav.logout')}
                   </button>
                 </div>

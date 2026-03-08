@@ -14,6 +14,11 @@ pub struct Config {
     pub gemini_api_key: String,
     pub web_app_url: String,
     pub cors_origin: String,
+    pub r2_account_id: String,
+    pub r2_access_key_id: String,
+    pub r2_secret_access_key: String,
+    pub r2_bucket_name: String,
+    pub r2_public_url: String,
 }
 
 impl Config {
@@ -52,6 +57,13 @@ impl Config {
                 .unwrap_or_else(|_| "http://localhost:3000".into()),
             cors_origin: env::var("CORS_ORIGIN")
                 .unwrap_or_else(|_| "http://localhost:3000".into()),
+            r2_account_id: env::var("R2_ACCOUNT_ID").unwrap_or_default(),
+            r2_access_key_id: env::var("R2_ACCESS_KEY_ID").unwrap_or_default(),
+            r2_secret_access_key: env::var("R2_SECRET_ACCESS_KEY").unwrap_or_default(),
+            r2_bucket_name: env::var("R2_BUCKET_NAME")
+                .unwrap_or_else(|_| "narrex-assets".into()),
+            r2_public_url: env::var("R2_PUBLIC_URL")
+                .unwrap_or_else(|_| "http://localhost:9000".into()),
         })
     }
 }

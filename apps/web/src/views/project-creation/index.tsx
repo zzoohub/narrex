@@ -117,7 +117,11 @@ const phaseHeadingKeys = [
   'creation.processing.phase.world',
 ] as const
 
-const ESTIMATED_TOKENS_PER_PHASE = 50
+/** Asymptotic progress: fast start, slows approaching max. */
+export function calcProgress(elapsedSecs: number, completed: boolean, max = 95, tau = 15): number {
+  if (completed) return 100
+  return max * (1 - Math.exp(-elapsedSecs / tau))
+}
 
 function formatElapsed(secs: number): string {
   const m = Math.floor(secs / 60)
@@ -187,16 +191,7 @@ export function ProjectCreationView() {
   let completionPauseTimer: ReturnType<typeof setTimeout> | null = null
   let autoNavTimer: ReturnType<typeof setTimeout> | null = null
 
-  const progress = () => {
-    if (completionData()) return 100
-    const completed = completedSteps()
-    const base = completed * 33.3
-    let inPhase = 0
-    if (activePhase() >= 0 && activePhase() === completed) {
-      inPhase = Math.min(phaseTokenCount() / ESTIMATED_TOKENS_PER_PHASE, 0.95) * 33.3
-    }
-    return Math.max(5, Math.min(base + inPhase, 99.9))
-  }
+  const progress = () => calcProgress(elapsedSecs(), !!completionData())
 
   onCleanup(() => {
     if (abortStream) abortStream()

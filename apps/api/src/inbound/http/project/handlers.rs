@@ -154,6 +154,9 @@ pub async fn get_workspace(
 }
 
 /// `POST /v1/projects/structure` — AI-powered project structuring (SSE).
+///
+/// Two-phase streaming: characters → timeline, each streamed token-by-token
+/// with Phase 1 output chained as context into Phase 2.
 pub async fn structure_project(
     State(state): State<AppState>,
     auth: AuthUser,
@@ -169,47 +172,81 @@ pub async fn structure_project(
 
     let stream = async_stream::stream! {
         use std::time::Instant;
-        let start = Instant::now();
+        use futures::StreamExt;
+        use crate::domain::ai::service::{parse_characters_output, parse_timeline_output};
 
-        // 1. Progress: analyzing
+        let start = Instant::now();
+        let mut total_model = String::new();
+        let mut total_provider = String::new();
+        let mut total_tokens_in: u32 = 0;
+        let mut total_tokens_out: u32 = 0;
+
+        // ── Phase 1: Characters ─────────────────────────────────────
         yield Ok(Event::default()
             .event("progress")
             .data(serde_json::json!({"message": "등장인물과 관계를 찾는 중"}).to_string()));
 
-        // 2. Call LLM
         let answers_ref = clarification_answers.as_deref();
-        let result = state.ai_service().generate_structure(&source_input, answers_ref, &locale).await;
-
-        let (output, model, provider, tokens_in, tokens_out) = match result {
-            Ok(v) => {
-                tracing::info!(model = %v.1, provider = %v.2, tokens_in = v.3, tokens_out = v.4, "structure_project: LLM succeeded");
-                v
-            }
+        let char_stream = match state.ai_service().stream_characters(&source_input, answers_ref, &locale).await {
+            Ok(s) => s,
             Err(e) => {
-                tracing::error!(error = %e, "structure_project: LLM failed");
-                yield Ok(Event::default()
-                    .event("error")
+                tracing::error!(error = %e, "structure_project: characters stream failed");
+                yield Ok(Event::default().event("error")
                     .data(serde_json::json!({"message": e.to_string()}).to_string()));
                 return;
             }
         };
 
-        // 3. Progress: creating project
-        yield Ok(Event::default()
-            .event("progress")
-            .data(serde_json::json!({"message": "줄거리를 타임라인으로 정리하는 중"}).to_string()));
+        let mut char_buffer = String::new();
+        let mut char_stream = Box::pin(char_stream);
+        while let Some(result) = char_stream.next().await {
+            match result {
+                Ok(chunk) => {
+                    if chunk.done {
+                        if let Some(ref usage) = chunk.usage {
+                            total_model = usage.model.clone();
+                            total_provider = usage.provider.clone();
+                            total_tokens_in += usage.token_count_input;
+                            total_tokens_out += usage.token_count_output;
+                        }
+                    } else {
+                        char_buffer.push_str(&chunk.text);
+                        yield Ok(Event::default().event("token")
+                            .data(serde_json::json!({"text": chunk.text}).to_string()));
+                    }
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, "structure_project: characters stream error");
+                    yield Ok(Event::default().event("error")
+                        .data(serde_json::json!({"message": e.to_string()}).to_string()));
+                    return;
+                }
+            }
+        }
 
-        // 4. Create project
-        let pov = output.pov.as_deref().and_then(|s| s.parse().ok());
+        tracing::info!(model = %total_model, provider = %total_provider, "structure_project: Phase 1 done");
+
+        let char_output = match parse_characters_output(&char_buffer) {
+            Ok(o) => o,
+            Err(e) => {
+                tracing::error!(error = %e, "structure_project: characters parse failed");
+                yield Ok(Event::default().event("error")
+                    .data(serde_json::json!({"message": e.to_string()}).to_string()));
+                return;
+            }
+        };
+
+        // Create project
+        let pov = char_output.pov.as_deref().and_then(|s| s.parse().ok());
         let project = Project {
             id: uuid::Uuid::new_v4(),
             user_id: auth.user_id,
-            title: output.title.clone(),
-            genre: output.genre.clone(),
-            theme: output.theme.clone(),
-            era_location: output.era_location.clone(),
+            title: char_output.title.clone(),
+            genre: char_output.genre.clone(),
+            theme: char_output.theme.clone(),
+            era_location: char_output.era_location.clone(),
             pov,
-            tone: output.tone.clone(),
+            tone: char_output.tone.clone(),
             source_type: Some(SourceType::FreeText),
             source_input: Some(source_input.clone()),
             created_at: chrono::Utc::now(),
@@ -219,17 +256,16 @@ pub async fn structure_project(
         let project = match state.project_service().create_project(&project, auth.user_id).await {
             Ok(p) => p,
             Err(e) => {
-                yield Ok(Event::default()
-                    .event("error")
+                yield Ok(Event::default().event("error")
                     .data(serde_json::json!({"message": e.to_string()}).to_string()));
                 return;
             }
         };
         let project_id = project.id;
 
-        // 5. Create characters (collect name -> id mapping)
+        // Create characters
         let mut char_name_to_id = std::collections::HashMap::new();
-        for ch in &output.characters {
+        for ch in &char_output.characters {
             let input = CreateCharacter {
                 name: ch.name.clone(),
                 personality: ch.personality.clone(),
@@ -242,25 +278,21 @@ pub async fn structure_project(
             };
             match state.character_service().create_character(project_id, &input).await {
                 Ok(created) => { char_name_to_id.insert(ch.name.clone(), created.id); }
-                Err(e) => {
-                    tracing::warn!("failed to create character {}: {e}", ch.name);
-                }
+                Err(e) => { tracing::warn!("failed to create character {}: {e}", ch.name); }
             }
         }
 
-        // 6. Create relationships
-        for rel in &output.relationships {
+        // Create relationships
+        for rel in &char_output.relationships {
             let a_id = char_name_to_id.get(&rel.character_a);
             let b_id = char_name_to_id.get(&rel.character_b);
             if let (Some(&a), Some(&b)) = (a_id, b_id) {
-                // Enforce a < b ordering
                 let (ordered_a, ordered_b, direction) = if a < b {
                     let dir = rel.direction.as_deref()
                         .and_then(|s| s.parse::<RelationshipDirection>().ok())
                         .unwrap_or(RelationshipDirection::Bidirectional);
                     (a, b, dir)
                 } else {
-                    // Flip a_to_b / b_to_a when swapping
                     let dir = match rel.direction.as_deref()
                         .and_then(|s| s.parse::<RelationshipDirection>().ok())
                         .unwrap_or(RelationshipDirection::Bidirectional)
@@ -282,13 +314,71 @@ pub async fn structure_project(
             }
         }
 
-        // 7. Progress: world building
+        // ── Phase 2: Timeline ───────────────────────────────────────
+        yield Ok(Event::default()
+            .event("progress")
+            .data(serde_json::json!({"message": "줄거리를 타임라인으로 정리하는 중"}).to_string()));
+
+        // Extract the JSON portion of Phase 1 output for context chaining
+        let char_json_for_context = crate::domain::ai::service::extract_json_from_raw(&char_buffer)
+            .unwrap_or_else(|| char_buffer.clone());
+
+        let timeline_stream = match state.ai_service().stream_timeline(&source_input, &char_json_for_context, &locale).await {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::error!(error = %e, "structure_project: timeline stream failed");
+                yield Ok(Event::default().event("error")
+                    .data(serde_json::json!({"message": e.to_string()}).to_string()));
+                return;
+            }
+        };
+
+        let mut timeline_buffer = String::new();
+        let mut timeline_stream = Box::pin(timeline_stream);
+        while let Some(result) = timeline_stream.next().await {
+            match result {
+                Ok(chunk) => {
+                    if chunk.done {
+                        if let Some(ref usage) = chunk.usage {
+                            total_model = usage.model.clone();
+                            total_provider = usage.provider.clone();
+                            total_tokens_in += usage.token_count_input;
+                            total_tokens_out += usage.token_count_output;
+                        }
+                    } else {
+                        timeline_buffer.push_str(&chunk.text);
+                        yield Ok(Event::default().event("token")
+                            .data(serde_json::json!({"text": chunk.text}).to_string()));
+                    }
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, "structure_project: timeline stream error");
+                    yield Ok(Event::default().event("error")
+                        .data(serde_json::json!({"message": e.to_string()}).to_string()));
+                    return;
+                }
+            }
+        }
+
+        tracing::info!(model = %total_model, provider = %total_provider, "structure_project: Phase 2 done");
+
+        let timeline_output = match parse_timeline_output(&timeline_buffer) {
+            Ok(o) => o,
+            Err(e) => {
+                tracing::error!(error = %e, "structure_project: timeline parse failed");
+                yield Ok(Event::default().event("error")
+                    .data(serde_json::json!({"message": e.to_string()}).to_string()));
+                return;
+            }
+        };
+
+        // ── Phase 3: Save world (DB operations) ─────────────────────
         yield Ok(Event::default()
             .event("progress")
             .data(serde_json::json!({"message": "작품 세계를 설정하는 중"}).to_string()));
 
-        // 8. Create tracks and scenes
-        for (track_idx, track_data) in output.tracks.iter().enumerate() {
+        // Create tracks and scenes
+        for (track_idx, track_data) in timeline_output.tracks.iter().enumerate() {
             let track_input = CreateTrack {
                 label: track_data.label.clone(),
                 position: Some((track_idx as f64 + 1.0) * 1024.0),
@@ -327,7 +417,7 @@ pub async fn structure_project(
             }
         }
 
-        // 9. Log generation
+        // Log generation
         let elapsed = start.elapsed().as_millis() as i32;
         let log = GenerationLog {
             id: uuid::Uuid::new_v4(),
@@ -336,31 +426,21 @@ pub async fn structure_project(
             scene_id: None,
             generation_type: GenerationType::Structuring,
             status: GenerationStatus::Success,
-            model: model.clone(),
-            provider: provider.clone(),
+            model: total_model.clone(),
+            provider: total_provider.clone(),
             duration_ms: elapsed,
-            token_count_input: tokens_in as i32,
-            token_count_output: tokens_out as i32,
+            token_count_input: total_tokens_in as i32,
+            token_count_output: total_tokens_out as i32,
             cost_usd: 0.0,
             error_message: None,
             created_at: chrono::Utc::now(),
         };
         let _ = state.ai_service().log_generation(&log).await;
 
-        // 10. Load workspace and send completed
-        match state.project_service().get_workspace(project_id, auth.user_id).await {
-            Ok(workspace) => {
-                let _ws_resp = WorkspaceResponse::from(&workspace);
-                yield Ok(Event::default()
-                    .event("completed")
-                    .data(serde_json::json!({"data": {"project": {"id": project_id}}}).to_string()));
-            }
-            Err(e) => {
-                yield Ok(Event::default()
-                    .event("error")
-                    .data(serde_json::json!({"message": e.to_string()}).to_string()));
-            }
-        }
+        // Send completed
+        yield Ok(Event::default()
+            .event("completed")
+            .data(serde_json::json!({"data": {"project": {"id": project_id}}}).to_string()));
     };
 
     Ok(Sse::new(stream))

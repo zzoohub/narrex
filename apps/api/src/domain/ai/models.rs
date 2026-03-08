@@ -305,6 +305,29 @@ pub struct StructuredScene {
     pub characters: Option<Vec<String>>,
 }
 
+/// Phase 1 output: project metadata + characters + relationships.
+#[derive(Debug, Clone, Deserialize)]
+pub struct CharactersOutput {
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub title: String,
+    pub genre: Option<String>,
+    pub theme: Option<String>,
+    pub era_location: Option<String>,
+    pub pov: Option<String>,
+    pub tone: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub characters: Vec<StructuredCharacter>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub relationships: Vec<StructuredRelationship>,
+}
+
+/// Phase 2 output: timeline tracks with scenes.
+#[derive(Debug, Clone, Deserialize)]
+pub struct TimelineOutput {
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub tracks: Vec<StructuredTrack>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -524,6 +547,52 @@ mod tests {
         assert!(output.characters[0].personality.is_none());
         assert_eq!(output.relationships[0].label, "");
         assert_eq!(output.tracks[0].scenes[0].title, "");
+    }
+
+    // --- CharactersOutput deserialization ---
+
+    #[test]
+    fn characters_output_deserialize() {
+        let json = r#"{
+            "title": "테스트",
+            "genre": "판타지",
+            "theme": "성장",
+            "characters": [{"name": "이수현", "personality": "용감한"}],
+            "relationships": [{"character_a": "이수현", "character_b": "박지훈", "label": "라이벌"}]
+        }"#;
+        let output: CharactersOutput = serde_json::from_str(json).unwrap();
+        assert_eq!(output.title, "테스트");
+        assert_eq!(output.genre.as_deref(), Some("판타지"));
+        assert_eq!(output.characters.len(), 1);
+        assert_eq!(output.relationships.len(), 1);
+    }
+
+    #[test]
+    fn characters_output_minimal() {
+        let json = r#"{"title": "최소", "characters": [], "relationships": []}"#;
+        let output: CharactersOutput = serde_json::from_str(json).unwrap();
+        assert_eq!(output.title, "최소");
+        assert!(output.characters.is_empty());
+    }
+
+    // --- TimelineOutput deserialization ---
+
+    #[test]
+    fn timeline_output_deserialize() {
+        let json = r#"{
+            "tracks": [{"label": "메인", "scenes": [{"title": "시작", "plot_summary": "첫 장면", "characters": ["이수현"]}]}]
+        }"#;
+        let output: TimelineOutput = serde_json::from_str(json).unwrap();
+        assert_eq!(output.tracks.len(), 1);
+        assert_eq!(output.tracks[0].scenes.len(), 1);
+        assert_eq!(output.tracks[0].scenes[0].title, "시작");
+    }
+
+    #[test]
+    fn timeline_output_empty() {
+        let json = r#"{"tracks": []}"#;
+        let output: TimelineOutput = serde_json::from_str(json).unwrap();
+        assert!(output.tracks.is_empty());
     }
 
     #[test]

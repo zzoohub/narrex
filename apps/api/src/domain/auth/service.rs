@@ -2,19 +2,21 @@ use uuid::Uuid;
 
 use super::error::AuthError;
 use super::models::{AuthTokens, GoogleUserInfo, UpdateProfile, User};
-use super::ports::{TokenService, UserRepository};
+use super::ports::{AvatarStorage, TokenService, UserRepository};
 
 #[derive(Clone)]
-pub struct AuthServiceImpl<U: UserRepository, T: TokenService> {
+pub struct AuthServiceImpl<U: UserRepository, T: TokenService, S: AvatarStorage> {
     user_repo: U,
     token_svc: T,
+    avatar_storage: S,
 }
 
-impl<U: UserRepository, T: TokenService> AuthServiceImpl<U, T> {
-    pub fn new(user_repo: U, token_svc: T) -> Self {
+impl<U: UserRepository, T: TokenService, S: AvatarStorage> AuthServiceImpl<U, T, S> {
+    pub fn new(user_repo: U, token_svc: T, avatar_storage: S) -> Self {
         Self {
             user_repo,
             token_svc,
+            avatar_storage,
         }
     }
 
@@ -22,8 +24,9 @@ impl<U: UserRepository, T: TokenService> AuthServiceImpl<U, T> {
     pub async fn google_callback(
         &self,
         google_info: GoogleUserInfo,
+        preferred_locale: &str,
     ) -> Result<(User, AuthTokens, String), AuthError> {
-        let user = self.user_repo.upsert_from_google(&google_info).await?;
+        let user = self.user_repo.upsert_from_google(&google_info, preferred_locale).await?;
         let tokens = self.token_svc.create_tokens(user.id).await?;
         let refresh_token = self.token_svc.create_refresh_token(user.id).await?;
         Ok((user, tokens, refresh_token))
@@ -75,13 +78,78 @@ impl<U: UserRepository, T: TokenService> AuthServiceImpl<U, T> {
             .ok_or(AuthError::UserNotFound)?;
         self.user_repo.delete_user(user_id).await
     }
+
+    /// Upload a profile avatar image and update the user's profile URL.
+    pub async fn upload_avatar(
+        &self,
+        user_id: Uuid,
+        content_type: &str,
+        data: Vec<u8>,
+    ) -> Result<User, AuthError> {
+        // Verify user exists.
+        self.user_repo
+            .find_by_id(user_id)
+            .await?
+            .ok_or(AuthError::UserNotFound)?;
+
+        // Validate size (2MB max).
+        if data.len() > 2 * 1024 * 1024 {
+            return Err(AuthError::InvalidInput("file too large (max 2MB)".into()));
+        }
+
+        // Upload to storage.
+        let url = self
+            .avatar_storage
+            .upload_avatar(user_id, content_type, data)
+            .await?;
+
+        // Update profile with new URL.
+        let update = UpdateProfile {
+            profile_image_url: Some(Some(url)),
+            ..Default::default()
+        };
+        self.user_repo.update_profile(user_id, &update).await
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::ports::AvatarStorage;
     use chrono::Utc;
     use std::sync::Mutex;
+
+    // -- Mock AvatarStorage --
+
+    #[derive(Clone)]
+    struct MockAvatarStorage {
+        should_fail: bool,
+    }
+
+    impl MockAvatarStorage {
+        fn new() -> Self {
+            Self { should_fail: false }
+        }
+        fn failing() -> Self {
+            Self { should_fail: true }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl AvatarStorage for MockAvatarStorage {
+        async fn upload_avatar(
+            &self,
+            user_id: Uuid,
+            _content_type: &str,
+            _data: Vec<u8>,
+        ) -> Result<String, AuthError> {
+            if self.should_fail {
+                Err(AuthError::Unknown(anyhow::anyhow!("upload failed")))
+            } else {
+                Ok(format!("https://assets.test/avatars/{user_id}.jpg"))
+            }
+        }
+    }
 
     // -- Mock UserRepository --
 
@@ -142,7 +210,7 @@ mod tests {
             Ok(None)
         }
 
-        async fn upsert_from_google(&self, _info: &GoogleUserInfo) -> Result<User, AuthError> {
+        async fn upsert_from_google(&self, _info: &GoogleUserInfo, _preferred_locale: &str) -> Result<User, AuthError> {
             let result = self.upsert_result.lock().unwrap().take();
             match result {
                 Some(r) => r,
@@ -234,7 +302,7 @@ mod tests {
         let user = make_user(user_id);
         let repo = MockUserRepo::with_user(user.clone());
         let token_svc = MockTokenSvc::new(user_id);
-        let svc = AuthServiceImpl::new(repo, token_svc);
+        let svc = AuthServiceImpl::new(repo, token_svc, MockAvatarStorage::new());
 
         let info = GoogleUserInfo {
             google_id: "google123".into(),
@@ -243,7 +311,7 @@ mod tests {
             picture: None,
         };
 
-        let (returned_user, tokens, refresh) = svc.google_callback(info).await.unwrap();
+        let (returned_user, tokens, refresh) = svc.google_callback(info, "ko").await.unwrap();
         assert_eq!(returned_user.id, user_id);
         assert!(tokens.access_token.contains(&user_id.to_string()));
         assert!(refresh.contains(&user_id.to_string()));
@@ -254,7 +322,7 @@ mod tests {
     async fn google_callback_upsert_fails() {
         let repo = MockUserRepo::failing(AuthError::OAuthFailed("bad code".into()));
         let token_svc = MockTokenSvc::new(Uuid::new_v4());
-        let svc = AuthServiceImpl::new(repo, token_svc);
+        let svc = AuthServiceImpl::new(repo, token_svc, MockAvatarStorage::new());
 
         let info = GoogleUserInfo {
             google_id: "g".into(),
@@ -263,7 +331,7 @@ mod tests {
             picture: None,
         };
 
-        let result = svc.google_callback(info).await;
+        let result = svc.google_callback(info, "en").await;
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), AuthError::OAuthFailed(_)));
     }
@@ -273,7 +341,7 @@ mod tests {
         let user_id = Uuid::new_v4();
         let repo = MockUserRepo::with_user(make_user(user_id));
         let token_svc = MockTokenSvc::new(user_id);
-        let svc = AuthServiceImpl::new(repo, token_svc);
+        let svc = AuthServiceImpl::new(repo, token_svc, MockAvatarStorage::new());
 
         let (tokens, refresh) = svc.refresh_tokens("old-refresh").await.unwrap();
         assert!(tokens.access_token.contains(&user_id.to_string()));
@@ -286,7 +354,7 @@ mod tests {
         let repo = MockUserRepo::with_user(make_user(user_id));
         let token_svc = MockTokenSvc::new(user_id)
             .with_verify_refresh_err(AuthError::InvalidToken("bad refresh".into()));
-        let svc = AuthServiceImpl::new(repo, token_svc);
+        let svc = AuthServiceImpl::new(repo, token_svc, MockAvatarStorage::new());
 
         let result = svc.refresh_tokens("bad-token").await;
         assert!(result.is_err());
@@ -298,7 +366,7 @@ mod tests {
         let user_id = Uuid::new_v4();
         let repo = MockUserRepo::with_user(make_user(user_id));
         let token_svc = MockTokenSvc::new(user_id);
-        let svc = AuthServiceImpl::new(repo, token_svc);
+        let svc = AuthServiceImpl::new(repo, token_svc, MockAvatarStorage::new());
 
         let result = svc.verify_token("valid-token").await.unwrap();
         assert_eq!(result, user_id);
@@ -310,7 +378,7 @@ mod tests {
         let repo = MockUserRepo::with_user(make_user(user_id));
         let token_svc = MockTokenSvc::new(user_id)
             .with_verify_access_err(AuthError::TokenExpired);
-        let svc = AuthServiceImpl::new(repo, token_svc);
+        let svc = AuthServiceImpl::new(repo, token_svc, MockAvatarStorage::new());
 
         let result = svc.verify_token("expired-token").await;
         assert!(result.is_err());
@@ -322,7 +390,7 @@ mod tests {
         let user_id = Uuid::new_v4();
         let repo = MockUserRepo::new_empty();
         let token_svc = MockTokenSvc::new(user_id);
-        let svc = AuthServiceImpl::new(repo, token_svc);
+        let svc = AuthServiceImpl::new(repo, token_svc, MockAvatarStorage::new());
 
         let result = svc.get_user(user_id).await;
         assert!(result.is_err());
@@ -335,7 +403,7 @@ mod tests {
         let user = make_user(user_id);
         let repo = MockUserRepo::with_user(user.clone());
         let token_svc = MockTokenSvc::new(user_id);
-        let svc = AuthServiceImpl::new(repo, token_svc);
+        let svc = AuthServiceImpl::new(repo, token_svc, MockAvatarStorage::new());
 
         let result = svc.get_user(user_id).await.unwrap();
         assert_eq!(result.id, user_id);
@@ -348,7 +416,7 @@ mod tests {
         let user = make_user(user_id);
         let repo = MockUserRepo::with_user(user);
         let token_svc = MockTokenSvc::new(user_id);
-        let svc = AuthServiceImpl::new(repo, token_svc);
+        let svc = AuthServiceImpl::new(repo, token_svc, MockAvatarStorage::new());
 
         let update = UpdateProfile {
             display_name: Some(Some("New Name".into())),
@@ -363,7 +431,7 @@ mod tests {
         let user_id = Uuid::new_v4();
         let repo = MockUserRepo::new_empty();
         let token_svc = MockTokenSvc::new(user_id);
-        let svc = AuthServiceImpl::new(repo, token_svc);
+        let svc = AuthServiceImpl::new(repo, token_svc, MockAvatarStorage::new());
 
         let update = UpdateProfile::default();
         let result = svc.update_profile(user_id, &update).await;
@@ -376,7 +444,7 @@ mod tests {
         let user = make_user(user_id);
         let repo = MockUserRepo::with_user(user);
         let token_svc = MockTokenSvc::new(user_id);
-        let svc = AuthServiceImpl::new(repo.clone(), token_svc);
+        let svc = AuthServiceImpl::new(repo.clone(), token_svc, MockAvatarStorage::new());
 
         let result = svc.delete_account(user_id).await;
         assert!(result.is_ok());
@@ -388,10 +456,67 @@ mod tests {
         let user_id = Uuid::new_v4();
         let repo = MockUserRepo::new_empty();
         let token_svc = MockTokenSvc::new(user_id);
-        let svc = AuthServiceImpl::new(repo, token_svc);
+        let svc = AuthServiceImpl::new(repo, token_svc, MockAvatarStorage::new());
 
         let result = svc.delete_account(user_id).await;
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), AuthError::UserNotFound));
+    }
+
+    #[tokio::test]
+    async fn upload_avatar_success() {
+        let user_id = Uuid::new_v4();
+        let user = make_user(user_id);
+        let repo = MockUserRepo::with_user(user);
+        let token_svc = MockTokenSvc::new(user_id);
+        let svc = AuthServiceImpl::new(repo, token_svc, MockAvatarStorage::new());
+
+        let data = vec![0u8; 1024]; // 1KB test file
+        let result = svc
+            .upload_avatar(user_id, "image/jpeg", data)
+            .await
+            .unwrap();
+        assert_eq!(result.id, user_id);
+    }
+
+    #[tokio::test]
+    async fn upload_avatar_user_not_found() {
+        let user_id = Uuid::new_v4();
+        let repo = MockUserRepo::new_empty();
+        let token_svc = MockTokenSvc::new(user_id);
+        let svc = AuthServiceImpl::new(repo, token_svc, MockAvatarStorage::new());
+
+        let data = vec![0u8; 1024];
+        let result = svc.upload_avatar(user_id, "image/jpeg", data).await;
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), AuthError::UserNotFound));
+    }
+
+    #[tokio::test]
+    async fn upload_avatar_file_too_large() {
+        let user_id = Uuid::new_v4();
+        let user = make_user(user_id);
+        let repo = MockUserRepo::with_user(user);
+        let token_svc = MockTokenSvc::new(user_id);
+        let svc = AuthServiceImpl::new(repo, token_svc, MockAvatarStorage::new());
+
+        let data = vec![0u8; 3 * 1024 * 1024]; // 3MB — exceeds 2MB limit
+        let result = svc.upload_avatar(user_id, "image/jpeg", data).await;
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), AuthError::InvalidInput(_)));
+    }
+
+    #[tokio::test]
+    async fn upload_avatar_storage_failure() {
+        let user_id = Uuid::new_v4();
+        let user = make_user(user_id);
+        let repo = MockUserRepo::with_user(user);
+        let token_svc = MockTokenSvc::new(user_id);
+        let svc = AuthServiceImpl::new(repo, token_svc, MockAvatarStorage::failing());
+
+        let data = vec![0u8; 1024];
+        let result = svc.upload_avatar(user_id, "image/jpeg", data).await;
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), AuthError::Unknown(_)));
     }
 }

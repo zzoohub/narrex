@@ -91,11 +91,11 @@ Desktop-first web application. The multi-track timeline and editor require subst
 |
 +-- Export [Phase 2]
 |
-+-- Account Settings [Phase 1]
-    +-- Profile [Phase 1]
-    +-- Preferences (Theme, Language) [Phase 1]
-    +-- Account Management (Logout, Delete) [Phase 1]
-    +-- Subscription / Billing [Phase 2]
++-- Settings [Phase 1]                     (/settings — full page)
+    +-- Profile (display name, image)        [Phase 1]
+    +-- Preferences (theme, language)        [Phase 1]
+    +-- Account (logout, delete)             [Phase 1]
+    +-- Subscription / Billing               [Phase 2]
 ```
 
 ### Navigation Pattern
@@ -181,11 +181,36 @@ Workspace (Scene selected)
   +-- Navigate prev/next scene: arrows in editor header
 ```
 
-### Flow 5: Episode Organization [Phase 2]
+### Flow 5: Settings & Account Management [Phase 1]
+
+```
+Any Page (Nav Bar)
+  |
+  +-- Click avatar in nav bar
+  |     |
+  |     +-- Dropdown: [Settings] [Log out]
+  |     |
+  |     +-- Click "Settings" -> /settings page
+  |     |     |
+  |     |     +-- Profile: view/edit display name, profile image URL
+  |     |     +-- Preferences: theme (system/light/dark), language (ko/en)
+  |     |     +-- Account: logout, delete account
+  |     |           |
+  |     |           +-- Delete Account -> confirmation dialog
+  |     |                 +-- Data summary (projects, scenes, drafts)
+  |     |                 +-- Type confirmation phrase
+  |     |                 +-- Execute deletion -> redirect to login
+  |     |
+  |     +-- Click "Log out" -> clear session -> redirect to login
+```
+
+**Entry point:** Avatar dropdown in navigation bar (present on dashboard + workspace headers). Settings is a full-page view, not a modal. See [ux/settings.md](./ux/settings.md) for full spec.
+
+### Flow 6: Episode Organization [Phase 2]
 
 AI suggests episode distribution -> draggable episode dividers on timeline -> per-episode word count + hook type labels.
 
-### Flow 6: Revision [Phase 3+]
+### Flow 7: Revision [Phase 3+]
 
 Revision Panel -> run checks (character consistency, foreshadowing, setting, style) -> issue cards with suggested fixes -> apply or dismiss.
 
@@ -218,6 +243,16 @@ Detailed screen specs are in separate files:
 ---
 
 ## 6. Interaction Patterns
+
+### 6.0 Avatar Dropdown (Global Navigation)
+
+Present on every page header (dashboard, workspace). Provides access to Settings and Log out.
+
+- **Trigger:** Click on avatar button (top-right of nav bar)
+- **Content:** User name + email (read-only info), "Settings" link, "Log out" button
+- **Dismiss:** Click outside, Escape, or re-click avatar
+- **Accessibility:** `role="menu"` with `role="menuitem"` items, arrow key navigation, focus management
+- **Full spec:** [ux/settings.md](./ux/settings.md) (Section 2: Navigation Entry Point)
 
 ### 6.1 Drag-and-Drop (Timeline)
 

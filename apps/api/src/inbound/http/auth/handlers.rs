@@ -1,5 +1,5 @@
 use axum::extract::{Query, State};
-use axum::http::{header, StatusCode};
+use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::Json;
 
@@ -61,6 +61,7 @@ pub async fn initiate_google_auth(
 /// `GET /v1/auth/google/callback` — exchange code for tokens, upsert user, redirect.
 pub async fn handle_google_callback(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Query(query): Query<GoogleCallbackQuery>,
 ) -> Result<Response, ApiError> {
     // Exchange the authorization code for a Google access token.
@@ -84,10 +85,17 @@ pub async fn handle_google_callback(
             ApiError::BadRequest("OAuth authentication failed".into())
         })?;
 
+    // Resolve preferred locale from Accept-Language header.
+    let preferred_locale = headers
+        .get(header::ACCEPT_LANGUAGE)
+        .and_then(|v| v.to_str().ok())
+        .map(resolve_preferred_locale)
+        .unwrap_or_else(|| "en".into());
+
     // Upsert user and issue tokens.
     let (_user, tokens, refresh_token) = state
         .auth_service()
-        .google_callback(google_user)
+        .google_callback(google_user, &preferred_locale)
         .await?;
 
     // Validate state param matches configured web app URL to prevent open redirect.
@@ -190,6 +198,49 @@ pub async fn update_profile(
     Ok(ApiSuccess::new(UserResponse::from(&user)))
 }
 
+/// `POST /v1/auth/me/avatar` — upload profile avatar image.
+pub async fn upload_avatar(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    mut multipart: axum::extract::Multipart,
+) -> Result<ApiSuccess<UserResponse>, ApiError> {
+    let mut file_data: Option<(String, Vec<u8>)> = None;
+
+    while let Some(field) = multipart.next_field().await.map_err(|e| {
+        ApiError::BadRequest(format!("invalid multipart: {e}"))
+    })? {
+        if field.name() == Some("avatar") {
+            let content_type = field
+                .content_type()
+                .unwrap_or("application/octet-stream")
+                .to_string();
+
+            // Validate content type.
+            if !["image/jpeg", "image/png", "image/webp"].contains(&content_type.as_str()) {
+                return Err(ApiError::BadRequest(
+                    "unsupported image format (use JPEG, PNG, or WebP)".into(),
+                ));
+            }
+
+            let data = field.bytes().await.map_err(|e| {
+                ApiError::BadRequest(format!("failed to read file: {e}"))
+            })?;
+
+            file_data = Some((content_type, data.to_vec()));
+        }
+    }
+
+    let (content_type, data) = file_data
+        .ok_or_else(|| ApiError::BadRequest("missing 'avatar' field".into()))?;
+
+    let user = state
+        .auth_service()
+        .upload_avatar(auth.user_id, &content_type, data)
+        .await?;
+
+    Ok(ApiSuccess::new(UserResponse::from(&user)))
+}
+
 /// `DELETE /v1/auth/me` — delete user account and all data.
 pub async fn delete_account(
     State(state): State<AppState>,
@@ -252,6 +303,36 @@ struct GoogleUserInfoResponse {
     picture: Option<String>,
 }
 
+/// Parse `Accept-Language` header and resolve to a supported locale (`ko` or `en`).
+/// Falls back to `"en"` when no supported language is found.
+fn resolve_preferred_locale(accept_language: &str) -> String {
+    const SUPPORTED: &[&str] = &["ko", "en"];
+
+    let mut entries: Vec<(&str, f32)> = accept_language
+        .split(',')
+        .filter_map(|part| {
+            let part = part.trim();
+            let (lang, quality) = if let Some((l, q)) = part.split_once(";q=") {
+                (l.trim(), q.trim().parse::<f32>().unwrap_or(0.0))
+            } else {
+                (part, 1.0)
+            };
+            let primary = lang.split('-').next()?;
+            Some((primary, quality))
+        })
+        .collect();
+
+    entries.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    for (lang, _) in entries {
+        if SUPPORTED.contains(&lang) {
+            return lang.to_string();
+        }
+    }
+
+    "en".to_string()
+}
+
 async fn fetch_google_user_info(access_token: &str) -> anyhow::Result<GoogleUserInfo> {
     let client = reqwest::Client::new();
     let resp: GoogleUserInfoResponse = client
@@ -268,4 +349,60 @@ async fn fetch_google_user_info(access_token: &str) -> anyhow::Result<GoogleUser
         name: resp.name,
         picture: resp.picture,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolve_korean_primary() {
+        assert_eq!(resolve_preferred_locale("ko-KR,ko;q=0.9,en;q=0.8"), "ko");
+    }
+
+    #[test]
+    fn resolve_english_primary() {
+        assert_eq!(resolve_preferred_locale("en-US,en;q=0.9,ko;q=0.8"), "en");
+    }
+
+    #[test]
+    fn resolve_korean_by_quality() {
+        assert_eq!(
+            resolve_preferred_locale("en;q=0.7,ko;q=0.9"),
+            "ko"
+        );
+    }
+
+    #[test]
+    fn resolve_unsupported_falls_back_to_en() {
+        assert_eq!(resolve_preferred_locale("fr-FR,de;q=0.9"), "en");
+    }
+
+    #[test]
+    fn resolve_wildcard_falls_back_to_en() {
+        assert_eq!(resolve_preferred_locale("*"), "en");
+    }
+
+    #[test]
+    fn resolve_empty_falls_back_to_en() {
+        assert_eq!(resolve_preferred_locale(""), "en");
+    }
+
+    #[test]
+    fn resolve_bare_ko() {
+        assert_eq!(resolve_preferred_locale("ko"), "ko");
+    }
+
+    #[test]
+    fn resolve_bare_en() {
+        assert_eq!(resolve_preferred_locale("en"), "en");
+    }
+
+    #[test]
+    fn resolve_mixed_with_unsupported_picks_first_supported() {
+        assert_eq!(
+            resolve_preferred_locale("ja,zh;q=0.9,ko;q=0.8,en;q=0.7"),
+            "ko"
+        );
+    }
 }

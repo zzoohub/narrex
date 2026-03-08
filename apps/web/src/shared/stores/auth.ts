@@ -1,5 +1,5 @@
 import { createSignal } from 'solid-js'
-import { setAccessToken, getAccessToken, BASE_URL } from '@/shared/api/client'
+import { setAccessToken, getAccessToken, BASE_URL, post, patch, del, ApiError } from '@/shared/api/client'
 
 // ---- Types ------------------------------------------------------------------
 
@@ -8,6 +8,8 @@ export interface AuthUser {
   name: string
   email: string
   profileImageUrl: string | null
+  themePreference: string
+  languagePreference: string
 }
 
 type AuthState = 'loading' | 'authenticated' | 'unauthenticated'
@@ -105,11 +107,57 @@ export async function handleOAuthCallback(code: string): Promise<boolean> {
   }
 }
 
-export function logout(): void {
+export async function logout(): Promise<void> {
+  try {
+    await post('/v1/auth/logout')
+  } catch {
+    // ignore — clear local state regardless
+  }
   setAccessToken(null)
   localStorage.removeItem('narrex_access_token')
   setUser(null)
   setAuthState('unauthenticated')
+}
+
+export async function deleteAccount(): Promise<void> {
+  await del('/v1/auth/me')
+  setAccessToken(null)
+  localStorage.removeItem('narrex_access_token')
+  setUser(null)
+  setAuthState('unauthenticated')
+}
+
+export async function updateProfile(data: {
+  displayName?: string | null
+  profileImageUrl?: string | null
+  themePreference?: string
+  languagePreference?: string
+}): Promise<AuthUser> {
+  const res = await patch<{ data: AuthUser }>('/v1/auth/me', data)
+  setUser(res.data)
+  return res.data
+}
+
+export async function uploadAvatar(file: File): Promise<AuthUser> {
+  const formData = new FormData()
+  formData.append('avatar', file)
+
+  const token = getAccessToken()
+  const res = await fetch(`${BASE_URL}/v1/auth/me/avatar`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    credentials: 'include',
+    body: formData,
+  })
+
+  if (!res.ok) {
+    const problem = await res.json().catch(() => null)
+    throw new ApiError(res.status, problem)
+  }
+
+  const data = (await res.json()) as { data: AuthUser }
+  setUser(data.data)
+  return data.data
 }
 
 // ---- Hooks ------------------------------------------------------------------
@@ -120,6 +168,9 @@ export function useAuth() {
     user,
     loginWithGoogle,
     logout,
+    deleteAccount,
+    updateProfile,
+    uploadAvatar,
   }
 }
 

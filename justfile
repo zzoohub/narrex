@@ -1,5 +1,9 @@
 set dotenv-load := false
 
+# ─── Environment ──────────────────────────────────────────────────────────────
+
+database_url := env("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/narrex")
+
 # ─── Path resolution ─────────────────────────────────────────────────────────
 
 api_dir := "apps/api"
@@ -35,16 +39,16 @@ push type="chore" msg="":
 # ─── DB ───────────────────────────────────────────────────────────────────────
 
 db-migrate:
-    sqlx migrate run --source db/migrations
+    sqlx migrate run --source db/migrations --database-url {{ database_url }}
 
 db-revert:
-    sqlx migrate revert --source db/migrations
+    sqlx migrate revert --source db/migrations --database-url {{ database_url }}
 
 db-seed:
     @for f in db/seeds/*.sql; do echo "▶ $f"; docker exec -i narrex-db-1 psql -U postgres -d narrex -f - < "$f"; done
 
 db-reset:
-    sqlx database reset -y --source db/migrations
+    sqlx database reset -y --source db/migrations --database-url {{ database_url }}
 
 # ─── API (Rust / Axum) ──────────────────────────────────────────────────────
 

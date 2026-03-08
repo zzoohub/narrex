@@ -69,10 +69,10 @@ impl UserRepository for Postgres {
         Ok(row.map(UserRow::into_domain))
     }
 
-    async fn upsert_from_google(&self, info: &GoogleUserInfo) -> Result<User, AuthError> {
+    async fn upsert_from_google(&self, info: &GoogleUserInfo, preferred_locale: &str) -> Result<User, AuthError> {
         let row = sqlx::query_as::<_, UserRow>(
-            "INSERT INTO user_account (google_id, email, display_name, profile_image_url) \
-             VALUES ($1, $2, $3, $4) \
+            "INSERT INTO user_account (google_id, email, display_name, profile_image_url, language_preference) \
+             VALUES ($1, $2, $3, $4, $5) \
              ON CONFLICT (google_id) DO UPDATE SET \
                  email = EXCLUDED.email, \
                  display_name = EXCLUDED.display_name, \
@@ -84,6 +84,7 @@ impl UserRepository for Postgres {
         .bind(&info.email)
         .bind(&info.name)
         .bind(&info.picture)
+        .bind(preferred_locale)
         .fetch_one(self.pool())
         .await
         .map_err(|e| AuthError::Unknown(e.into()))?;

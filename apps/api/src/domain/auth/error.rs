@@ -3,6 +3,7 @@ use std::fmt;
 #[derive(Debug)]
 pub enum AuthError {
     InvalidToken(String),
+    InvalidInput(String),
     TokenExpired,
     UserNotFound,
     OAuthFailed(String),
@@ -13,6 +14,7 @@ impl fmt::Display for AuthError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidToken(msg) => write!(f, "invalid token: {msg}"),
+            Self::InvalidInput(msg) => write!(f, "invalid input: {msg}"),
             Self::TokenExpired => write!(f, "token expired"),
             Self::UserNotFound => write!(f, "user not found"),
             Self::OAuthFailed(msg) => write!(f, "oauth failed: {msg}"),
@@ -76,5 +78,18 @@ mod tests {
         use std::error::Error;
         let err = AuthError::Unknown(anyhow::anyhow!("inner"));
         assert!(err.source().is_some());
+    }
+
+    #[test]
+    fn display_invalid_input() {
+        let err = AuthError::InvalidInput("bad file".into());
+        assert_eq!(err.to_string(), "invalid input: bad file");
+    }
+
+    #[test]
+    fn source_returns_none_for_invalid_input() {
+        use std::error::Error;
+        let err = AuthError::InvalidInput("x".into());
+        assert!(err.source().is_none());
     }
 }

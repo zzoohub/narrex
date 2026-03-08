@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@solidjs/testing-library'
 import { I18nProvider } from '@/shared/lib/i18n'
-import { ProjectCreationView } from './index'
+import { ProjectCreationView, calcProgress } from './index'
 import { streamStructure } from '@/features/structuring'
 import type { SSEEvent } from '@/shared/api/sse'
 
@@ -128,6 +128,32 @@ describe('ProjectCreationView', () => {
       </I18nProvider>
     ))
     expect(screen.getByText(/데스크톱용으로 설계/)).toBeInTheDocument()
+  })
+
+  // ── Progress calculation ─────────────────────────────────────────────────
+
+  describe('calcProgress (asymptotic curve)', () => {
+    it('returns 0 at t=0', () => {
+      expect(calcProgress(0, false)).toBe(0)
+    })
+
+    it('returns 100 when completed', () => {
+      expect(calcProgress(5, true)).toBe(100)
+    })
+
+    it('increases faster at first than later (asymptotic)', () => {
+      const first5 = calcProgress(5, false)
+      const next5 = calcProgress(10, false) - calcProgress(5, false)
+      expect(first5).toBeGreaterThan(next5)
+    })
+
+    it('never exceeds 95 before completion', () => {
+      expect(calcProgress(10000, false)).toBeLessThanOrEqual(95)
+    })
+
+    it('approaches 95 after 60 seconds', () => {
+      expect(calcProgress(60, false)).toBeGreaterThan(90)
+    })
   })
 
   // ── Processing state ─────────────────────────────────────────────────────

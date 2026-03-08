@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedNewRouteImport } from './routes/_authenticated/new'
 import { Route as AuthenticatedProjectIdRouteImport } from './routes/_authenticated/project.$id'
 
@@ -29,6 +30,11 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedNewRoute = AuthenticatedNewRouteImport.update({
   id: '/new',
   path: '/new',
@@ -44,11 +50,13 @@ export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/login': typeof LoginRoute
   '/new': typeof AuthenticatedNewRoute
+  '/settings': typeof AuthenticatedSettingsRoute
   '/project/$id': typeof AuthenticatedProjectIdRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/new': typeof AuthenticatedNewRoute
+  '/settings': typeof AuthenticatedSettingsRoute
   '/': typeof AuthenticatedIndexRoute
   '/project/$id': typeof AuthenticatedProjectIdRoute
 }
@@ -57,19 +65,21 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/login': typeof LoginRoute
   '/_authenticated/new': typeof AuthenticatedNewRoute
+  '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/project/$id': typeof AuthenticatedProjectIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/new' | '/project/$id'
+  fullPaths: '/' | '/login' | '/new' | '/settings' | '/project/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/login' | '/new' | '/' | '/project/$id'
+  to: '/login' | '/new' | '/settings' | '/' | '/project/$id'
   id:
     | '__root__'
     | '/_authenticated'
     | '/login'
     | '/_authenticated/new'
+    | '/_authenticated/settings'
     | '/_authenticated/'
     | '/_authenticated/project/$id'
   fileRoutesById: FileRoutesById
@@ -102,6 +112,13 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/settings': {
+      id: '/_authenticated/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AuthenticatedSettingsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/new': {
       id: '/_authenticated/new'
       path: '/new'
@@ -121,12 +138,14 @@ declare module '@tanstack/solid-router' {
 
 interface AuthenticatedRouteChildren {
   AuthenticatedNewRoute: typeof AuthenticatedNewRoute
+  AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedProjectIdRoute: typeof AuthenticatedProjectIdRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedNewRoute: AuthenticatedNewRoute,
+  AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedProjectIdRoute: AuthenticatedProjectIdRoute,
 }

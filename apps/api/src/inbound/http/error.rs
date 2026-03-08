@@ -144,6 +144,7 @@ impl From<AuthError> for ApiError {
     fn from(err: AuthError) -> Self {
         match err {
             AuthError::InvalidToken(msg) => Self::Unauthorized(msg),
+            AuthError::InvalidInput(msg) => Self::BadRequest(msg),
             AuthError::TokenExpired => Self::Unauthorized("token expired".into()),
             AuthError::UserNotFound => Self::NotFound("user not found".into()),
             AuthError::OAuthFailed(msg) => Self::BadRequest(msg),
@@ -326,6 +327,12 @@ mod tests {
     #[test]
     fn from_auth_oauth_failed() {
         let err: ApiError = AuthError::OAuthFailed("nope".into()).into();
+        assert!(matches!(err, ApiError::BadRequest(_)));
+    }
+
+    #[test]
+    fn from_auth_invalid_input() {
+        let err: ApiError = AuthError::InvalidInput("bad file".into()).into();
         assert!(matches!(err, ApiError::BadRequest(_)));
     }
 

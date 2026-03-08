@@ -32,7 +32,7 @@ use super::timeline::handlers as timeline_handlers;
 // Service type aliases (concrete adapter types)
 // ---------------------------------------------------------------------------
 
-pub type AuthSvc = AuthServiceImpl<Postgres, crate::outbound::jwt::JwtTokenService>;
+pub type AuthSvc = AuthServiceImpl<Postgres, crate::outbound::jwt::JwtTokenService, crate::outbound::storage::R2Storage>;
 pub type ProjectSvc = ProjectServiceImpl<Postgres>;
 pub type TimelineSvc = TimelineServiceImpl<Postgres, Postgres, Postgres, Postgres>;
 pub type CharacterSvc = CharacterServiceImpl<Postgres, Postgres>;
@@ -192,6 +192,10 @@ fn build_router(state: AppState, cors_origin: &str) -> Router {
             get(auth_handlers::get_current_user)
                 .patch(auth_handlers::update_profile)
                 .delete(auth_handlers::delete_account),
+        )
+        .route(
+            "/v1/auth/me/avatar",
+            post(auth_handlers::upload_avatar),
         )
         // Cost analytics
         .route("/v1/me/costs", get(ai_handlers::get_user_costs))

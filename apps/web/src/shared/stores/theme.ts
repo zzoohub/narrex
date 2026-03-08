@@ -1,6 +1,6 @@
 import { createSignal, createEffect, onCleanup } from 'solid-js'
 
-type ThemePreference = 'system' | 'light' | 'dark'
+export type ThemePreference = 'system' | 'light' | 'dark'
 type ResolvedTheme = 'light' | 'dark'
 
 const STORAGE_KEY = 'narrex-theme'
