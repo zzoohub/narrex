@@ -15,6 +15,8 @@ export interface ContextMenuItem {
 export interface ContextMenuProps {
   items: (ContextMenuItem | typeof Separator)[]
   children: JSX.Element
+  /** Use `true` when wrapping SVG elements — renders a `<g>` instead of `<div>`. */
+  svg?: boolean
 }
 
 /** Insert between items to render a horizontal divider line. */
@@ -119,9 +121,15 @@ export function ContextMenu(props: ContextMenuProps) {
 
   return (
     <>
-      <div onContextMenu={handleContextMenu} style={{ display: 'contents' }}>
-        {props.children}
-      </div>
+      {props.svg ? (
+        <g onContextMenu={handleContextMenu}>
+          {props.children}
+        </g>
+      ) : (
+        <div onContextMenu={handleContextMenu} style={{ display: 'contents' }}>
+          {props.children}
+        </div>
+      )}
 
       <Show when={open()}>
         <Portal>

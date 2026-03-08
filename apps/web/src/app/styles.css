@@ -267,6 +267,54 @@ body {
   border-color: var(--scene-revision-border);
 }
 
+/* ── Panel collapse ───────────────────────────────────────────────────── */
+.panel-collapsible {
+  overflow: hidden;
+  transition: width 200ms ease-out, height 200ms ease-out,
+              opacity 200ms ease-out, border-width 200ms ease-out;
+}
+.panel-collapsible[data-collapsed="true"] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ── Edge tab (collapsed panel re-open button) ────────────────────────── */
+.edge-tab {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  border: 1px solid var(--border-default);
+  color: var(--fg-muted);
+  cursor: pointer;
+  z-index: 20;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
+}
+.edge-tab:hover {
+  background: var(--surface-raised);
+  border-color: var(--accent);
+  color: var(--fg);
+}
+.edge-tab--left {
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 56px;
+  border-left: none;
+  border-radius: 0 6px 6px 0;
+}
+.edge-tab--bottom {
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 56px;
+  height: 24px;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+}
+
 /* ── Streaming cursor ──────────────────────────────────────────────────── */
 .stream-cursor::after {
   content: '';

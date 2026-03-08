@@ -4,9 +4,19 @@ use std::str::FromStr;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 
 use crate::domain::character::models::{Character, CharacterRelationship};
+
+/// Deserializes a value that might be `null` into `T::default()`.
+/// Handles both missing fields (via `#[serde(default)]`) and explicit `null`.
+fn null_as_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Default + Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer).map(|o| o.unwrap_or_default())
+}
 use crate::domain::project::models::Project;
 use crate::domain::timeline::models::Scene;
 
@@ -239,21 +249,27 @@ pub struct CostSummary {
 // ---------------------------------------------------------------------------
 
 /// LLM JSON output schema for project structuring.
+/// All fields use lenient deserialization: `null` → default value.
 #[derive(Debug, Clone, Deserialize)]
 pub struct StructuredOutput {
+    #[serde(default, deserialize_with = "null_as_default")]
     pub title: String,
     pub genre: Option<String>,
     pub theme: Option<String>,
     pub era_location: Option<String>,
     pub pov: Option<String>,
     pub tone: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
     pub characters: Vec<StructuredCharacter>,
+    #[serde(default, deserialize_with = "null_as_default")]
     pub relationships: Vec<StructuredRelationship>,
+    #[serde(default, deserialize_with = "null_as_default")]
     pub tracks: Vec<StructuredTrack>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct StructuredCharacter {
+    #[serde(default, deserialize_with = "null_as_default")]
     pub name: String,
     pub personality: Option<String>,
     pub appearance: Option<String>,
@@ -263,8 +279,11 @@ pub struct StructuredCharacter {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct StructuredRelationship {
+    #[serde(default, deserialize_with = "null_as_default")]
     pub character_a: String,
+    #[serde(default, deserialize_with = "null_as_default")]
     pub character_b: String,
+    #[serde(default, deserialize_with = "null_as_default")]
     pub label: String,
     pub direction: Option<String>,
 }
@@ -272,11 +291,13 @@ pub struct StructuredRelationship {
 #[derive(Debug, Clone, Deserialize)]
 pub struct StructuredTrack {
     pub label: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
     pub scenes: Vec<StructuredScene>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct StructuredScene {
+    #[serde(default, deserialize_with = "null_as_default")]
     pub title: String,
     pub plot_summary: Option<String>,
     pub location: Option<String>,
@@ -473,6 +494,36 @@ mod tests {
         assert!(output.characters.is_empty());
         assert!(output.relationships.is_empty());
         assert!(output.tracks.is_empty());
+    }
+
+    #[test]
+    fn structured_output_deserialize_null_fields() {
+        let json = r#"{
+            "title": null,
+            "genre": null,
+            "characters": [
+                { "name": null, "personality": null }
+            ],
+            "relationships": [
+                { "character_a": null, "character_b": null, "label": null }
+            ],
+            "tracks": [
+                {
+                    "label": null,
+                    "scenes": [
+                        { "title": null, "plot_summary": null, "characters": null }
+                    ]
+                }
+            ]
+        }"#;
+
+        let output: StructuredOutput = serde_json::from_str(json).unwrap();
+        assert_eq!(output.title, "");
+        assert!(output.genre.is_none());
+        assert_eq!(output.characters[0].name, "");
+        assert!(output.characters[0].personality.is_none());
+        assert_eq!(output.relationships[0].label, "");
+        assert_eq!(output.tracks[0].scenes[0].title, "");
     }
 
     #[test]

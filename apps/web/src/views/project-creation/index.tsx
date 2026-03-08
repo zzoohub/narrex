@@ -143,6 +143,7 @@ export function ProjectCreationView() {
   const [fileContent, setFileContent] = createSignal<string | null>(null)
   const [isDragging, setIsDragging] = createSignal(false)
   const [completedSteps, setCompletedSteps] = createSignal(0)
+  const [errorDetail, setErrorDetail] = createSignal('')
   const [clarificationQuestions, setClarificationQuestions] = createSignal<
     Array<{ question: string; field: string }>
   >([])
@@ -258,14 +259,18 @@ export function ProjectCreationView() {
           }
           case 'error': {
             const errorData = event.data as SSEErrorEvent
-            console.error('SSE error:', errorData.message)
+            const msg = typeof errorData?.message === 'string' ? errorData.message : JSON.stringify(event.data)
+            console.error('SSE error:', msg)
+            setErrorDetail(msg)
             setState('error')
             return
           }
         }
       }
     } catch (err) {
-      console.error('Stream error:', err)
+      const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err)
+      console.error('Stream error:', msg, err)
+      setErrorDetail(msg)
       setState('error')
     } finally {
       abortStream = null
@@ -539,9 +544,14 @@ export function ProjectCreationView() {
             <div class="w-16 h-16 rounded-2xl bg-error-muted flex items-center justify-center mb-6">
               <IconX size={28} class="text-error" />
             </div>
-            <p class="text-sm text-fg-muted max-w-sm leading-relaxed mb-6">
+            <p class="text-sm text-fg-muted max-w-sm leading-relaxed mb-4">
               {t('creation.error')}
             </p>
+            <Show when={errorDetail()}>
+              <pre class="text-xs text-error bg-surface-raised px-4 py-2 rounded-lg max-w-sm overflow-x-auto mb-6 whitespace-pre-wrap">
+                {errorDetail()}
+              </pre>
+            </Show>
             <Button
               variant="secondary"
               onClick={() => setState('input')}

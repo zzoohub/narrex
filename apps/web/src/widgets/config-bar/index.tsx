@@ -1,12 +1,6 @@
 import { createSignal, createMemo, Show, For, batch } from 'solid-js'
 import { useI18n } from '@/shared/lib/i18n'
-import {
-  Chip,
-  Button,
-  IconChevronDown,
-  IconChevronUp,
-  IconPlus,
-} from '@/shared/ui'
+import { Chip, Button, IconPlus } from '@/shared/ui'
 import { useWorkspace } from '@/features/workspace'
 import type { PovType } from '@/entities/project'
 
@@ -32,11 +26,15 @@ function joinToneTags(tags: string[]): string {
 
 // ---- Component ---------------------------------------------------------------
 
-export function ConfigBar() {
+interface ConfigBarProps {
+  open: boolean
+  onClose: () => void
+}
+
+export function ConfigBar(props: ConfigBarProps) {
   const { t } = useI18n()
   const ws = useWorkspace()
 
-  const [expanded, setExpanded] = createSignal(false)
   const [addingTag, setAddingTag] = createSignal(false)
   const [newTag, setNewTag] = createSignal('')
 
@@ -47,13 +45,6 @@ export function ConfigBar() {
   const eraLocation = createMemo(() => ws.state.project?.eraLocation ?? '')
   const pov = createMemo(() => ws.state.project?.pov ?? 'first_person')
   const toneTags = createMemo(() => parseToneTags(ws.state.project?.tone))
-
-  // ---- POV label ----
-
-  const povLabel = createMemo(() => {
-    const opt = POV_OPTIONS.find((o) => o.value === pov())
-    return opt ? t(opt.labelKey) : t('config.pov.first')
-  })
 
   // ---- Handlers (auto-save via the store debounce) ----
 
@@ -106,46 +97,17 @@ export function ConfigBar() {
   // ---- Render ----
 
   return (
-    <div class="border-b border-border-default bg-surface transition-all duration-200">
-      {/* -- Collapsed bar -------------------------------------------------- */}
-      <button
-        type="button"
-        onClick={() => setExpanded((e) => !e)}
-        class="w-full flex items-center gap-3 px-5 h-11 text-sm cursor-pointer hover:bg-surface-raised transition-colors"
-      >
-        <Show
-          when={expanded()}
-          fallback={<IconChevronDown size={16} class="text-fg-muted flex-shrink-0" />}
-        >
-          <IconChevronUp size={16} class="text-fg-muted flex-shrink-0" />
-        </Show>
+    <Show when={props.open}>
+      {/* Backdrop */}
+      <div
+        data-testid="config-backdrop"
+        class="fixed inset-0 z-40"
+        onClick={() => props.onClose()}
+      />
 
-        <span class="text-fg-muted font-medium text-xs uppercase tracking-wide mr-2">
-          {t('config.title')}
-        </span>
-
-        <Show when={!expanded()}>
-          <div class="flex items-center gap-2 overflow-hidden">
-            <Show when={genre()}>
-              <Chip label={genre()} variant="accent" />
-            </Show>
-            <For each={toneTags().slice(0, 2)}>
-              {(tag) => <Chip label={tag} />}
-            </For>
-            <Show when={toneTags().length > 2}>
-              <span class="text-fg-muted text-xs">+{toneTags().length - 2}</span>
-            </Show>
-            <Show when={eraLocation()}>
-              <span class="text-fg-muted text-xs truncate">{eraLocation()}</span>
-            </Show>
-            <span class="text-fg-muted text-xs">{povLabel()}</span>
-          </div>
-        </Show>
-      </button>
-
-      {/* -- Expanded panel ------------------------------------------------- */}
-      <Show when={expanded()}>
-        <div class="px-5 pb-5 pt-2 animate-fade-in">
+      {/* Dropdown panel */}
+      <div class="absolute left-0 right-0 top-full z-50 border-b border-border-default bg-surface shadow-lg animate-fade-in">
+        <div class="px-5 py-5">
           <div class="grid grid-cols-3 gap-x-6 gap-y-4 max-w-4xl">
             {/* Genre */}
             <label class="flex flex-col gap-1.5">
@@ -250,7 +212,7 @@ export function ConfigBar() {
             </div>
           </div>
         </div>
-      </Show>
-    </div>
+      </div>
+    </Show>
   )
 }

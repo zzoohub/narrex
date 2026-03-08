@@ -10,8 +10,12 @@ import {
   IconUser,
   IconMoon,
   IconSun,
+  IconTrash,
+  ContextMenu,
+  Separator,
+  Dialog,
 } from '@/shared/ui'
-import { listProjects } from '@/entities/project'
+import { listProjects, deleteProject } from '@/entities/project'
 import type { ProjectSummary } from '@/entities/project'
 import { useAuth } from '@/shared/stores/auth'
 
@@ -39,6 +43,17 @@ export function DashboardView() {
     const check = () => setIsMobile(window.innerWidth < 768)
     check()
     window.addEventListener('resize', check)
+  }
+
+  // ── Delete project ──
+  const [deleteTarget, setDeleteTarget] = createSignal<ProjectSummary | null>(null)
+
+  async function handleDeleteConfirm() {
+    const target = deleteTarget()
+    if (!target) return
+    setDeleteTarget(null)
+    await deleteProject(target.id)
+    refetch()
   }
 
   return (
@@ -184,57 +199,70 @@ export function DashboardView() {
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
               <For each={projects()}>
                 {(project: ProjectSummary, i) => (
-                  <Link
-                    to="/project/$id"
-                    params={{ id: project.id }}
-                    class="block"
-                    style={{ "animation-delay": `${i() * 60}ms` }}
+                  <ContextMenu
+                    items={[
+                      {
+                        label: t('common.delete'),
+                        icon: <IconTrash size={14} />,
+                        danger: true,
+                        onClick: () => setDeleteTarget(project),
+                      },
+                    ]}
                   >
-                    <Card interactive class="animate-slide-up h-full">
-                      <div class="flex flex-col gap-3">
-                        {/* Title */}
-                        <h3 class="text-base font-semibold text-fg leading-snug line-clamp-2">
-                          {project.title}
-                        </h3>
+                    <div data-project-card={project.id}>
+                      <Link
+                        to="/project/$id"
+                        params={{ id: project.id }}
+                        class="block"
+                        style={{ "animation-delay": `${i() * 60}ms` }}
+                      >
+                        <Card interactive class="animate-slide-up h-full">
+                          <div class="flex flex-col gap-3">
+                            {/* Title */}
+                            <h3 class="text-base font-semibold text-fg leading-snug line-clamp-2">
+                              {project.title}
+                            </h3>
 
-                        {/* Genre tag + progress */}
-                        <div class="flex items-center gap-2">
-                          <Show when={project.genre}>
-                            <span class="text-xs font-medium px-2 py-0.5 rounded-md bg-accent-muted text-accent">
-                              {project.genre}
-                            </span>
-                          </Show>
-                          <Show when={project.sceneCount > 0}>
-                            <span class="text-xs text-fg-muted">
-                              {t('dashboard.card.scenes', {
-                                drafted: project.draftedSceneCount,
-                                total: project.sceneCount,
-                              })}
-                            </span>
-                          </Show>
-                        </div>
+                            {/* Genre tag + progress */}
+                            <div class="flex items-center gap-2">
+                              <Show when={project.genre}>
+                                <span class="text-xs font-medium px-2 py-0.5 rounded-md bg-accent-muted text-accent">
+                                  {project.genre}
+                                </span>
+                              </Show>
+                              <Show when={project.sceneCount > 0}>
+                                <span class="text-xs text-fg-muted">
+                                  {t('dashboard.card.scenes', {
+                                    drafted: project.draftedSceneCount,
+                                    total: project.sceneCount,
+                                  })}
+                                </span>
+                              </Show>
+                            </div>
 
-                        {/* Progress bar */}
-                        <Show when={project.sceneCount > 0}>
-                          <div class="w-full h-1.5 rounded-full bg-surface-raised overflow-hidden">
-                            <div
-                              class="h-full rounded-full bg-accent transition-all duration-300"
-                              style={{
-                                width: `${Math.round((project.draftedSceneCount / project.sceneCount) * 100)}%`,
-                              }}
-                            />
+                            {/* Progress bar */}
+                            <Show when={project.sceneCount > 0}>
+                              <div class="w-full h-1.5 rounded-full bg-surface-raised overflow-hidden">
+                                <div
+                                  class="h-full rounded-full bg-accent transition-all duration-300"
+                                  style={{
+                                    width: `${Math.round((project.draftedSceneCount / project.sceneCount) * 100)}%`,
+                                  }}
+                                />
+                              </div>
+                            </Show>
+
+                            {/* Dates */}
+                            <div class="flex items-center justify-between text-xs pt-1">
+                              <span class="text-fg-muted">
+                                {t('dashboard.card.lastEdited')}: {formatDate(project.updatedAt)}
+                              </span>
+                            </div>
                           </div>
-                        </Show>
-
-                        {/* Dates */}
-                        <div class="flex items-center justify-between text-xs pt-1">
-                          <span class="text-fg-muted">
-                            {t('dashboard.card.lastEdited')}: {formatDate(project.updatedAt)}
-                          </span>
-                        </div>
-                      </div>
-                    </Card>
-                  </Link>
+                        </Card>
+                      </Link>
+                    </div>
+                  </ContextMenu>
                 )}
               </For>
 
@@ -251,6 +279,17 @@ export function DashboardView() {
           </Show>
         </Suspense>
       </main>
+
+      {/* ── Delete confirmation dialog ─────────────────────────────── */}
+      <Dialog
+        open={deleteTarget() !== null}
+        onClose={() => setDeleteTarget(null)}
+        title={t('dashboard.deleteConfirmTitle', { title: deleteTarget()?.title ?? '' })}
+        description={t('dashboard.deleteConfirmDescription')}
+        confirmLabel={t('common.delete')}
+        confirmVariant="danger"
+        onConfirm={handleDeleteConfirm}
+      />
     </div>
     </Show>
   )

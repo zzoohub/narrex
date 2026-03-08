@@ -22,7 +22,7 @@ impl CfWorkersAiProvider {
             client: Client::new(),
             account_id,
             api_token,
-            model: "@cf/meta/llama-3.1-70b-instruct".to_string(),
+            model: "@cf/zai-org/glm-4.7-flash".to_string(),
         }
     }
 
@@ -55,6 +55,8 @@ struct CfMessage {
     content: String,
 }
 
+// --- Response types: supports both CF-native and OpenAI-compatible formats ---
+
 #[derive(Deserialize)]
 struct CfResponse {
     result: Option<CfResult>,
@@ -64,8 +66,21 @@ struct CfResponse {
 
 #[derive(Deserialize)]
 struct CfResult {
+    // CF-native format (e.g. llama models)
     response: Option<String>,
+    // OpenAI-compatible format (e.g. glm-4.7-flash)
+    choices: Option<Vec<CfChoice>>,
     usage: Option<CfUsage>,
+}
+
+#[derive(Deserialize)]
+struct CfChoice {
+    message: Option<CfChoiceMessage>,
+}
+
+#[derive(Deserialize)]
+struct CfChoiceMessage {
+    content: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -79,11 +94,68 @@ struct CfError {
     message: String,
 }
 
+impl CfResult {
+    fn extract_text(&self) -> Option<String> {
+        // Try CF-native format first
+        if let Some(ref text) = self.response {
+            return Some(text.clone());
+        }
+        // Try OpenAI-compatible format
+        self.choices
+            .as_ref()?
+            .first()?
+            .message
+            .as_ref()?
+            .content
+            .clone()
+    }
+}
+
+// --- Streaming types: supports both formats ---
+
 #[derive(Deserialize)]
 struct CfStreamData {
+    // CF-native format
     response: Option<String>,
-    #[allow(dead_code)]
+    // OpenAI-compatible format
+    choices: Option<Vec<CfStreamChoice>>,
     usage: Option<CfUsage>,
+}
+
+#[derive(Deserialize)]
+struct CfStreamChoice {
+    delta: Option<CfStreamDelta>,
+    finish_reason: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct CfStreamDelta {
+    content: Option<String>,
+}
+
+impl CfStreamData {
+    fn extract_text(&self) -> Option<String> {
+        // Try CF-native format first
+        if let Some(ref text) = self.response {
+            return Some(text.clone());
+        }
+        // Try OpenAI-compatible format (skip reasoning-only chunks)
+        self.choices
+            .as_ref()?
+            .first()?
+            .delta
+            .as_ref()?
+            .content
+            .clone()
+    }
+
+    fn is_finished(&self) -> bool {
+        self.choices
+            .as_ref()
+            .and_then(|c| c.first())
+            .and_then(|c| c.finish_reason.as_deref())
+            .is_some_and(|r| r == "stop" || r == "length")
+    }
 }
 
 impl CfWorkersAiProvider {
@@ -149,7 +221,7 @@ impl LlmProvider for CfWorkersAiProvider {
             .result
             .ok_or_else(|| LlmError::InvalidResponse("missing result".into()))?;
         let text = result
-            .response
+            .extract_text()
             .ok_or_else(|| LlmError::InvalidResponse("missing response text".into()))?;
 
         let (input_tokens, output_tokens) = result
@@ -196,6 +268,7 @@ impl LlmProvider for CfWorkersAiProvider {
         let stream = try_stream! {
             let mut buffer = String::new();
             let mut total_output = String::new();
+            let mut last_usage: Option<CfUsage> = None;
             let mut byte_stream = Box::pin(byte_stream);
 
             while let Some(chunk) = byte_stream.next().await {
@@ -216,14 +289,17 @@ impl LlmProvider for CfWorkersAiProvider {
                     };
 
                     if data == "[DONE]" {
+                        let (input, output) = last_usage
+                            .map(|u| (u.prompt_tokens.unwrap_or(0), u.completion_tokens.unwrap_or(0)))
+                            .unwrap_or((0, total_output.split_whitespace().count() as u32));
                         yield StreamChunk {
                             text: String::new(),
                             done: true,
                             usage: Some(StreamUsage {
                                 model: model.clone(),
                                 provider: provider_name.clone(),
-                                token_count_input: 0,
-                                token_count_output: total_output.split_whitespace().count() as u32,
+                                token_count_input: input,
+                                token_count_output: output,
                             }),
                         };
                         return;
@@ -231,13 +307,40 @@ impl LlmProvider for CfWorkersAiProvider {
 
                     match serde_json::from_str::<CfStreamData>(data) {
                         Ok(parsed) => {
-                            if let Some(text) = parsed.response {
-                                total_output.push_str(&text);
+                            if let Some(ref u) = parsed.usage {
+                                last_usage = Some(CfUsage {
+                                    prompt_tokens: u.prompt_tokens,
+                                    completion_tokens: u.completion_tokens,
+                                });
+                            }
+
+                            if parsed.is_finished() {
+                                let (input, output) = last_usage
+                                    .take()
+                                    .map(|u| (u.prompt_tokens.unwrap_or(0), u.completion_tokens.unwrap_or(0)))
+                                    .unwrap_or((0, total_output.split_whitespace().count() as u32));
                                 yield StreamChunk {
-                                    text,
-                                    done: false,
-                                    usage: None,
+                                    text: String::new(),
+                                    done: true,
+                                    usage: Some(StreamUsage {
+                                        model: model.clone(),
+                                        provider: provider_name.clone(),
+                                        token_count_input: input,
+                                        token_count_output: output,
+                                    }),
                                 };
+                                return;
+                            }
+
+                            if let Some(text) = parsed.extract_text() {
+                                if !text.is_empty() {
+                                    total_output.push_str(&text);
+                                    yield StreamChunk {
+                                        text,
+                                        done: false,
+                                        usage: None,
+                                    };
+                                }
                             }
                         }
                         Err(e) => {
@@ -248,14 +351,17 @@ impl LlmProvider for CfWorkersAiProvider {
             }
 
             warn!("CF Workers AI stream ended without [DONE]");
+            let (input, output) = last_usage
+                .map(|u| (u.prompt_tokens.unwrap_or(0), u.completion_tokens.unwrap_or(0)))
+                .unwrap_or((0, total_output.split_whitespace().count() as u32));
             yield StreamChunk {
                 text: String::new(),
                 done: true,
                 usage: Some(StreamUsage {
                     model: model.clone(),
                     provider: provider_name.clone(),
-                    token_count_input: 0,
-                    token_count_output: total_output.split_whitespace().count() as u32,
+                    token_count_input: input,
+                    token_count_output: output,
                 }),
             };
         };
@@ -279,7 +385,7 @@ mod tests {
     #[test]
     fn default_model() {
         let p = make_provider();
-        assert_eq!(p.model, "@cf/meta/llama-3.1-70b-instruct");
+        assert_eq!(p.model, "@cf/zai-org/glm-4.7-flash");
     }
 
     #[test]
@@ -293,7 +399,7 @@ mod tests {
         let p = make_provider();
         let ep = p.endpoint();
         assert!(ep.contains("test-account-id"));
-        assert!(ep.contains("@cf/meta/llama-3.1-70b-instruct"));
+        assert!(ep.contains("@cf/zai-org/glm-4.7-flash"));
         assert!(ep.starts_with("https://api.cloudflare.com/client/v4/accounts/"));
     }
 
@@ -302,7 +408,7 @@ mod tests {
         let p = make_provider().with_model("my-model".into());
         let ep = p.endpoint();
         assert!(ep.contains("my-model"));
-        assert!(!ep.contains("llama"));
+        assert!(!ep.contains("glm"));
     }
 
     #[test]
@@ -396,17 +502,40 @@ mod tests {
         assert!(json.contains("\"stream\":true"));
     }
 
+    // --- CF-native format tests ---
+
     #[test]
-    fn cf_response_deserialization_success() {
+    fn cf_response_native_format() {
         let json = r#"{"result":{"response":"hello world","usage":{"prompt_tokens":10,"completion_tokens":5}},"success":true,"errors":[]}"#;
         let resp: CfResponse = serde_json::from_str(json).unwrap();
         assert!(resp.success);
-        assert!(resp.errors.is_empty());
         let result = resp.result.unwrap();
-        assert_eq!(result.response.unwrap(), "hello world");
+        assert_eq!(result.extract_text().unwrap(), "hello world");
         let usage = result.usage.unwrap();
         assert_eq!(usage.prompt_tokens.unwrap(), 10);
         assert_eq!(usage.completion_tokens.unwrap(), 5);
+    }
+
+    // --- OpenAI-compatible format tests ---
+
+    #[test]
+    fn cf_response_openai_format() {
+        let json = r#"{"result":{"choices":[{"index":0,"message":{"role":"assistant","content":"안녕하세요!"}}],"usage":{"prompt_tokens":20,"completion_tokens":529,"total_tokens":549}},"success":true,"errors":[]}"#;
+        let resp: CfResponse = serde_json::from_str(json).unwrap();
+        assert!(resp.success);
+        let result = resp.result.unwrap();
+        assert_eq!(result.extract_text().unwrap(), "안녕하세요!");
+        let usage = result.usage.unwrap();
+        assert_eq!(usage.prompt_tokens.unwrap(), 20);
+        assert_eq!(usage.completion_tokens.unwrap(), 529);
+    }
+
+    #[test]
+    fn cf_response_openai_format_null_content() {
+        let json = r#"{"result":{"choices":[{"index":0,"message":{"role":"assistant","content":null}}],"usage":{"prompt_tokens":20,"completion_tokens":200}},"success":true,"errors":[]}"#;
+        let resp: CfResponse = serde_json::from_str(json).unwrap();
+        let result = resp.result.unwrap();
+        assert!(result.extract_text().is_none());
     }
 
     #[test]
@@ -428,10 +557,43 @@ mod tests {
         assert!(result.usage.is_none());
     }
 
+    // --- Streaming format tests ---
+
     #[test]
-    fn cf_stream_data_deserialization() {
+    fn stream_data_native_format() {
         let json = r#"{"response":"chunk text","usage":null}"#;
         let data: CfStreamData = serde_json::from_str(json).unwrap();
-        assert_eq!(data.response.unwrap(), "chunk text");
+        assert_eq!(data.extract_text().unwrap(), "chunk text");
+        assert!(!data.is_finished());
+    }
+
+    #[test]
+    fn stream_data_openai_format_content() {
+        let json = r#"{"choices":[{"index":0,"delta":{"content":"hello"},"finish_reason":null}],"usage":{"prompt_tokens":7,"total_tokens":50,"completion_tokens":43}}"#;
+        let data: CfStreamData = serde_json::from_str(json).unwrap();
+        assert_eq!(data.extract_text().unwrap(), "hello");
+        assert!(!data.is_finished());
+    }
+
+    #[test]
+    fn stream_data_openai_format_reasoning_only() {
+        let json = r#"{"choices":[{"index":0,"delta":{"reasoning":"thinking..."},"finish_reason":null}]}"#;
+        let data: CfStreamData = serde_json::from_str(json).unwrap();
+        assert!(data.extract_text().is_none());
+        assert!(!data.is_finished());
+    }
+
+    #[test]
+    fn stream_data_openai_format_finished_stop() {
+        let json = r#"{"choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":7,"completion_tokens":100}}"#;
+        let data: CfStreamData = serde_json::from_str(json).unwrap();
+        assert!(data.is_finished());
+    }
+
+    #[test]
+    fn stream_data_openai_format_finished_length() {
+        let json = r#"{"choices":[{"index":0,"delta":{},"finish_reason":"length"}],"usage":{"prompt_tokens":7,"completion_tokens":500}}"#;
+        let data: CfStreamData = serde_json::from_str(json).unwrap();
+        assert!(data.is_finished());
     }
 }

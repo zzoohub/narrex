@@ -111,6 +111,8 @@ const translations: Record<Locale, Record<string, string>> = {
     'common.add': '추가',
     'common.close': '닫기',
     'common.undo': '실행 취소',
+    'dashboard.deleteConfirmTitle': '"{title}"을(를) 삭제하시겠습니까?',
+    'dashboard.deleteConfirmDescription': '포함된 씬, 캐릭터, 초고가 모두 삭제됩니다.',
   },
   en: {
     'nav.projects': 'Projects',
@@ -205,6 +207,8 @@ const translations: Record<Locale, Record<string, string>> = {
     'common.add': 'Add',
     'common.close': 'Close',
     'common.undo': 'Undo',
+    'dashboard.deleteConfirmTitle': 'Delete "{title}"?',
+    'dashboard.deleteConfirmDescription': 'All scenes, characters, and drafts will be removed.',
   },
 }
 

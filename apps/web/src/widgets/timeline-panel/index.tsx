@@ -40,6 +40,7 @@ const MAX_SCALE = 240
 const DEFAULT_SCALE = 120
 const SCALE_STEP = 30
 const RULER_HEIGHT = 28
+const DRAG_THRESHOLD = 5
 
 // ---- Helpers -----------------------------------------------------------------
 
@@ -102,7 +103,7 @@ function buildSceneLookup(tracks: Array<{ scenes: Scene[] }>): Map<string, { sce
 
 // ---- Component ---------------------------------------------------------------
 
-export function TimelinePanel() {
+export function TimelinePanel(props: { onCollapse?: () => void }) {
   const { t } = useI18n()
   const ws = useWorkspace()
 
@@ -110,10 +111,6 @@ export function TimelinePanel() {
 
   const [showHint, setShowHint] = createSignal(true)
   const [scale, setScale] = createSignal(DEFAULT_SCALE)
-
-  // Track add inline input
-  const [addingTrack, setAddingTrack] = createSignal(false)
-  const [newTrackLabel, setNewTrackLabel] = createSignal('')
 
   // Track collapse state
   const [collapsedTracks, setCollapsedTracks] = createSignal<Set<string>>(new Set())
@@ -140,16 +137,31 @@ export function TimelinePanel() {
   const [renamingTrackId, setRenamingTrackId] = createSignal<string | null>(null)
   const [renameTrackLabel, setRenameTrackLabel] = createSignal('')
 
-  // Drag state
-  const [dragging, setDragging] = createSignal<{
+  // Drag: direct DOM manipulation — no signals in the hot path
+  let dragState: {
     sceneId: string
-    originTrackId: string
-    originStartPosition: number
-    offsetX: number
-    offsetY: number
-    pointerId: number
-  } | null>(null)
-  const [ghostPos, setGhostPos] = createSignal({ x: 0, y: 0 })
+    trackId: string
+    startPosition: number
+    startX: number
+    startY: number
+    offsetX: number        // click offset within clip (for accurate drop)
+    el: HTMLElement
+    active: boolean        // false = pending, true = threshold crossed
+  } | null = null
+  // Thin signal only to toggle visual states (z-index, shadow) on drag start/end
+  const [dragActiveId, setDragActiveId] = createSignal<string | null>(null)
+
+  // Resize: direct DOM manipulation
+  let resizeState: {
+    sceneId: string
+    edge: 'left' | 'right'
+    el: HTMLElement
+    origStartPosition: number
+    origDuration: number
+    startX: number
+  } | null = null
+  // Guard: block the click event that fires right after resize/drag ends
+  let suppressNextClick = false
 
   let timelineBodyRef: HTMLDivElement | undefined
 
@@ -340,69 +352,188 @@ export function TimelinePanel() {
     return { x, y }
   }
 
-  // ---- Drag & Drop ----
+  // ---- Drag & Drop (raw DOM — zero signals in the hot path) ----
 
   function handlePointerDown(e: PointerEvent, sceneId: string, trackId: string, startPosition: number) {
-    // Only left button
     if (e.button !== 0) return
+    const el = e.currentTarget as HTMLElement
+    el.setPointerCapture(e.pointerId)
+    const rect = el.getBoundingClientRect()
 
-    const target = e.currentTarget as HTMLElement
-    const rect = target.getBoundingClientRect()
-    const offsetX = e.clientX - rect.left
-    const offsetY = e.clientY - rect.top
-
-    target.setPointerCapture(e.pointerId)
-
-    setDragging({
+    dragState = {
       sceneId,
-      originTrackId: trackId,
-      originStartPosition: startPosition,
-      offsetX,
-      offsetY,
-      pointerId: e.pointerId,
-    })
-    setGhostPos({ x: e.clientX - offsetX, y: e.clientY - offsetY })
+      trackId,
+      startPosition,
+      startX: e.clientX,
+      startY: e.clientY,
+      offsetX: e.clientX - rect.left,
+      el,
+      active: false,
+    }
   }
 
   function handlePointerMove(e: PointerEvent) {
-    const drag = dragging()
-    if (!drag) return
-    setGhostPos({ x: e.clientX - drag.offsetX, y: e.clientY - drag.offsetY })
+    if (!dragState) return
+
+    if (!dragState.active) {
+      const dx = e.clientX - dragState.startX
+      const dy = e.clientY - dragState.startY
+      if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return
+
+      // Promote: set will-change, z-index, shadow via one signal flip
+      dragState.active = true
+      dragState.el.style.willChange = 'transform'
+      dragState.el.style.zIndex = '50'
+      dragState.el.style.boxShadow = '0 8px 24px rgba(0,0,0,0.3)'
+      dragState.el.style.cursor = 'grabbing'
+      setDragActiveId(dragState.sceneId) // signal: blocks click, hides tooltip
+    }
+
+    // Direct DOM write — no signal, no reactivity, no GC
+    const dx = e.clientX - dragState.startX
+    const dy = e.clientY - dragState.startY
+    dragState.el.style.transform = `translate3d(${dx}px,${dy}px,0)`
   }
 
   function handlePointerUp(e: PointerEvent) {
-    const drag = dragging()
-    if (!drag) return
+    if (!dragState) return
 
-    const bodyRect = timelineBodyRef?.getBoundingClientRect()
-    if (!bodyRect) {
-      setDragging(null)
+    if (!dragState.active) {
+      // Never crossed threshold — click (onClick handles it)
+      dragState = null
       return
     }
 
-    // Compute which track the pointer is over
-    const relY = e.clientY - bodyRect.top - RULER_HEIGHT
-    const tracks = ws.trackScenes()
-    let targetTrackIndex = Math.floor(relY / TRACK_HEIGHT)
-    targetTrackIndex = Math.max(0, Math.min(tracks.length - 1, targetTrackIndex))
-    const targetTrack = tracks[targetTrackIndex]
+    // Reset visual before store update (prevents flash)
+    dragState.el.style.transform = ''
+    dragState.el.style.willChange = ''
+    dragState.el.style.zIndex = ''
+    dragState.el.style.boxShadow = ''
+    dragState.el.style.cursor = ''
 
-    // Compute new start position
-    const relX = e.clientX - bodyRect.left - TRACK_LABEL_WIDTH + (timelineBodyRef?.scrollLeft ?? 0)
-    let newStartPosition = relX / scale()
-    newStartPosition = Math.max(0, Math.round(newStartPosition * 4) / 4) // snap to 0.25
+    // Compute snapped drop position using clip's LEFT EDGE (not raw pointer)
+    const bodyRect = timelineBodyRef?.getBoundingClientRect()
+    if (bodyRect) {
+      const tracks = ws.trackScenes()
+      const relY = e.clientY - bodyRect.top - RULER_HEIGHT
+      let ti = Math.floor(relY / TRACK_HEIGHT)
+      ti = Math.max(0, Math.min(tracks.length - 1, ti))
+      const targetTrack = tracks[ti]
 
-    if (targetTrack && (targetTrack.id !== drag.originTrackId || Math.abs(newStartPosition - drag.originStartPosition) > 0.1)) {
-      ws.moveScene(drag.sceneId, targetTrack.id, newStartPosition)
+      // Subtract offsetX so the clip's left edge lands where the user sees it
+      const clipLeftClient = e.clientX - dragState.offsetX
+      const relX = clipLeftClient - bodyRect.left - TRACK_LABEL_WIDTH + (timelineBodyRef?.scrollLeft ?? 0)
+      let newStart = relX / scale()
+      newStart = Math.max(0, Math.round(newStart * 4) / 4)
+
+      if (targetTrack && (targetTrack.id !== dragState.trackId || Math.abs(newStart - dragState.startPosition) > 0.1)) {
+        ws.moveScene(dragState.sceneId, targetTrack.id, newStart)
+      }
     }
 
-    setDragging(null)
+    dragState = null
+    setDragActiveId(null)
+    suppressNextClick = true
+  }
+
+  // ---- Clip edge resize (raw DOM — zero signals in the hot path) ----
+
+  const MIN_DURATION = 0.25
+
+  function handleResizeDown(e: PointerEvent, sceneId: string, edge: 'left' | 'right', startPosition: number, duration: number) {
+    e.stopPropagation()
+    e.preventDefault()
+
+    const clipEl = (e.currentTarget as HTMLElement).parentElement as HTMLElement
+    clipEl.style.willChange = 'left, width'
+
+    resizeState = {
+      sceneId,
+      edge,
+      el: clipEl,
+      origStartPosition: startPosition,
+      origDuration: duration,
+      startX: e.clientX,
+    }
+
+    const sc = scale()
+    const origLeftPx = startPosition * sc
+    const origWidthPx = Math.max(duration * sc, 24)
+    const origRightPx = origLeftPx + origWidthPx
+    const minW = MIN_DURATION * sc
+
+    const onMove = (ev: PointerEvent) => {
+      if (!resizeState) return
+      const deltaX = ev.clientX - resizeState.startX
+
+      if (edge === 'right') {
+        const newW = Math.max(minW, origWidthPx + deltaX)
+        resizeState.el.style.width = `${newW}px`
+      } else {
+        const newLeft = Math.max(0, origLeftPx + deltaX)
+        const newW = Math.max(minW, origRightPx - newLeft)
+        resizeState.el.style.left = `${newLeft}px`
+        resizeState.el.style.width = `${newW}px`
+      }
+    }
+
+    const onUp = () => {
+      document.removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointerup', onUp)
+      document.body.style.cursor = ''
+
+      if (resizeState) {
+        // Read final pixel values BEFORE clearing
+        const finalLeft = parseFloat(resizeState.el.style.left)
+        const finalWidth = parseFloat(resizeState.el.style.width)
+
+        // Update store FIRST (SolidJS will immediately overwrite inline left/width)
+        if (edge === 'right') {
+          const w = Number.isFinite(finalWidth) ? finalWidth : origWidthPx
+          const newDuration = Math.max(MIN_DURATION, Math.round((w / sc) * 4) / 4)
+          ws.updateScene(sceneId, { duration: newDuration })
+        } else {
+          const l = Number.isFinite(finalLeft) ? finalLeft : origLeftPx
+          let newStart = l / sc
+          newStart = Math.max(0, Math.round(newStart * 4) / 4)
+          const rightEdge = startPosition + duration
+          const newDuration = Math.max(MIN_DURATION, Math.round((rightEdge - newStart) * 4) / 4)
+          ws.updateScene(sceneId, { startPosition: newStart, duration: newDuration })
+        }
+
+        // Only clear will-change hint — SolidJS already overwrote left/width
+        resizeState.el.style.willChange = ''
+      }
+      resizeState = null
+      suppressNextClick = true
+    }
+
+    document.addEventListener('pointermove', onMove)
+    document.addEventListener('pointerup', onUp)
+    document.body.style.cursor = 'ew-resize'
   }
 
   // Cancel drag on Escape
   function handleKeyDown(e: KeyboardEvent) {
-    if (e.key === 'Escape' && dragging()) {
-      setDragging(null)
+    if (e.key === 'Escape' && (dragState || resizeState)) {
+      if (dragState) {
+        dragState.el.style.transform = ''
+        dragState.el.style.willChange = ''
+        dragState.el.style.zIndex = ''
+        dragState.el.style.boxShadow = ''
+        dragState.el.style.cursor = ''
+        dragState = null
+        setDragActiveId(null)
+      }
+      if (resizeState) {
+        // Cancel: restore original values
+        const sc = scale()
+        resizeState.el.style.left = `${resizeState.origStartPosition * sc}px`
+        resizeState.el.style.width = `${Math.max(resizeState.origDuration * sc, 24)}px`
+        resizeState.el.style.willChange = ''
+        resizeState = null
+        document.body.style.cursor = ''
+      }
       return
     }
 
@@ -428,19 +559,6 @@ export function TimelinePanel() {
     document.addEventListener('keydown', handleKeyDown)
     onCleanup(() => document.removeEventListener('keydown', handleKeyDown))
   })
-
-  // ---- Track add ----
-
-  function submitNewTrack() {
-    const label = newTrackLabel().trim()
-    if (label) {
-      ws.addTrack(label)
-    }
-    batch(() => {
-      setAddingTrack(false)
-      setNewTrackLabel('')
-    })
-  }
 
   // ---- Track rename ----
 
@@ -518,14 +636,7 @@ export function TimelinePanel() {
     return max
   }
 
-  // ---- Dragging scene info for ghost ----
-
-  const draggingScene = createMemo(() => {
-    const drag = dragging()
-    if (!drag) return null
-    const lookup = sceneLookup()
-    return lookup.get(drag.sceneId) ?? null
-  })
+  // (dragActiveId / resizeActiveId signals used only for click-blocking + CSS toggles)
 
   // ---- Render ----
 
@@ -534,42 +645,6 @@ export function TimelinePanel() {
       class="flex flex-col h-full bg-surface border-t border-border-default"
       tabIndex={0}
     >
-      {/* -- Header --------------------------------------------------------- */}
-      <div class="flex items-center justify-between px-4 h-10 border-b border-border-subtle flex-shrink-0">
-        <span class="text-xs font-medium text-fg-secondary uppercase tracking-wide">
-          {t('timeline.title')}
-        </span>
-        <div class="flex items-center gap-1">
-          <button
-            type="button"
-            class="p-1.5 rounded-md text-fg-muted hover:text-fg hover:bg-surface-raised transition-colors cursor-pointer"
-            aria-label="Zoom out"
-            onClick={zoomOut}
-          >
-            <IconZoomOut size={16} />
-          </button>
-          <span class="text-[10px] text-fg-muted tabular-nums min-w-[3ch] text-center select-none">
-            {Math.round((scale() / DEFAULT_SCALE) * 100)}%
-          </span>
-          <button
-            type="button"
-            class="p-1.5 rounded-md text-fg-muted hover:text-fg hover:bg-surface-raised transition-colors cursor-pointer"
-            aria-label="Zoom in"
-            onClick={zoomIn}
-          >
-            <IconZoomIn size={16} />
-          </button>
-          <button
-            type="button"
-            class="p-1.5 rounded-md text-fg-muted hover:text-fg hover:bg-surface-raised transition-colors cursor-pointer"
-            aria-label={t('timeline.fit')}
-            onClick={zoomFit}
-          >
-            <IconMaximize size={16} />
-          </button>
-        </div>
-      </div>
-
       {/* -- Hint banner ---------------------------------------------------- */}
       <Show when={showHint()}>
         <div class="flex items-center justify-between px-4 py-2 bg-accent-muted text-accent text-xs border-b border-border-subtle">
@@ -583,6 +658,81 @@ export function TimelinePanel() {
           </button>
         </div>
       </Show>
+
+      {/* -- Timeline header bar ------------------------------------------- */}
+      <div
+        data-testid="timeline-header"
+        class="flex items-center flex-shrink-0 border-b border-border-subtle"
+        style={{ height: '32px' }}
+      >
+        {/* Left: label column — "TIMELINE" + collapse */}
+        <div
+          class="flex-shrink-0 flex items-center justify-between px-3 border-r border-border-subtle h-full"
+          style={{ width: `${TRACK_LABEL_WIDTH}px` }}
+        >
+          <span class="text-[11px] font-medium text-fg-secondary uppercase tracking-wider select-none">
+            {t('timeline.title')}
+          </span>
+          <Show when={props.onCollapse}>
+            <button
+              type="button"
+              onClick={props.onCollapse}
+              class="p-1 rounded-md text-fg-muted hover:text-fg hover:bg-surface-raised transition-colors cursor-pointer"
+              aria-label="Collapse timeline"
+              aria-expanded={true}
+            >
+              <IconChevronDown size={14} />
+            </button>
+          </Show>
+        </div>
+
+        {/* Right: track add + zoom controls */}
+        <div class="flex-1 flex items-center justify-between px-3 h-full">
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<IconPlus size={14} />}
+            onClick={() => ws.addTrack(`Track ${ws.trackScenes().length + 1}`)}
+          >
+            {t('timeline.addTrack')}
+          </Button>
+
+          {/* Zoom toolbar */}
+          <div
+            data-testid="timeline-zoom-toolbar"
+            class="flex items-center gap-0.5"
+          >
+            <button
+              type="button"
+              class="p-1 rounded-md text-fg-muted hover:text-fg hover:bg-surface-raised transition-colors cursor-pointer"
+              aria-label="Zoom out"
+              onClick={zoomOut}
+            >
+              <IconZoomOut size={14} />
+            </button>
+            <span class="text-[10px] text-fg-muted tabular-nums min-w-[4ch] text-center select-none">
+              {Math.round((scale() / DEFAULT_SCALE) * 100)}%
+            </span>
+            <button
+              type="button"
+              class="p-1 rounded-md text-fg-muted hover:text-fg hover:bg-surface-raised transition-colors cursor-pointer"
+              aria-label="Zoom in"
+              onClick={zoomIn}
+            >
+              <IconZoomIn size={14} />
+            </button>
+            <div class="w-px h-3.5 bg-border-default mx-0.5" />
+            <button
+              type="button"
+              class="p-1 rounded-md text-fg-muted hover:text-fg hover:bg-surface-raised transition-colors cursor-pointer"
+              aria-label={t('timeline.fit')}
+              onClick={zoomFit}
+            >
+              <IconMaximize size={14} />
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* -- Timeline body -------------------------------------------------- */}
       <div
@@ -668,9 +818,14 @@ export function TimelinePanel() {
             'z-index': '2',
           }}
         >
-          {/* -- Ruler ------------------------------------------------------ */}
+          {/* -- Ruler -------------------------------------------------------- */}
           <div class="flex flex-shrink-0" style={{ height: `${RULER_HEIGHT}px` }}>
-            <div class="flex-shrink-0 border-r border-border-subtle" style={{ width: `${TRACK_LABEL_WIDTH}px` }} />
+            <div
+              class="flex-shrink-0 border-r border-border-subtle"
+              style={{ width: `${TRACK_LABEL_WIDTH}px` }}
+            />
+
+            {/* Ruler ticks only */}
             <div class="relative flex-1">
               <For each={rulerTicks()}>
                 {(tick) => (
@@ -707,12 +862,13 @@ export function TimelinePanel() {
                     >
                       <button
                         type="button"
-                        class="p-0.5 rounded text-fg-muted hover:text-fg transition-colors cursor-pointer flex-shrink-0"
+                        class="p-1 rounded-md text-fg-muted hover:text-fg hover:bg-surface-raised transition-colors cursor-pointer flex-shrink-0"
                         onClick={() => toggleTrackCollapse(track.id)}
                         aria-label={isCollapsed() ? 'Expand track' : 'Collapse track'}
+                        aria-expanded={!isCollapsed()}
                       >
-                        <Show when={isCollapsed()} fallback={<IconChevronDown size={12} />}>
-                          <IconChevronRight size={12} />
+                        <Show when={isCollapsed()} fallback={<IconChevronDown size={14} />}>
+                          <IconChevronRight size={14} />
                         </Show>
                       </button>
                       <Show
@@ -756,26 +912,39 @@ export function TimelinePanel() {
                                 style={{
                                   left: `${scene.startPosition * scale()}px`,
                                   width: `${Math.max(scene.duration * scale(), 24)}px`,
-                                  opacity: dragging()?.sceneId === scene.id ? '0.3' : '1',
                                 }}
                                 data-status={statusToCss(scene.status)}
                                 data-selected={ws.selectedSceneId() === scene.id}
                                 onClick={(e) => {
-                                  if (!dragging()) {
+                                  if (suppressNextClick) {
+                                    suppressNextClick = false
+                                    return
+                                  }
+                                  if (!dragActiveId()) {
                                     e.stopPropagation()
                                     ws.selectScene(scene.id)
                                   }
                                 }}
                                 onPointerDown={(e) => handlePointerDown(e, scene.id, track.id, scene.startPosition)}
-                                onPointerEnter={(e) => showSceneTooltip(e, scene)}
+                                onPointerEnter={(e) => { if (!dragActiveId()) showSceneTooltip(e, scene) }}
                                 onPointerLeave={hideSceneTooltip}
                                 aria-label={`${scene.title || 'Untitled'}, ${sceneTooltip(t, scene.status)}`}
                               >
+                                {/* Left resize handle */}
+                                <span
+                                  class="absolute left-0 top-0 w-1.5 h-full cursor-ew-resize opacity-0 group-hover:opacity-100 hover:bg-accent/30 rounded-l-md transition-opacity z-10"
+                                  onPointerDown={(e) => handleResizeDown(e, scene.id, 'left', scene.startPosition, scene.duration)}
+                                />
                                 {sceneStatusIcon(scene.status)}
                                 <span class="text-xs text-fg truncate">
                                   {scene.title || '\u2014'}
                                 </span>
-                                {/* Branch handle (bottom-right, visible on hover) */}
+                                {/* Right resize handle */}
+                                <span
+                                  class="absolute right-0 top-0 w-1.5 h-full cursor-ew-resize opacity-0 group-hover:opacity-100 hover:bg-accent/30 rounded-r-md transition-opacity z-10"
+                                  onPointerDown={(e) => handleResizeDown(e, scene.id, 'right', scene.startPosition, scene.duration)}
+                                />
+                                {/* Branch handle */}
                                 <span
                                   class="absolute -bottom-1.5 right-1 w-3 h-3 rounded-full bg-accent/60 hover:bg-accent border border-surface opacity-0 group-hover:opacity-100 transition-opacity cursor-crosshair"
                                   onPointerDown={(e) => handleBranchHandleDown(e, scene.id)}
@@ -808,70 +977,11 @@ export function TimelinePanel() {
             }}
           </For>
 
-          {/* -- Add track -------------------------------------------------- */}
-          <div class="py-2 px-3" style={{ "padding-left": `${TRACK_LABEL_WIDTH + 12}px` }}>
-            <Show
-              when={addingTrack()}
-              fallback={
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  icon={<IconPlus size={14} />}
-                  onClick={() => setAddingTrack(true)}
-                >
-                  {t('timeline.addTrack')}
-                </Button>
-              }
-            >
-              <div class="flex items-center gap-2">
-                <input
-                  type="text"
-                  class="h-8 px-3 rounded-md text-sm bg-canvas border border-border-default text-fg placeholder:text-fg-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-focus-ring transition-colors"
-                  placeholder={t('timeline.addTrack')}
-                  value={newTrackLabel()}
-                  onInput={(e) => setNewTrackLabel(e.currentTarget.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') submitNewTrack()
-                    if (e.key === 'Escape') {
-                      setAddingTrack(false)
-                      setNewTrackLabel('')
-                    }
-                  }}
-                  onBlur={submitNewTrack}
-                  autofocus
-                />
-              </div>
-            </Show>
-          </div>
+          {/* spacer to allow scroll beyond last track */}
+          <div class="h-2" />
         </div>
 
-        {/* -- Drag ghost --------------------------------------------------- */}
-        <Show when={dragging() && draggingScene()}>
-          {(_) => {
-            const info = draggingScene()!
-            return (
-              <div
-                class="tl-clip pointer-events-none"
-                style={{
-                  position: 'fixed',
-                  left: `${ghostPos().x}px`,
-                  top: `${ghostPos().y}px`,
-                  width: `${Math.max(info.scene.duration * scale(), 24)}px`,
-                  height: `${TRACK_HEIGHT - 8}px`,
-                  'z-index': '100',
-                  opacity: '0.8',
-                }}
-                data-status={statusToCss(info.scene.status)}
-                data-selected="true"
-              >
-                {sceneStatusIcon(info.scene.status)}
-                <span class="text-xs text-fg truncate">
-                  {info.scene.title || '\u2014'}
-                </span>
-              </div>
-            )
-          }}
-        </Show>
+        {/* (no ghost — actual clip moves via translate3d) */}
       </div>
 
       {/* -- Delete scene dialog -------------------------------------------- */}

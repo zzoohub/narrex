@@ -21,9 +21,11 @@ vi.mock('@/shared/stores/auth', () => ({
 }))
 
 const mockListProjects = vi.fn()
+const mockDeleteProject = vi.fn()
 
 vi.mock('@/entities/project', () => ({
   listProjects: (...args: any[]) => mockListProjects(...args),
+  deleteProject: (...args: any[]) => mockDeleteProject(...args),
 }))
 
 // ---------------------------------------------------------------------------
@@ -130,5 +132,113 @@ describe('DashboardView', () => {
     mockListProjects.mockResolvedValue({ data: [] })
     renderDashboard()
     expect(screen.getByText('New Project')).toBeInTheDocument()
+  })
+
+  // ── Project deletion ──────────────────────────────────────────────
+
+  const PROJECT_LIST = [
+    {
+      id: 'p1',
+      title: 'My Novel',
+      genre: 'Fantasy',
+      sceneCount: 10,
+      draftedSceneCount: 3,
+      updatedAt: '2024-06-15T00:00:00Z',
+      createdAt: '2024-01-01T00:00:00Z',
+    },
+  ]
+
+  it('shows context menu with delete option on right-click', async () => {
+    mockListProjects.mockResolvedValue({ data: PROJECT_LIST })
+    renderDashboard()
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('My Novel')).toBeInTheDocument()
+    })
+
+    const card = screen.getByText('My Novel').closest('[data-project-card]')!
+    await fireEvent.contextMenu(card)
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Delete')).toBeInTheDocument()
+    })
+  })
+
+  it('shows confirmation dialog when delete is clicked from context menu', async () => {
+    mockListProjects.mockResolvedValue({ data: PROJECT_LIST })
+    renderDashboard()
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('My Novel')).toBeInTheDocument()
+    })
+
+    const card = screen.getByText('My Novel').closest('[data-project-card]')!
+    await fireEvent.contextMenu(card)
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Delete')).toBeInTheDocument()
+    })
+
+    await fireEvent.click(screen.getByText('Delete'))
+
+    await vi.waitFor(() => {
+      const dialog = screen.getByRole('dialog')
+      expect(dialog).toBeInTheDocument()
+      expect(dialog.textContent).toContain('My Novel')
+    })
+  })
+
+  it('calls deleteProject and refetches on confirm', async () => {
+    mockDeleteProject.mockResolvedValue(undefined)
+    mockListProjects.mockResolvedValue({ data: PROJECT_LIST })
+    renderDashboard()
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('My Novel')).toBeInTheDocument()
+    })
+
+    const card = screen.getByText('My Novel').closest('[data-project-card]')!
+    await fireEvent.contextMenu(card)
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Delete')).toBeInTheDocument()
+    })
+    await fireEvent.click(screen.getByText('Delete'))
+
+    await vi.waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    // Confirm delete
+    const confirmBtn = screen.getByRole('dialog').querySelector('button.bg-error-muted, button.bg-error')
+      ?? screen.getAllByText('Delete').find(el => el.closest('[role="dialog"]'))!
+    await fireEvent.click(confirmBtn)
+
+    expect(mockDeleteProject).toHaveBeenCalledWith('p1')
+  })
+
+  it('does not delete when dialog is cancelled', async () => {
+    mockListProjects.mockResolvedValue({ data: PROJECT_LIST })
+    renderDashboard()
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('My Novel')).toBeInTheDocument()
+    })
+
+    const card = screen.getByText('My Novel').closest('[data-project-card]')!
+    await fireEvent.contextMenu(card)
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Delete')).toBeInTheDocument()
+    })
+    await fireEvent.click(screen.getByText('Delete'))
+
+    await vi.waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    await fireEvent.click(screen.getByText('Cancel'))
+
+    expect(mockDeleteProject).not.toHaveBeenCalled()
   })
 })

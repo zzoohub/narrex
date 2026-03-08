@@ -85,10 +85,10 @@ vi.mock('@/features/workspace', () => ({
 // Helpers
 // ---------------------------------------------------------------------------
 
-function renderTimeline() {
+function renderTimeline(props: { onCollapse?: () => void } = {}) {
   return render(() => (
     <I18nProvider initial="en">
-      <TimelinePanel />
+      <TimelinePanel onCollapse={props.onCollapse} />
     </I18nProvider>
   ))
 }
@@ -115,22 +115,74 @@ describe('TimelinePanel', () => {
     expect(screen.getByText('Parallel')).toBeInTheDocument()
   })
 
-  it('renders add track button', () => {
+  it('renders timeline hint banner', () => {
     renderTimeline()
-    expect(screen.getByText('Add Track')).toBeInTheDocument()
+    expect(screen.getByText(/starting point/)).toBeInTheDocument()
   })
 
-  it('shows track label input when add track button clicked', async () => {
-    renderTimeline()
-    const addBtn = screen.getByText('Add Track')
-    await fireEvent.click(addBtn)
-    // Should show an input field for the new track label
-    const input = screen.getByPlaceholderText('Add Track')
-    expect(input).toBeInTheDocument()
+  describe('timeline header bar', () => {
+    it('renders a header bar with "Timeline" label', () => {
+      renderTimeline()
+      const header = screen.getByTestId('timeline-header')
+      expect(header).toBeInTheDocument()
+      expect(header.textContent).toContain('Timeline')
+    })
+
+    it('places collapse button inside the header bar', () => {
+      const onCollapse = vi.fn()
+      renderTimeline({ onCollapse })
+      const header = screen.getByTestId('timeline-header')
+      const collapseBtn = screen.getByLabelText('Collapse timeline')
+      expect(header.contains(collapseBtn)).toBe(true)
+    })
+
+    it('places add track button inside the header bar', () => {
+      renderTimeline()
+      const header = screen.getByTestId('timeline-header')
+      const addBtn = screen.getByText('Add Track')
+      expect(header.contains(addBtn)).toBe(true)
+    })
+
+    it('calls addTrack directly on add track click (no inline input)', async () => {
+      renderTimeline()
+      const addBtn = screen.getByText('Add Track')
+      await fireEvent.click(addBtn)
+      expect(mockAddTrack).toHaveBeenCalledWith('Track 3')
+    })
+
+    it('places zoom controls inside the header bar', () => {
+      renderTimeline()
+      const header = screen.getByTestId('timeline-header')
+      const zoomToolbar = screen.getByTestId('timeline-zoom-toolbar')
+      expect(header.contains(zoomToolbar)).toBe(true)
+    })
   })
 
-  it('renders timeline header with title', () => {
-    renderTimeline()
-    expect(screen.getByText('Timeline')).toBeInTheDocument()
+  describe('zoom controls', () => {
+    it('renders zoom controls in a dedicated toolbar', () => {
+      renderTimeline()
+      const zoomToolbar = screen.getByTestId('timeline-zoom-toolbar')
+      expect(zoomToolbar).toBeInTheDocument()
+      const zoomIn = screen.getByLabelText('Zoom in')
+      const zoomOut = screen.getByLabelText('Zoom out')
+      const fit = screen.getByLabelText('Fit')
+      expect(zoomToolbar.contains(zoomIn)).toBe(true)
+      expect(zoomToolbar.contains(zoomOut)).toBe(true)
+      expect(zoomToolbar.contains(fit)).toBe(true)
+    })
+
+    it('keeps collapse button separate from zoom controls', () => {
+      const onCollapse = vi.fn()
+      renderTimeline({ onCollapse })
+      const collapseBtn = screen.getByLabelText('Collapse timeline')
+      const zoomToolbar = screen.getByTestId('timeline-zoom-toolbar')
+      expect(zoomToolbar.contains(collapseBtn)).toBe(false)
+    })
+
+    it('renders zoom percentage display inside the toolbar', () => {
+      renderTimeline()
+      const zoomToolbar = screen.getByTestId('timeline-zoom-toolbar')
+      expect(zoomToolbar.textContent).toContain('100%')
+    })
   })
 })

@@ -2,7 +2,7 @@ import { createSignal, createEffect, onMount, onCleanup, For, Show } from 'solid
 import { Portal } from 'solid-js/web'
 import { useI18n } from '@/shared/lib/i18n'
 import { useWorkspace } from '@/features/workspace'
-import { Button, IconPlus, IconArrowLeft, IconTrash, IconPen, ContextMenu, type ContextMenuItem, Separator, Dialog } from '@/shared/ui'
+import { Button, IconPlus, IconArrowLeft, IconChevronLeft, IconTrash, IconPen, ContextMenu, type ContextMenuItem, Separator, Dialog } from '@/shared/ui'
 import * as d3 from 'd3'
 import type { Character, CharacterRelationship, RelationshipVisual } from '@/entities/character'
 
@@ -34,7 +34,7 @@ interface PopoverState {
 
 /* ── Main component ──────────────────────────────────────────────────── */
 
-export function CharacterMap() {
+export function CharacterMap(props: { onCollapse?: () => void }) {
   const { t } = useI18n()
   const ws = useWorkspace()
   const [selectedCharId, setSelectedCharId] = createSignal<string | null>(null)
@@ -50,6 +50,7 @@ export function CharacterMap() {
           <GraphView
             t={t}
             onSelect={setSelectedCharId}
+            {...(props.onCollapse ? { onCollapse: props.onCollapse } : {})}
           />
         }
       >
@@ -59,6 +60,7 @@ export function CharacterMap() {
             t={t}
             onBack={() => setSelectedCharId(null)}
             onDeleted={() => setSelectedCharId(null)}
+            {...(props.onCollapse ? { onCollapse: props.onCollapse } : {})}
           />
         )}
       </Show>
@@ -71,6 +73,7 @@ export function CharacterMap() {
 function GraphView(props: {
   t: (k: string, params?: Record<string, string | number>) => string
   onSelect: (id: string) => void
+  onCollapse?: () => void
 }) {
   const ws = useWorkspace()
 
@@ -88,6 +91,8 @@ function GraphView(props: {
 
   function rebuildSimulation() {
     simulation?.stop()
+
+    if (!svgRef) return
 
     const width = svgRef.clientWidth || 400
     const height = svgRef.clientHeight || 300
@@ -387,14 +392,27 @@ function GraphView(props: {
         <span class="text-xs font-medium text-fg-secondary uppercase tracking-wide">
           {props.t('characters.title')}
         </span>
-        <Button
-          variant="ghost"
-          size="sm"
-          icon={<IconPlus size={14} />}
-          onClick={() => ws.addCharacter(props.t('characters.newName') || 'New Character')}
-        >
-          {props.t('characters.add')}
-        </Button>
+        <div class="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<IconPlus size={14} />}
+            onClick={() => ws.addCharacter(props.t('characters.newName') || 'New Character')}
+          >
+            {props.t('characters.add')}
+          </Button>
+          <Show when={props.onCollapse}>
+            <button
+              type="button"
+              onClick={props.onCollapse}
+              class="p-1 rounded-md text-fg-muted hover:text-fg hover:bg-surface-raised transition-colors cursor-pointer"
+              aria-label="Collapse character panel"
+              aria-expanded={true}
+            >
+              <IconChevronLeft size={14} />
+            </button>
+          </Show>
+        </div>
       </div>
 
       {/* Graph area */}
@@ -446,7 +464,7 @@ function GraphView(props: {
 
                 return (
                   <Show when={posA() && posB()}>
-                    <ContextMenu items={relContextItems(rel.id)}>
+                    <ContextMenu items={relContextItems(rel.id)} svg>
                       <g
                         class="cursor-pointer"
                         style={{ 'pointer-events': 'all' }}
@@ -519,7 +537,7 @@ function GraphView(props: {
                 return (
                   <Show when={pos()}>
                     {(p) => (
-                      <ContextMenu items={charContextItems(char.id)}>
+                      <ContextMenu items={charContextItems(char.id)} svg>
                         <g
                           class="cursor-grab active:cursor-grabbing"
                           style={{ 'pointer-events': 'all' }}
@@ -755,6 +773,7 @@ function CharacterCard(props: {
   t: (k: string, params?: Record<string, string | number>) => string
   onBack: () => void
   onDeleted: () => void
+  onCollapse?: () => void
 }) {
   const ws = useWorkspace()
   const [showDeleteDialog, setShowDeleteDialog] = createSignal(false)
@@ -780,17 +799,30 @@ function CharacterCard(props: {
   return (
     <>
       {/* Header */}
-      <div class="flex items-center gap-2 px-4 h-10 border-b border-border-subtle flex-shrink-0">
-        <button
-          type="button"
-          onClick={props.onBack}
-          class="p-1 rounded-md text-fg-muted hover:text-fg hover:bg-surface-raised transition-colors cursor-pointer"
-        >
-          <IconArrowLeft size={16} />
-        </button>
-        <span class="text-xs font-medium text-fg-secondary uppercase tracking-wide">
-          {props.t('characters.title')}
-        </span>
+      <div class="flex items-center justify-between px-4 h-10 border-b border-border-subtle flex-shrink-0">
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={props.onBack}
+            class="p-1 rounded-md text-fg-muted hover:text-fg hover:bg-surface-raised transition-colors cursor-pointer"
+          >
+            <IconArrowLeft size={16} />
+          </button>
+          <span class="text-xs font-medium text-fg-secondary uppercase tracking-wide">
+            {props.t('characters.title')}
+          </span>
+        </div>
+        <Show when={props.onCollapse}>
+          <button
+            type="button"
+            onClick={props.onCollapse}
+            class="p-1 rounded-md text-fg-muted hover:text-fg hover:bg-surface-raised transition-colors cursor-pointer"
+            aria-label="Collapse character panel"
+            aria-expanded={true}
+          >
+            <IconChevronLeft size={14} />
+          </button>
+        </Show>
       </div>
 
       {/* Card body */}

@@ -4,11 +4,12 @@ import { useI18n } from '@/shared/lib/i18n'
 import { useTheme } from '@/shared/stores/theme'
 import { WorkspaceProvider, useWorkspace } from '@/features/workspace'
 import {
-  IconPanelLeft,
-  IconPanelBottom,
   IconChevronLeft,
+  IconChevronRight,
+  IconChevronUp,
   IconMoon,
   IconSun,
+  IconSliders,
   Dialog,
 } from '@/shared/ui'
 import { ConfigBar } from '@/widgets/config-bar'
@@ -18,7 +19,7 @@ import { EditorPanel } from '@/widgets/editor-panel'
 import { SceneDetail } from '@/widgets/scene-detail'
 
 export function WorkspaceView() {
-  const params = useParams({ from: '/project/$id' })
+  const params = useParams({ from: '/_authenticated/project/$id' })
   return (
     <WorkspaceProvider projectId={params().id}>
       <WorkspaceLayout />
@@ -31,6 +32,9 @@ function WorkspaceLayout() {
   const { t } = useI18n()
   const { theme, toggle } = useTheme()
 
+  // ---- Config dropdown ----
+  const [configOpen, setConfigOpen] = createSignal(false)
+
   // ---- Panel visibility ----
   const [leftOpen, setLeftOpen] = createSignal(true)
   const [rightOpen, setRightOpen] = createSignal(false)
@@ -40,6 +44,9 @@ function WorkspaceLayout() {
   const [leftWidth, setLeftWidth] = createSignal(280)
   const [rightWidth, setRightWidth] = createSignal(340)
   const [bottomHeight, setBottomHeight] = createSignal(240)
+
+  // ---- Resize-in-progress flag (disables CSS transitions) ----
+  const [isResizing, setIsResizing] = createSignal(false)
 
   // ---- Delete confirmation ----
   const [showDeleteDialog, setShowDeleteDialog] = createSignal(false)
@@ -166,6 +173,7 @@ function WorkspaceLayout() {
     direction: 1 | -1,
   ) {
     return (e: PointerEvent) => {
+      setIsResizing(true)
       const startX = e.clientX
       const startSize = getter()
       const onMove = (ev: PointerEvent) => {
@@ -177,6 +185,7 @@ function WorkspaceLayout() {
         document.removeEventListener('pointerup', onUp)
         document.body.style.cursor = ''
         document.body.style.userSelect = ''
+        setIsResizing(false)
       }
       document.addEventListener('pointermove', onMove)
       document.addEventListener('pointerup', onUp)
@@ -186,6 +195,7 @@ function WorkspaceLayout() {
   }
 
   function handleBottomResize(e: PointerEvent) {
+    setIsResizing(true)
     const startY = e.clientY
     const startSize = bottomHeight()
     const maxH = window.innerHeight * 0.5
@@ -198,6 +208,7 @@ function WorkspaceLayout() {
       document.removeEventListener('pointerup', onUp)
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
+      setIsResizing(false)
     }
     document.addEventListener('pointermove', onMove)
     document.addEventListener('pointerup', onUp)
@@ -233,8 +244,8 @@ function WorkspaceLayout() {
       }
     >
       <div class="h-screen flex flex-col overflow-hidden bg-canvas">
-        {/* ── Top bar ────────────────────────────────────────────── */}
-        <header class="flex items-center justify-between px-4 h-11 border-b border-border-default bg-surface flex-shrink-0 z-30">
+        {/* ── Top bar (single merged header) ──────────────────── */}
+        <header class="relative flex items-center justify-between px-4 h-11 border-b border-border-default bg-surface flex-shrink-0 z-30">
           <div class="flex items-center gap-3">
             <Link
               to="/"
@@ -252,33 +263,22 @@ function WorkspaceLayout() {
           </div>
 
           <div class="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => setLeftOpen((v) => !v)}
-              class={[
-                'p-1.5 rounded-md transition-colors cursor-pointer',
-                leftOpen()
-                  ? 'text-accent bg-accent-muted'
-                  : 'text-fg-muted hover:text-fg hover:bg-surface-raised',
-              ].join(' ')}
-              aria-label="Toggle character panel"
-            >
-              <IconPanelLeft size={16} />
-            </button>
-            <button
-              type="button"
-              onClick={() => setBottomOpen((v) => !v)}
-              class={[
-                'p-1.5 rounded-md transition-colors cursor-pointer',
-                bottomOpen()
-                  ? 'text-accent bg-accent-muted'
-                  : 'text-fg-muted hover:text-fg hover:bg-surface-raised',
-              ].join(' ')}
-              aria-label="Toggle timeline"
-            >
-              <IconPanelBottom size={16} />
-            </button>
-            <div class="w-px h-5 bg-border-default mx-1" />
+            <Show when={ws.state.project}>
+              <button
+                type="button"
+                onClick={() => setConfigOpen((v) => !v)}
+                class={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs transition-colors cursor-pointer ${
+                  configOpen()
+                    ? 'text-accent bg-accent/10'
+                    : 'text-fg-muted hover:text-fg hover:bg-surface-raised'
+                }`}
+                aria-label={t('config.title')}
+                aria-expanded={configOpen()}
+              >
+                <IconSliders size={14} />
+                <span class="hidden sm:inline">{t('config.title')}</span>
+              </button>
+            </Show>
             <button
               type="button"
               onClick={toggle}
@@ -293,47 +293,84 @@ function WorkspaceLayout() {
               {saveStatusText()}
             </span>
           </div>
+
+          {/* Config dropdown overlay */}
+          <ConfigBar open={configOpen()} onClose={() => setConfigOpen(false)} />
         </header>
 
-        {/* ── Config bar ─────────────────────────────────────────── */}
-        <Show when={ws.state.project}>
-          <ConfigBar />
-        </Show>
-
         {/* ── Workspace panels ───────────────────────────────────── */}
-        <div class="flex-1 flex overflow-hidden min-h-0">
+        <div class="flex-1 flex overflow-hidden min-h-0 relative">
           {/* Left panel — Character map */}
-          <Show when={leftOpen()}>
-            <div
-              class="flex-shrink-0 overflow-hidden border-r border-border-default"
-              style={{ width: `${leftWidth()}px` }}
-            >
-              <CharacterMap />
+          <div
+            class="panel-collapsible flex-shrink-0 border-r border-border-default"
+            data-collapsed={!leftOpen()}
+            style={{
+              width: leftOpen() ? `${leftWidth()}px` : '0px',
+              'border-width': leftOpen() ? undefined : '0px',
+              transition: isResizing() ? 'none' : undefined,
+            }}
+          >
+            <div style={{ width: `${leftWidth()}px`, height: '100%' }}>
+              <CharacterMap onCollapse={() => setLeftOpen(false)} />
             </div>
-            <div
-              class="resize-h"
-              onPointerDown={createHorizontalResize(setLeftWidth, leftWidth, 240, 400, 1)}
-            />
+          </div>
+          <div
+            class="resize-h panel-collapsible"
+            data-collapsed={!leftOpen()}
+            style={{ width: leftOpen() ? undefined : '0px', transition: isResizing() ? 'none' : undefined }}
+            onPointerDown={createHorizontalResize(setLeftWidth, leftWidth, 240, 400, 1)}
+          />
+
+          {/* Left edge tab (when collapsed) */}
+          <Show when={!leftOpen()}>
+            <button
+              type="button"
+              class="edge-tab edge-tab--left"
+              aria-label="Open character panel"
+              aria-expanded={false}
+              onClick={() => setLeftOpen(true)}
+            >
+              <IconChevronRight size={14} />
+            </button>
           </Show>
 
           {/* Center — Editor */}
-          <div class="flex-1 min-w-0 flex flex-col">
+          <div class="flex-1 min-w-0 flex flex-col relative">
             <div class="flex-1 overflow-hidden">
               <EditorPanel />
             </div>
 
             {/* Bottom panel — Timeline */}
-            <Show when={bottomOpen()}>
-              <div
-                class="resize-v"
-                onPointerDown={handleBottomResize}
-              />
-              <div
-                class="flex-shrink-0 overflow-hidden"
-                style={{ height: `${bottomHeight()}px` }}
-              >
-                <TimelinePanel />
+            <div
+              class="resize-v panel-collapsible"
+              data-collapsed={!bottomOpen()}
+              style={{ height: bottomOpen() ? undefined : '0px', transition: isResizing() ? 'none' : undefined }}
+              onPointerDown={handleBottomResize}
+            />
+            <div
+              class="panel-collapsible flex-shrink-0"
+              data-collapsed={!bottomOpen()}
+              style={{
+                height: bottomOpen() ? `${bottomHeight()}px` : '0px',
+                transition: isResizing() ? 'none' : undefined,
+              }}
+            >
+              <div style={{ height: `${bottomHeight()}px` }}>
+                <TimelinePanel onCollapse={() => setBottomOpen(false)} />
               </div>
+            </div>
+
+            {/* Bottom edge tab (when collapsed) */}
+            <Show when={!bottomOpen()}>
+              <button
+                type="button"
+                class="edge-tab edge-tab--bottom"
+                aria-label="Open timeline"
+                aria-expanded={false}
+                onClick={() => setBottomOpen(true)}
+              >
+                <IconChevronUp size={14} />
+              </button>
             </Show>
           </div>
 

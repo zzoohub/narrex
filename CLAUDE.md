@@ -16,11 +16,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    - FastAPI: `pytest` + `httpx` + `anyio`
    - Next.js: `vitest` + `@testing-library/react`
    - TanStack/SolidJS: `vitest` + `@solidjs/testing-library`
-2. **Post-check**: After implementation, run sub-agents in parallel (skip for docs-only changes):
-   - **z-security-reviewer** (if auth/data/API changed)
-   - **z-verifier** (e2e + browser verification)
-   > Sub-agents report only. Fix → re-run → pass, then next step.
-3. Any change to requirements, product scope, architecture, data model, UX/UI design, or project structure must be reflected in `docs/`.
+2. **Post-check**: Run both sub-agents in parallel when all logic changes.
+   Skip for cosmetic-only changes (styling, typos, renaming, formatting, docs).
+   - **z-security-reviewer** + **z-verifier** (e2e + browser)
+   > Fix → re-run → all pass, then proceed. When in doubt, run.
+3. **Docs sync**: Any change to requirements, product scope, architecture, data model, UX/UI, or project structure must be reflected in `docs/`.
 
 ### MUST NOT
 - (project-specific anti-patterns here)
