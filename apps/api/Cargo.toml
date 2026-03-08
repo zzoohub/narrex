@@ -1,3 +1,7 @@
+[workspace]
+members = [".", "crates/llm"]
+resolver = "2"
+
 [package]
 name = "narrex-api"
 version = "0.1.0"
@@ -8,7 +12,7 @@ name = "narrex-api"
 path = "src/main.rs"
 
 [dependencies]
-narrex-llm = { path = "../crates/llm" }
+narrex-llm = { path = "crates/llm" }
 anyhow = "1"
 dotenvy = "0.15"
 async-stream = "0.3"
