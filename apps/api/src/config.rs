@@ -3,6 +3,7 @@ use std::env;
 /// Application configuration loaded from environment variables.
 #[derive(Debug, Clone)]
 pub struct Config {
+    pub run_mode: String,
     pub port: u16,
     pub database_url: String,
     pub jwt_secret: String,
@@ -35,6 +36,7 @@ impl Config {
     /// - `CORS_ORIGIN` (default: `http://localhost:3000`)
     pub fn from_env() -> anyhow::Result<Self> {
         Ok(Self {
+            run_mode: env::var("RUN_MODE").unwrap_or_else(|_| "production".into()),
             port: env::var("PORT")
                 .unwrap_or_else(|_| "8080".into())
                 .parse()

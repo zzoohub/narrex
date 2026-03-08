@@ -4,6 +4,7 @@ use axum::response::{IntoResponse, Redirect, Response};
 use axum::Json;
 
 use serde::Deserialize;
+use uuid::Uuid;
 
 use crate::domain::auth::models::GoogleUserInfo;
 use crate::inbound::http::error::ApiError;
@@ -11,17 +12,12 @@ use crate::inbound::http::middleware::auth::AuthUser;
 use crate::inbound::http::response::ApiSuccess;
 use crate::inbound::http::server::AppState;
 
-use super::request::UpdateProfileRequest;
+use super::request::{TestLoginRequest, UpdateProfileRequest};
 use super::response::{AuthTokensResponse, UserResponse};
 
 // ---------------------------------------------------------------------------
 // Query params
 // ---------------------------------------------------------------------------
-
-#[derive(Debug, Deserialize)]
-pub struct GoogleAuthQuery {
-    pub redirect_uri: Option<String>,
-}
 
 #[derive(Debug, Deserialize)]
 pub struct GoogleCallbackQuery {
@@ -36,11 +32,9 @@ pub struct GoogleCallbackQuery {
 /// `GET /v1/auth/google` — redirect to Google OAuth consent screen.
 pub async fn initiate_google_auth(
     State(state): State<AppState>,
-    Query(query): Query<GoogleAuthQuery>,
 ) -> Result<Response, ApiError> {
-    let redirect_uri = query
-        .redirect_uri
-        .unwrap_or_else(|| state.config().google_redirect_uri.clone());
+    let redirect_uri = &state.config().google_redirect_uri;
+    let state_nonce = Uuid::new_v4().to_string();
 
     let google_url = format!(
         "https://accounts.google.com/o/oauth2/v2/auth?\
@@ -51,11 +45,23 @@ pub async fn initiate_google_auth(
          access_type=offline&\
          state={}",
         state.config().google_client_id,
-        urlencoding::encode(&redirect_uri),
-        urlencoding::encode(&state.config().web_app_url),
+        urlencoding::encode(redirect_uri),
+        urlencoding::encode(&state_nonce),
     );
 
-    Ok(Redirect::temporary(&google_url).into_response())
+    // Store state nonce in httpOnly cookie for CSRF validation on callback.
+    let state_cookie = format!(
+        "oauth_state={}; HttpOnly; Secure; SameSite=Lax; Path=/v1/auth; Max-Age=600",
+        state_nonce,
+    );
+
+    let mut response = Redirect::temporary(&google_url).into_response();
+    response.headers_mut().insert(
+        header::SET_COOKIE,
+        state_cookie.parse().expect("valid cookie header"),
+    );
+
+    Ok(response)
 }
 
 /// `GET /v1/auth/google/callback` — exchange code for tokens, upsert user, redirect.
@@ -64,6 +70,22 @@ pub async fn handle_google_callback(
     headers: HeaderMap,
     Query(query): Query<GoogleCallbackQuery>,
 ) -> Result<Response, ApiError> {
+    // Validate state parameter against the per-session cookie (CSRF protection).
+    let cookie_header = headers
+        .get(header::COOKIE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+
+    let expected_state = cookie_header
+        .split(';')
+        .filter_map(|c| c.trim().strip_prefix("oauth_state="))
+        .next()
+        .ok_or_else(|| ApiError::BadRequest("missing OAuth state cookie".into()))?;
+
+    if query.state != expected_state {
+        return Err(ApiError::BadRequest("invalid OAuth state parameter".into()));
+    }
+
     // Exchange the authorization code for a Google access token.
     let google_tokens = exchange_google_code(
         &query.code,
@@ -93,34 +115,33 @@ pub async fn handle_google_callback(
         .unwrap_or_else(|| "en".into());
 
     // Upsert user and issue tokens.
-    let (_user, tokens, refresh_token) = state
+    let (_user, _tokens, refresh_token) = state
         .auth_service()
         .google_callback(google_user, &preferred_locale)
         .await?;
 
-    // Validate state param matches configured web app URL to prevent open redirect.
-    let expected_web_url = &state.config().web_app_url;
-    if query.state != *expected_web_url {
-        return Err(ApiError::BadRequest("invalid OAuth state parameter".into()));
-    }
-    let web_url = expected_web_url;
-
-    let redirect_url = format!(
-        "{}?accessToken={}&expiresIn={}",
-        web_url, tokens.access_token, tokens.expires_in,
-    );
+    // Redirect to web app without tokens in URL (client uses refresh cookie).
+    let web_url = &state.config().web_app_url;
 
     // Set httpOnly refresh token cookie.
-    let cookie = format!(
+    let refresh_cookie = format!(
         "refresh_token={}; HttpOnly; Secure; SameSite=Lax; Path=/v1/auth; Max-Age={}",
         refresh_token,
         30 * 24 * 60 * 60, // 30 days
     );
 
-    let mut response = Redirect::temporary(&redirect_url).into_response();
-    response.headers_mut().insert(
+    // Clear the one-time state cookie.
+    let clear_state_cookie =
+        "oauth_state=; HttpOnly; Secure; SameSite=Lax; Path=/v1/auth; Max-Age=0";
+
+    let mut response = Redirect::temporary(web_url).into_response();
+    response.headers_mut().append(
         header::SET_COOKIE,
-        cookie.parse().expect("valid cookie header"),
+        refresh_cookie.parse().expect("valid cookie header"),
+    );
+    response.headers_mut().append(
+        header::SET_COOKIE,
+        clear_state_cookie.parse().expect("valid cookie header"),
     );
 
     Ok(response)
@@ -198,47 +219,88 @@ pub async fn update_profile(
     Ok(ApiSuccess::new(UserResponse::from(&user)))
 }
 
+/// Detect image content type from magic bytes (first bytes of the file).
+fn detect_image_type(data: &[u8]) -> Option<&'static str> {
+    // JPEG: FF D8 FF
+    if data.len() >= 3 && data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF {
+        return Some("image/jpeg");
+    }
+    // PNG: 89 50 4E 47 0D 0A 1A 0A
+    if data.len() >= 8
+        && data[..8] == [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+    {
+        return Some("image/png");
+    }
+    // WebP: RIFF....WEBP
+    if data.len() >= 12 && data[..4] == *b"RIFF" && data[8..12] == *b"WEBP" {
+        return Some("image/webp");
+    }
+    None
+}
+
 /// `POST /v1/auth/me/avatar` — upload profile avatar image.
 pub async fn upload_avatar(
     State(state): State<AppState>,
     auth: AuthUser,
     mut multipart: axum::extract::Multipart,
 ) -> Result<ApiSuccess<UserResponse>, ApiError> {
-    let mut file_data: Option<(String, Vec<u8>)> = None;
+    let mut file_data: Option<Vec<u8>> = None;
 
     while let Some(field) = multipart.next_field().await.map_err(|e| {
         ApiError::BadRequest(format!("invalid multipart: {e}"))
     })? {
         if field.name() == Some("avatar") {
-            let content_type = field
-                .content_type()
-                .unwrap_or("application/octet-stream")
-                .to_string();
-
-            // Validate content type.
-            if !["image/jpeg", "image/png", "image/webp"].contains(&content_type.as_str()) {
-                return Err(ApiError::BadRequest(
-                    "unsupported image format (use JPEG, PNG, or WebP)".into(),
-                ));
-            }
-
             let data = field.bytes().await.map_err(|e| {
                 ApiError::BadRequest(format!("failed to read file: {e}"))
             })?;
 
-            file_data = Some((content_type, data.to_vec()));
+            file_data = Some(data.to_vec());
         }
     }
 
-    let (content_type, data) = file_data
+    let data = file_data
         .ok_or_else(|| ApiError::BadRequest("missing 'avatar' field".into()))?;
+
+    // Validate actual file content via magic bytes (not client-provided Content-Type).
+    let content_type = detect_image_type(&data).ok_or_else(|| {
+        ApiError::BadRequest("unsupported image format (use JPEG, PNG, or WebP)".into())
+    })?;
 
     let user = state
         .auth_service()
-        .upload_avatar(auth.user_id, &content_type, data)
+        .upload_avatar(auth.user_id, content_type, data)
         .await?;
 
     Ok(ApiSuccess::new(UserResponse::from(&user)))
+}
+
+/// `POST /v1/auth/test-login` — test-only login that bypasses Google OAuth.
+///
+/// Only registered when `RUN_MODE=test`. Creates a user with a deterministic
+/// fake Google ID and issues tokens, so E2E tests can authenticate without
+/// going through the real OAuth flow.
+pub async fn test_login(
+    State(state): State<AppState>,
+    Json(body): Json<TestLoginRequest>,
+) -> Result<Response, ApiError> {
+    let (_user, tokens, refresh_token) = state
+        .auth_service()
+        .test_login(&body.email, body.name.as_deref())
+        .await?;
+
+    let refresh_cookie = format!(
+        "refresh_token={}; HttpOnly; Secure; SameSite=Lax; Path=/v1/auth; Max-Age={}",
+        refresh_token,
+        30 * 24 * 60 * 60, // 30 days
+    );
+
+    let mut response = ApiSuccess::new(AuthTokensResponse::from(&tokens)).into_response();
+    response.headers_mut().insert(
+        header::SET_COOKIE,
+        refresh_cookie.parse().expect("valid cookie header"),
+    );
+
+    Ok(response)
 }
 
 /// `DELETE /v1/auth/me` — delete user account and all data.
@@ -354,6 +416,48 @@ async fn fetch_google_user_info(access_token: &str) -> anyhow::Result<GoogleUser
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ---- Magic bytes detection ----
+
+    #[test]
+    fn detect_jpeg() {
+        let data = [0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10];
+        assert_eq!(detect_image_type(&data), Some("image/jpeg"));
+    }
+
+    #[test]
+    fn detect_png() {
+        let data = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00];
+        assert_eq!(detect_image_type(&data), Some("image/png"));
+    }
+
+    #[test]
+    fn detect_webp() {
+        let mut data = Vec::from(*b"RIFF");
+        data.extend_from_slice(&[0x00; 4]); // file size placeholder
+        data.extend_from_slice(b"WEBP");
+        assert_eq!(detect_image_type(&data), Some("image/webp"));
+    }
+
+    #[test]
+    fn detect_unknown_returns_none() {
+        let data = [0x00, 0x01, 0x02, 0x03];
+        assert_eq!(detect_image_type(&data), None);
+    }
+
+    #[test]
+    fn detect_empty_returns_none() {
+        assert_eq!(detect_image_type(&[]), None);
+    }
+
+    #[test]
+    fn detect_svg_rejected() {
+        // SVG starts with text/xml — should not be detected as image.
+        let data = b"<?xml version=\"1.0\"?><svg>";
+        assert_eq!(detect_image_type(data), None);
+    }
+
+    // ---- Accept-Language resolution ----
 
     #[test]
     fn resolve_korean_primary() {

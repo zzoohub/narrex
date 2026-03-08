@@ -30,10 +30,10 @@ export default defineConfig({
       timeout: 30_000,
     },
     {
-      command: "just api-dev",
-      url: "http://localhost:8080",
+      command: "RUN_MODE=test just api-dev",
+      url: "http://localhost:8080/health",
       reuseExistingServer: !process.env.CI,
-      timeout: 30_000,
+      timeout: 60_000,
     },
   ],
 });

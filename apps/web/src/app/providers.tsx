@@ -1,8 +1,22 @@
-import { onMount } from 'solid-js'
-import type { ParentComponent } from 'solid-js'
-import { I18nProvider } from '@/shared/lib/i18n'
+import { createEffect, onMount } from 'solid-js'
+import type { Component, ParentComponent } from 'solid-js'
+import { I18nProvider, useI18n } from '@/shared/lib/i18n'
 import { useTheme } from '@/shared/stores/theme'
-import { initAuth } from '@/shared/stores/auth'
+import { initAuth, useAuth } from '@/shared/stores/auth'
+import type { Locale } from '@/shared/types'
+
+/** Syncs i18n locale from the authenticated user's languagePreference. */
+const LocaleSync: Component = () => {
+  const { setLocale } = useI18n()
+  const { user } = useAuth()
+
+  createEffect(() => {
+    const pref = user()?.languagePreference as Locale | undefined
+    if (pref) setLocale(pref)
+  })
+
+  return null
+}
 
 export const Providers: ParentComponent = (props) => {
   // Initialize theme side-effect (applies .dark class)
@@ -13,5 +27,10 @@ export const Providers: ParentComponent = (props) => {
     void initAuth()
   })
 
-  return <I18nProvider initial="ko">{props.children}</I18nProvider>
+  return (
+    <I18nProvider initial="ko">
+      <LocaleSync />
+      {props.children}
+    </I18nProvider>
+  )
 }

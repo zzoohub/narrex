@@ -646,7 +646,11 @@ export function ProjectCreationView() {
                           {t(phaseHeadingKeys[phaseIdx])}
                         </h3>
                         <div class="text-sm text-fg leading-relaxed whitespace-pre-wrap">
-                          {phaseTexts()[phaseIdx] ?? ''}
+                          {(() => {
+                            const text = phaseTexts()[phaseIdx] ?? ''
+                            const fence = text.indexOf('```')
+                            return fence >= 0 ? text.slice(0, fence).trimEnd() : text
+                          })()}
                           <Show when={activePhase() === phaseIdx && !completionData()}>
                             <span
                               class="inline-block w-0.5 h-4 bg-accent align-text-bottom ml-px"

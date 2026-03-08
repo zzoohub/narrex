@@ -54,10 +54,8 @@ async function refreshToken(): Promise<string | null> {
 // ---- Actions ----------------------------------------------------------------
 
 export async function initAuth(): Promise<void> {
-  // Try existing token from localStorage
-  const stored = localStorage.getItem('narrex_access_token')
-  if (stored) {
-    setAccessToken(stored)
+  // Try in-memory token first (e.g. after refresh within the same session).
+  if (getAccessToken()) {
     const me = await fetchMe()
     if (me) {
       setUser(me)
@@ -66,11 +64,10 @@ export async function initAuth(): Promise<void> {
     }
   }
 
-  // Try refresh
+  // Acquire token via httpOnly refresh cookie (no localStorage).
   const newToken = await refreshToken()
   if (newToken) {
     setAccessToken(newToken)
-    localStorage.setItem('narrex_access_token', newToken)
     const me = await fetchMe()
     if (me) {
       setUser(me)
@@ -98,7 +95,6 @@ export async function handleOAuthCallback(code: string): Promise<boolean> {
     if (!res.ok) return false
     const data = (await res.json()) as { data: { accessToken: string; user: AuthUser } }
     setAccessToken(data.data.accessToken)
-    localStorage.setItem('narrex_access_token', data.data.accessToken)
     setUser(data.data.user)
     setAuthState('authenticated')
     return true
@@ -114,7 +110,6 @@ export async function logout(): Promise<void> {
     // ignore — clear local state regardless
   }
   setAccessToken(null)
-  localStorage.removeItem('narrex_access_token')
   setUser(null)
   setAuthState('unauthenticated')
 }
@@ -122,14 +117,12 @@ export async function logout(): Promise<void> {
 export async function deleteAccount(): Promise<void> {
   await del('/v1/auth/me')
   setAccessToken(null)
-  localStorage.removeItem('narrex_access_token')
   setUser(null)
   setAuthState('unauthenticated')
 }
 
 export async function updateProfile(data: {
   displayName?: string | null
-  profileImageUrl?: string | null
   themePreference?: string
   languagePreference?: string
 }): Promise<AuthUser> {

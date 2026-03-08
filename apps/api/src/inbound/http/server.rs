@@ -1,12 +1,13 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use axum::extract::DefaultBodyLimit;
 use axum::routing::{delete, get, patch, post};
 use axum::Router;
 use sqlx::PgPool;
 use tokio::net::TcpListener;
 use tokio::signal;
-use axum::http::{header, HeaderValue, Method};
+use axum::http::{header, HeaderName, HeaderValue, Method};
 use tower_http::cors::CorsLayer;
 use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::timeout::TimeoutLayer;
@@ -174,7 +175,7 @@ fn build_router(state: AppState, cors_origin: &str) -> Router {
         .allow_credentials(true);
 
     // ---- Public routes (no auth) ----
-    let public = Router::new()
+    let mut public = Router::new()
         .route("/health", get(health::health_check))
         .route("/v1/auth/google", get(auth_handlers::initiate_google_auth))
         .route(
@@ -182,6 +183,15 @@ fn build_router(state: AppState, cors_origin: &str) -> Router {
             get(auth_handlers::handle_google_callback),
         )
         .route("/v1/auth/refresh", post(auth_handlers::refresh_token));
+
+    // Test-only route: bypass OAuth for E2E tests.
+    // Only available when RUN_MODE=test — does not exist in production.
+    if state.config().run_mode == "test" {
+        public = public.route(
+            "/v1/auth/test-login",
+            post(auth_handlers::test_login),
+        );
+    }
 
     // ---- Authenticated routes ----
     let authed = Router::new()
@@ -195,7 +205,8 @@ fn build_router(state: AppState, cors_origin: &str) -> Router {
         )
         .route(
             "/v1/auth/me/avatar",
-            post(auth_handlers::upload_avatar),
+            post(auth_handlers::upload_avatar)
+                .layer(DefaultBodyLimit::max(2 * 1024 * 1024 + 512)), // 2MB + multipart overhead
         )
         // Cost analytics
         .route("/v1/me/costs", get(ai_handlers::get_user_costs))
@@ -315,6 +326,10 @@ fn build_router(state: AppState, cors_origin: &str) -> Router {
         .layer(SetResponseHeaderLayer::overriding(
             header::REFERRER_POLICY,
             HeaderValue::from_static("strict-origin-when-cross-origin"),
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            HeaderName::from_static("content-security-policy"),
+            HeaderValue::from_static("default-src 'none'; frame-ancestors 'none'"),
         ))
         .layer(TimeoutLayer::with_status_code(
             axum::http::StatusCode::REQUEST_TIMEOUT,

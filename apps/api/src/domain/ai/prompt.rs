@@ -242,29 +242,32 @@ impl PromptBuilder {
     }
 
     /// Phase 1 system prompt: extract characters + project meta.
+    /// Outputs natural language summary first, then JSON in fenced block.
     pub fn characters_system_prompt(locale: &str) -> String {
         let lang_instruction = match locale {
-            "ko" => "- 모든 텍스트 값(title, personality 등)은 반드시 한국어로 작성",
-            _ => "- All text values (title, personality, etc.) MUST be written in English",
+            "ko" => "- 모든 텍스트는 반드시 한국어로 작성",
+            _ => "- All text MUST be written in English",
         };
 
         format!(
             "당신은 이야기 구조 분석 전문가입니다. \
              사용자의 이야기 아이디어에서 등장인물과 관계를 추출합니다.\n\n\
              ## 규칙\n\
-             - 유효한 JSON만 출력 (마크다운, 설명 없이)\n\
              {lang_instruction}\n\
-             - JSON 스키마: {{ \"title\": string, \"genre\": string|null, \"theme\": string|null, \
+             - 이야기에 맞춰 3-8명의 등장인물 생성\n\
+             - 등장인물 간 핵심 관계를 모두 추출\n\
+             - 텍스트에서 장르, 주제, 시대/배경, 시점, 톤을 추론\n\n\
+             ## 출력 형식\n\
+             1. 먼저 분석 결과를 자연스러운 문장으로 설명 (작품 제목, 장르, 등장인물 소개, 관계 설명)\n\
+             2. 마지막에 ```json 블록으로 구조화된 JSON 출력\n\n\
+             JSON 스키마: {{ \"title\": string, \"genre\": string|null, \"theme\": string|null, \
                \"era_location\": string|null, \
                \"pov\": \"first_person\"|\"third_limited\"|\"third_omniscient\"|null, \
                \"tone\": string|null, \
                \"characters\": [{{\"name\": string, \"personality\": string|null, \
                \"appearance\": string|null, \"secrets\": string|null, \"motivation\": string|null}}], \
                \"relationships\": [{{\"character_a\": string, \"character_b\": string, \
-               \"label\": string, \"direction\": \"bidirectional\"|\"a_to_b\"|\"b_to_a\"|null}}] }}\n\
-             - 이야기에 맞춰 3-8명의 등장인물 생성\n\
-             - 등장인물 간 핵심 관계를 모두 추출\n\
-             - 텍스트에서 장르, 주제, 시대/배경, 시점, 톤을 추론"
+               \"label\": string, \"direction\": \"bidirectional\"|\"a_to_b\"|\"b_to_a\"|null}}] }}"
         )
     }
 
@@ -295,26 +298,29 @@ impl PromptBuilder {
     }
 
     /// Phase 2 system prompt: create timeline tracks + scenes.
+    /// Outputs natural language summary first, then JSON in fenced block.
     pub fn timeline_system_prompt(locale: &str) -> String {
         let lang_instruction = match locale {
-            "ko" => "- 모든 텍스트 값(title, plot_summary 등)은 반드시 한국어로 작성",
-            _ => "- All text values (title, plot_summary, etc.) MUST be written in English",
+            "ko" => "- 모든 텍스트는 반드시 한국어로 작성",
+            _ => "- All text MUST be written in English",
         };
 
         format!(
             "당신은 이야기 타임라인 구성 전문가입니다. \
              주어진 등장인물과 이야기를 바탕으로 타임라인을 구성합니다.\n\n\
              ## 규칙\n\
-             - 유효한 JSON만 출력 (마크다운, 설명 없이)\n\
              {lang_instruction}\n\
-             - JSON 스키마: {{ \"tracks\": [{{\"label\": string|null, \
-               \"scenes\": [{{\"title\": string, \"plot_summary\": string|null, \
-               \"location\": string|null, \"mood_tags\": [string]|null, \
-               \"characters\": [string]|null}}]}}] }}\n\
              - 1-3개의 트랙(병렬 스토리라인) 생성\n\
              - 트랙당 3-10개의 장면 생성\n\
              - characters 배열에는 등장인물 이름 목록 포함\n\
-             - 앞서 제공된 등장인물 정보와 일치하는 이름 사용"
+             - 앞서 제공된 등장인물 정보와 일치하는 이름 사용\n\n\
+             ## 출력 형식\n\
+             1. 먼저 구성한 타임라인을 자연스러운 문장으로 설명 (트랙 구성, 주요 장면 흐름)\n\
+             2. 마지막에 ```json 블록으로 구조화된 JSON 출력\n\n\
+             JSON 스키마: {{ \"tracks\": [{{\"label\": string|null, \
+               \"scenes\": [{{\"title\": string, \"plot_summary\": string|null, \
+               \"location\": string|null, \"mood_tags\": [string]|null, \
+               \"characters\": [string]|null}}]}}] }}"
         )
     }
 

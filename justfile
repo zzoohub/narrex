@@ -154,7 +154,7 @@ mobile-clean:
 # ─── E2E (Playwright) ────────────────────────────────────────────────────────
 
 e2e-install:
-    cd e2e && bun install && bun playwright install --with-deps chromium
+    cd e2e && bun install && bunx playwright install --with-deps chromium
 
 e2e *args:
     cd e2e && bun playwright test --project=chromium {{ args }}

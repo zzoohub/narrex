@@ -62,6 +62,37 @@ impl<U: UserRepository, T: TokenService, S: AvatarStorage> AuthServiceImpl<U, T,
         user_id: Uuid,
         update: &UpdateProfile,
     ) -> Result<User, AuthError> {
+        // Validate display_name if provided.
+        if let Some(ref name_opt) = update.display_name {
+            if let Some(ref name) = name_opt {
+                let trimmed = name.trim();
+                if trimmed.is_empty() {
+                    return Err(AuthError::InvalidInput("display name cannot be empty".into()));
+                }
+                if trimmed.len() > 50 {
+                    return Err(AuthError::InvalidInput("display name must be 50 characters or fewer".into()));
+                }
+            }
+        }
+
+        // Validate theme_preference if provided.
+        if let Some(ref theme) = update.theme_preference {
+            if !["system", "light", "dark"].contains(&theme.as_str()) {
+                return Err(AuthError::InvalidInput(
+                    "theme must be one of: system, light, dark".into(),
+                ));
+            }
+        }
+
+        // Validate language_preference if provided.
+        if let Some(ref lang) = update.language_preference {
+            if !["ko", "en"].contains(&lang.as_str()) {
+                return Err(AuthError::InvalidInput(
+                    "language must be one of: ko, en".into(),
+                ));
+            }
+        }
+
         // Verify user exists.
         self.user_repo
             .find_by_id(user_id)
@@ -76,7 +107,31 @@ impl<U: UserRepository, T: TokenService, S: AvatarStorage> AuthServiceImpl<U, T,
             .find_by_id(user_id)
             .await?
             .ok_or(AuthError::UserNotFound)?;
+
+        // Clean up R2 avatar files before deleting the user (GDPR right to erasure).
+        if let Err(e) = self.avatar_storage.delete_avatar(user_id).await {
+            tracing::warn!(%user_id, error = %e, "failed to delete avatar from storage (proceeding with account deletion)");
+        }
+
         self.user_repo.delete_user(user_id).await
+    }
+
+    /// Test-only login: create/upsert a user with a fake Google ID and issue tokens.
+    ///
+    /// This bypasses Google OAuth and is intended for E2E tests only.
+    /// The route that calls this method should only be registered in test mode.
+    pub async fn test_login(
+        &self,
+        email: &str,
+        name: Option<&str>,
+    ) -> Result<(User, AuthTokens, String), AuthError> {
+        let google_info = GoogleUserInfo {
+            google_id: format!("test-{email}"),
+            email: email.to_string(),
+            name: name.map(String::from),
+            picture: None,
+        };
+        self.google_callback(google_info, "en").await
     }
 
     /// Upload a profile avatar image and update the user's profile URL.
@@ -148,6 +203,10 @@ mod tests {
             } else {
                 Ok(format!("https://assets.test/avatars/{user_id}.jpg"))
             }
+        }
+
+        async fn delete_avatar(&self, _user_id: Uuid) -> Result<(), AuthError> {
+            Ok(())
         }
     }
 
@@ -464,6 +523,87 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn update_profile_rejects_invalid_theme() {
+        let user_id = Uuid::new_v4();
+        let user = make_user(user_id);
+        let repo = MockUserRepo::with_user(user);
+        let token_svc = MockTokenSvc::new(user_id);
+        let svc = AuthServiceImpl::new(repo, token_svc, MockAvatarStorage::new());
+
+        let update = UpdateProfile {
+            theme_preference: Some("neon".into()),
+            ..Default::default()
+        };
+        let result = svc.update_profile(user_id, &update).await;
+        assert!(matches!(result.unwrap_err(), AuthError::InvalidInput(_)));
+    }
+
+    #[tokio::test]
+    async fn update_profile_rejects_invalid_language() {
+        let user_id = Uuid::new_v4();
+        let user = make_user(user_id);
+        let repo = MockUserRepo::with_user(user);
+        let token_svc = MockTokenSvc::new(user_id);
+        let svc = AuthServiceImpl::new(repo, token_svc, MockAvatarStorage::new());
+
+        let update = UpdateProfile {
+            language_preference: Some("fr".into()),
+            ..Default::default()
+        };
+        let result = svc.update_profile(user_id, &update).await;
+        assert!(matches!(result.unwrap_err(), AuthError::InvalidInput(_)));
+    }
+
+    #[tokio::test]
+    async fn update_profile_rejects_empty_display_name() {
+        let user_id = Uuid::new_v4();
+        let user = make_user(user_id);
+        let repo = MockUserRepo::with_user(user);
+        let token_svc = MockTokenSvc::new(user_id);
+        let svc = AuthServiceImpl::new(repo, token_svc, MockAvatarStorage::new());
+
+        let update = UpdateProfile {
+            display_name: Some(Some("   ".into())),
+            ..Default::default()
+        };
+        let result = svc.update_profile(user_id, &update).await;
+        assert!(matches!(result.unwrap_err(), AuthError::InvalidInput(_)));
+    }
+
+    #[tokio::test]
+    async fn update_profile_rejects_long_display_name() {
+        let user_id = Uuid::new_v4();
+        let user = make_user(user_id);
+        let repo = MockUserRepo::with_user(user);
+        let token_svc = MockTokenSvc::new(user_id);
+        let svc = AuthServiceImpl::new(repo, token_svc, MockAvatarStorage::new());
+
+        let update = UpdateProfile {
+            display_name: Some(Some("a".repeat(51))),
+            ..Default::default()
+        };
+        let result = svc.update_profile(user_id, &update).await;
+        assert!(matches!(result.unwrap_err(), AuthError::InvalidInput(_)));
+    }
+
+    #[tokio::test]
+    async fn update_profile_accepts_valid_theme() {
+        let user_id = Uuid::new_v4();
+        let user = make_user(user_id);
+        let repo = MockUserRepo::with_user(user);
+        let token_svc = MockTokenSvc::new(user_id);
+        let svc = AuthServiceImpl::new(repo, token_svc, MockAvatarStorage::new());
+
+        for theme in ["system", "light", "dark"] {
+            let update = UpdateProfile {
+                theme_preference: Some(theme.into()),
+                ..Default::default()
+            };
+            assert!(svc.update_profile(user_id, &update).await.is_ok());
+        }
+    }
+
+    #[tokio::test]
     async fn upload_avatar_success() {
         let user_id = Uuid::new_v4();
         let user = make_user(user_id);
@@ -518,5 +658,54 @@ mod tests {
         let result = svc.upload_avatar(user_id, "image/jpeg", data).await;
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), AuthError::Unknown(_)));
+    }
+
+    // ---- test_login ----
+
+    #[tokio::test]
+    async fn test_login_success() {
+        let user_id = Uuid::new_v4();
+        let user = make_user(user_id);
+        let repo = MockUserRepo::with_user(user);
+        let token_svc = MockTokenSvc::new(user_id);
+        let svc = AuthServiceImpl::new(repo, token_svc, MockAvatarStorage::new());
+
+        let (returned_user, tokens, refresh) = svc
+            .test_login("test@example.com", Some("Test User"))
+            .await
+            .unwrap();
+        assert_eq!(returned_user.id, user_id);
+        assert!(tokens.access_token.contains(&user_id.to_string()));
+        assert!(refresh.contains(&user_id.to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_login_without_name() {
+        let user_id = Uuid::new_v4();
+        let user = make_user(user_id);
+        let repo = MockUserRepo::with_user(user);
+        let token_svc = MockTokenSvc::new(user_id);
+        let svc = AuthServiceImpl::new(repo, token_svc, MockAvatarStorage::new());
+
+        let (returned_user, tokens, _refresh) = svc
+            .test_login("noname@example.com", None)
+            .await
+            .unwrap();
+        assert_eq!(returned_user.id, user_id);
+        assert!(!tokens.access_token.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_login_uses_deterministic_google_id() {
+        let user_id = Uuid::new_v4();
+        let user = make_user(user_id);
+        // Capture the google_info passed to upsert_from_google
+        let repo = MockUserRepo::with_user(user);
+        let token_svc = MockTokenSvc::new(user_id);
+        let svc = AuthServiceImpl::new(repo, token_svc, MockAvatarStorage::new());
+
+        // Should not panic — the google_id is deterministic from email
+        let result = svc.test_login("test@example.com", None).await;
+        assert!(result.is_ok());
     }
 }

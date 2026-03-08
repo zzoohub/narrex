@@ -70,6 +70,21 @@ impl AvatarStorage for R2Storage {
 
         Ok(format!("{}/{key}", self.public_url))
     }
+
+    async fn delete_avatar(&self, user_id: Uuid) -> Result<(), AuthError> {
+        // Try deleting all possible extensions (best-effort).
+        for ext in ["jpg", "png", "webp"] {
+            let key = format!("avatars/{user_id}.{ext}");
+            let _ = self
+                .client
+                .delete_object()
+                .bucket(&self.bucket)
+                .key(&key)
+                .send()
+                .await;
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]

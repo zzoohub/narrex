@@ -1372,16 +1372,12 @@ components:
 
     UpdateProfile:
       type: object
+      description: Profile image URL is only settable via the avatar upload endpoint.
       properties:
         displayName:
           type:
             - string
             - 'null'
-        profileImageUrl:
-          type:
-            - string
-            - 'null'
-          format: uri
         themePreference:
           type: string
           enum: [system, light, dark]

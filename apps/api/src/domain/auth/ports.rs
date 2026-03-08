@@ -28,4 +28,7 @@ pub trait AvatarStorage: Clone + Send + Sync + 'static {
         content_type: &str,
         data: Vec<u8>,
     ) -> Result<String, AuthError>;
+
+    /// Delete all avatar files for a user (best-effort, ignores missing files).
+    async fn delete_avatar(&self, user_id: Uuid) -> Result<(), AuthError>;
 }

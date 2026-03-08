@@ -305,9 +305,9 @@ pub struct StructuredScene {
     pub characters: Option<Vec<String>>,
 }
 
-/// Phase 1 output: project metadata + characters + relationships.
+/// Phase 1 output: world/setting metadata.
 #[derive(Debug, Clone, Deserialize)]
-pub struct CharactersOutput {
+pub struct WorldOutput {
     #[serde(default, deserialize_with = "null_as_default")]
     pub title: String,
     pub genre: Option<String>,
@@ -315,13 +315,18 @@ pub struct CharactersOutput {
     pub era_location: Option<String>,
     pub pov: Option<String>,
     pub tone: Option<String>,
+}
+
+/// Phase 2 output: characters + relationships.
+#[derive(Debug, Clone, Deserialize)]
+pub struct CharactersOutput {
     #[serde(default, deserialize_with = "null_as_default")]
     pub characters: Vec<StructuredCharacter>,
     #[serde(default, deserialize_with = "null_as_default")]
     pub relationships: Vec<StructuredRelationship>,
 }
 
-/// Phase 2 output: timeline tracks with scenes.
+/// Phase 3 output: timeline tracks with scenes.
 #[derive(Debug, Clone, Deserialize)]
 pub struct TimelineOutput {
     #[serde(default, deserialize_with = "null_as_default")]
@@ -549,29 +554,42 @@ mod tests {
         assert_eq!(output.tracks[0].scenes[0].title, "");
     }
 
+    // --- WorldOutput deserialization ---
+
+    #[test]
+    fn world_output_deserialize() {
+        let json = r#"{"title": "운명의 칼날", "genre": "판타지", "theme": "복수", "era_location": "중세", "pov": "third_limited", "tone": "어두운"}"#;
+        let output: WorldOutput = serde_json::from_str(json).unwrap();
+        assert_eq!(output.title, "운명의 칼날");
+        assert_eq!(output.genre.as_deref(), Some("판타지"));
+        assert_eq!(output.pov.as_deref(), Some("third_limited"));
+    }
+
+    #[test]
+    fn world_output_minimal() {
+        let json = r#"{"title": "최소"}"#;
+        let output: WorldOutput = serde_json::from_str(json).unwrap();
+        assert_eq!(output.title, "최소");
+        assert!(output.genre.is_none());
+    }
+
     // --- CharactersOutput deserialization ---
 
     #[test]
     fn characters_output_deserialize() {
         let json = r#"{
-            "title": "테스트",
-            "genre": "판타지",
-            "theme": "성장",
             "characters": [{"name": "이수현", "personality": "용감한"}],
             "relationships": [{"character_a": "이수현", "character_b": "박지훈", "label": "라이벌"}]
         }"#;
         let output: CharactersOutput = serde_json::from_str(json).unwrap();
-        assert_eq!(output.title, "테스트");
-        assert_eq!(output.genre.as_deref(), Some("판타지"));
         assert_eq!(output.characters.len(), 1);
         assert_eq!(output.relationships.len(), 1);
     }
 
     #[test]
     fn characters_output_minimal() {
-        let json = r#"{"title": "최소", "characters": [], "relationships": []}"#;
+        let json = r#"{"characters": [], "relationships": []}"#;
         let output: CharactersOutput = serde_json::from_str(json).unwrap();
-        assert_eq!(output.title, "최소");
         assert!(output.characters.is_empty());
     }
 

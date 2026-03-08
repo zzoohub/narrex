@@ -464,6 +464,7 @@ where
 
     /// Stream Phase 2: timeline tracks + scenes.
     /// `characters_context` is the raw JSON from Phase 1 for context chaining.
+    /// Uses 8192 max_tokens — timeline JSON with multiple tracks/scenes is large.
     pub async fn stream_timeline(
         &self,
         source_input: &str,
@@ -475,7 +476,7 @@ where
         let req = GenerateRequest {
             system_prompt: system,
             user_prompt: user,
-            max_tokens: Some(4096),
+            max_tokens: Some(8192),
             temperature: Some(0.7),
         };
         self.llm
