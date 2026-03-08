@@ -1,11 +1,11 @@
 set dotenv-load := false
 
-# ─── Dynamic path resolution ─────────────────────────────────────────────────
-# Supports both monorepo (services/api, clients/web) and flat (api, web) layouts
+# ─── Path resolution ─────────────────────────────────────────────────────────
 
-services_dir := if path_exists("services") == "true" { "services" } else { "." }
-worker_dir := if path_exists("services/worker") == "true" { "services/worker" } else { "worker" }
-web_dir := if path_exists("clients/web") == "true" { "clients/web" } else { "web" }
+api_dir := "apps/api"
+worker_dir := "apps/worker"
+web_dir := "apps/web"
+mobile_dir := "apps/mobile"
 
 default:
     @just --list
@@ -21,41 +21,37 @@ push branch="main" msg="update":
 # ─── DB ───────────────────────────────────────────────────────────────────────
 
 db-migrate:
-    cd {{ services_dir }} && cargo sqlx migrate run --source ../db/migrations
+    cd db && echo "TODO: run migrations"
 
 db-seed:
     cd db && echo "TODO: run seeds"
 
 db-reset: db-migrate db-seed
 
-# ─── API (Rust / Axum) ───────────────────────────────────────────────────────
-
-api-check:
-    cd {{ services_dir }} && cargo check
+# ─── API (Rust / Axum) ──────────────────────────────────────────────────────
 
 api-dev:
-    cd {{ services_dir }} && cargo watch -x 'run -p narrex-api'
-
-api-start:
-    cd {{ services_dir }} && cargo run -p narrex-api
+    cd {{ api_dir }} && cargo run
 
 api-test *args:
-    cd {{ services_dir }} && cargo nextest run {{ args }}
+    cd {{ api_dir }} && cargo nextest run {{ args }}
+
+api-test-cov:
+    cd {{ api_dir }} && cargo llvm-cov nextest --lcov
 
 api-lint:
-    cd {{ services_dir }} && cargo clippy --all-targets -- -D warnings
+    cd {{ api_dir }} && cargo clippy -- -D warnings
 
 api-fmt:
-    cd {{ services_dir }} && cargo fmt --all
+    cd {{ api_dir }} && cargo fmt --check
 
 api-clean:
-    cd {{ services_dir }} && cargo clean
+    cd {{ api_dir }} && cargo clean
 
-# ─── Worker ───────────────────────────────────────────────────────────────────
-# NOTE: Adjust commands for your framework (Celery, BullMQ, Temporal, etc.)
+# ─── Worker (Rust) ───────────────────────────────────────────────────────────
 
 worker-dev:
-    cd {{ worker_dir }} && echo "TODO: start all workers"
+    cd {{ worker_dir }} && cargo run
 
 worker-jobs:
     cd {{ worker_dir }} && echo "TODO: start job queue consumer"
@@ -67,15 +63,15 @@ worker-sub:
     cd {{ worker_dir }} && echo "TODO: start pub/sub subscribers"
 
 worker-test *args:
-    cd {{ worker_dir }} && echo "TODO: run worker tests" {{ args }}
+    cd {{ worker_dir }} && cargo nextest run {{ args }}
 
 worker-lint:
-    cd {{ worker_dir }} && echo "TODO: lint worker"
+    cd {{ worker_dir }} && cargo clippy -- -D warnings
 
 worker-clean:
-    cd {{ worker_dir }} && echo "TODO: clean worker artifacts"
+    cd {{ worker_dir }} && cargo clean
 
-# ─── Web ───────────────────────────────────────────────────────────────────
+# ─── Web ──────────────────────────────────────────────────────────────────────
 
 web-install:
     cd {{ web_dir }} && bun install
@@ -105,11 +101,35 @@ web-test-cov:
     cd {{ web_dir }} && bun vitest run --coverage
 
 web-clean:
-    rm -rf {{ web_dir }}/.output {{ web_dir }}/coverage
+    rm -rf {{ web_dir }}/.next {{ web_dir }}/coverage
+
+# ─── Mobile (Expo React Native) ──────────────────────────────────────────────
+
+mobile-install:
+    cd {{ mobile_dir }} && bun install
+
+mobile-dev:
+    cd {{ mobile_dir }} && bunx expo start --dev-client
+
+mobile-ios:
+    cd {{ mobile_dir }} && bunx expo run:ios
+
+mobile-android:
+    cd {{ mobile_dir }} && bunx expo run:android
+
+mobile-lint:
+    cd {{ mobile_dir }} && bun run lint
+
+mobile-typecheck:
+    cd {{ mobile_dir }} && bun tsc --noEmit
+
+mobile-test *args:
+    cd {{ mobile_dir }} && bun vitest run {{ args }}
+
+mobile-clean:
+    rm -rf {{ mobile_dir }}/.expo {{ mobile_dir }}/node_modules
 
 # ─── E2E (Playwright) ────────────────────────────────────────────────────────
-# Runs from project root against e2e/ directory.
-# Expects playwright.config.ts at root.
 
 e2e-install:
     cd e2e && bun install && bun playwright install --with-deps chromium
@@ -126,20 +146,23 @@ e2e-ui:
 e2e-report:
     cd e2e && bun playwright show-report
 
-# ─── Quality ──────────────────────────────────────────────────────────────────
+# ─── Quality ─────────────────────────────────────────────────────────────────
 
-lint: api-lint web-lint
+lint: api-lint worker-lint web-lint mobile-lint
 
-test: api-test web-test
+test: api-test worker-test web-test mobile-test
 
 check: lint test
 
-# ─── Build ────────────────────────────────────────────────────────────────────
+# ─── Build ───────────────────────────────────────────────────────────────────
 
 build service:
-    #!/usr/bin/env sh
-    if [ -d "services/{{ service }}" ]; then
-        docker build -t {{ service }} -f services/{{ service }}/Dockerfile .
-    else
-        docker build -t {{ service }} -f {{ service }}/Dockerfile .
-    fi
+    docker build -t {{ service }} -f apps/{{ service }}/Dockerfile .
+
+# ─── Deploy ──────────────────────────────────────────────────────────────────
+
+deploy-api:
+    gcloud run deploy api --source {{ api_dir }}
+
+deploy-worker:
+    gcloud run deploy worker --source {{ worker_dir }}
