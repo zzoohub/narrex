@@ -189,7 +189,9 @@ fn build_router(state: AppState, cors_origin: &str) -> Router {
         .route("/v1/auth/logout", post(auth_handlers::logout))
         .route(
             "/v1/auth/me",
-            get(auth_handlers::get_current_user).patch(auth_handlers::update_profile),
+            get(auth_handlers::get_current_user)
+                .patch(auth_handlers::update_profile)
+                .delete(auth_handlers::delete_account),
         )
         // Cost analytics
         .route("/v1/me/costs", get(ai_handlers::get_user_costs))

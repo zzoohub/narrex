@@ -66,6 +66,15 @@ impl<U: UserRepository, T: TokenService> AuthServiceImpl<U, T> {
             .ok_or(AuthError::UserNotFound)?;
         self.user_repo.update_profile(user_id, update).await
     }
+
+    /// Delete user account and all associated data.
+    pub async fn delete_account(&self, user_id: Uuid) -> Result<(), AuthError> {
+        self.user_repo
+            .find_by_id(user_id)
+            .await?
+            .ok_or(AuthError::UserNotFound)?;
+        self.user_repo.delete_user(user_id).await
+    }
 }
 
 #[cfg(test)]
@@ -80,6 +89,7 @@ mod tests {
     struct MockUserRepo {
         user: std::sync::Arc<Mutex<Option<User>>>,
         upsert_result: std::sync::Arc<Mutex<Option<Result<User, AuthError>>>>,
+        delete_called: std::sync::Arc<Mutex<bool>>,
     }
 
     impl MockUserRepo {
@@ -87,6 +97,7 @@ mod tests {
             Self {
                 user: std::sync::Arc::new(Mutex::new(Some(user.clone()))),
                 upsert_result: std::sync::Arc::new(Mutex::new(Some(Ok(user)))),
+                delete_called: std::sync::Arc::new(Mutex::new(false)),
             }
         }
 
@@ -94,6 +105,7 @@ mod tests {
             Self {
                 user: std::sync::Arc::new(Mutex::new(None)),
                 upsert_result: std::sync::Arc::new(Mutex::new(None)),
+                delete_called: std::sync::Arc::new(Mutex::new(false)),
             }
         }
 
@@ -101,6 +113,7 @@ mod tests {
             Self {
                 user: std::sync::Arc::new(Mutex::new(None)),
                 upsert_result: std::sync::Arc::new(Mutex::new(Some(Err(err)))),
+                delete_called: std::sync::Arc::new(Mutex::new(false)),
             }
         }
     }
@@ -112,6 +125,8 @@ mod tests {
             email: "test@example.com".into(),
             display_name: Some("Test User".into()),
             profile_image_url: None,
+            theme_preference: "system".into(),
+            language_preference: "ko".into(),
             created_at: Utc::now(),
             updated_at: Utc::now(),
         }
@@ -144,6 +159,11 @@ mod tests {
                 Some(u) => Ok(u),
                 None => Err(AuthError::UserNotFound),
             }
+        }
+
+        async fn delete_user(&self, _id: Uuid) -> Result<(), AuthError> {
+            *self.delete_called.lock().unwrap() = true;
+            Ok(())
         }
     }
 
@@ -347,6 +367,31 @@ mod tests {
 
         let update = UpdateProfile::default();
         let result = svc.update_profile(user_id, &update).await;
+        assert!(matches!(result.unwrap_err(), AuthError::UserNotFound));
+    }
+
+    #[tokio::test]
+    async fn delete_account_success() {
+        let user_id = Uuid::new_v4();
+        let user = make_user(user_id);
+        let repo = MockUserRepo::with_user(user);
+        let token_svc = MockTokenSvc::new(user_id);
+        let svc = AuthServiceImpl::new(repo.clone(), token_svc);
+
+        let result = svc.delete_account(user_id).await;
+        assert!(result.is_ok());
+        assert!(*repo.delete_called.lock().unwrap());
+    }
+
+    #[tokio::test]
+    async fn delete_account_user_not_found() {
+        let user_id = Uuid::new_v4();
+        let repo = MockUserRepo::new_empty();
+        let token_svc = MockTokenSvc::new(user_id);
+        let svc = AuthServiceImpl::new(repo, token_svc);
+
+        let result = svc.delete_account(user_id).await;
+        assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), AuthError::UserNotFound));
     }
 }

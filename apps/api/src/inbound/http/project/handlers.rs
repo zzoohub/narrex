@@ -162,7 +162,10 @@ pub async fn structure_project(
     tracing::info!(user_id = %auth.user_id, input_len = body.source_input.len(), "structure_project: started");
     let source_input = body.source_input.clone();
     let clarification_answers = body.clarification_answers.clone();
-    let locale = body.locale.clone().unwrap_or_else(|| "ko".to_string());
+    let user = state.auth_service().get_user(auth.user_id).await.map_err(|_| {
+        ApiError::Unauthorized("user not found".into())
+    })?;
+    let locale = user.language_preference;
 
     let stream = async_stream::stream! {
         use std::time::Instant;

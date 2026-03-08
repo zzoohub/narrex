@@ -190,6 +190,24 @@ pub async fn update_profile(
     Ok(ApiSuccess::new(UserResponse::from(&user)))
 }
 
+/// `DELETE /v1/auth/me` — delete user account and all data.
+pub async fn delete_account(
+    State(state): State<AppState>,
+    auth: AuthUser,
+) -> Result<Response, ApiError> {
+    state.auth_service().delete_account(auth.user_id).await?;
+
+    // Clear refresh token cookie
+    let cookie = "refresh_token=; HttpOnly; Secure; SameSite=Lax; Path=/v1/auth; Max-Age=0";
+    let mut response = StatusCode::NO_CONTENT.into_response();
+    response.headers_mut().insert(
+        header::SET_COOKIE,
+        cookie.parse().expect("valid cookie header"),
+    );
+
+    Ok(response)
+}
+
 // ---------------------------------------------------------------------------
 // Google OAuth helpers
 // ---------------------------------------------------------------------------

@@ -45,6 +45,8 @@ mod tests {
         let up = UpdateProfile::default();
         assert!(up.display_name.is_none());
         assert!(up.profile_image_url.is_none());
+        assert!(up.theme_preference.is_none());
+        assert!(up.language_preference.is_none());
     }
 
     #[test]
@@ -66,5 +68,27 @@ mod tests {
             ..Default::default()
         };
         assert!(up.display_name.unwrap().is_none());
+    }
+
+    #[test]
+    fn update_profile_set_theme_preference() {
+        let up = UpdateProfile {
+            theme_preference: Some("dark".into()),
+            ..Default::default()
+        };
+        assert_eq!(up.theme_preference.as_deref(), Some("dark"));
+        assert!(up.display_name.is_none());
+        assert!(up.language_preference.is_none());
+    }
+
+    #[test]
+    fn update_profile_set_language_preference() {
+        let up = UpdateProfile {
+            language_preference: Some("en".into()),
+            ..Default::default()
+        };
+        assert_eq!(up.language_preference.as_deref(), Some("en"));
+        assert!(up.display_name.is_none());
+        assert!(up.theme_preference.is_none());
     }
 }

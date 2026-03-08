@@ -7,7 +7,6 @@ use crate::domain::project::models::{CreateProjectFromText, PovType, UpdateProje
 pub struct CreateProjectTextRequest {
     pub source_input: String,
     pub clarification_answers: Option<Vec<String>>,
-    pub locale: Option<String>,
 }
 
 impl From<CreateProjectTextRequest> for CreateProjectFromText {

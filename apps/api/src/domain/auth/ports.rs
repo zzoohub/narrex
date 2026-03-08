@@ -9,6 +9,7 @@ pub trait UserRepository: Clone + Send + Sync + 'static {
     async fn find_by_google_id(&self, google_id: &str) -> Result<Option<User>, AuthError>;
     async fn upsert_from_google(&self, info: &GoogleUserInfo) -> Result<User, AuthError>;
     async fn update_profile(&self, id: Uuid, update: &UpdateProfile) -> Result<User, AuthError>;
+    async fn delete_user(&self, id: Uuid) -> Result<(), AuthError>;
 }
 
 #[async_trait::async_trait]
