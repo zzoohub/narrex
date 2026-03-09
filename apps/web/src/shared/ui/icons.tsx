@@ -88,6 +88,13 @@ export const IconLogOut = icon(() => (
     <line x1="21" y1="12" x2="9" y2="12" />
   </>
 ))
+export const IconKeyboard = icon(() => (
+  <>
+    <rect x="2" y="4" width="20" height="16" rx="2" />
+    <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01" />
+    <line x1="7" y1="16" x2="17" y2="16" />
+  </>
+))
 export const IconSliders = icon(() => (
   <>
     <line x1="4" y1="21" x2="4" y2="14" /><line x1="4" y1="10" x2="4" y2="3" />

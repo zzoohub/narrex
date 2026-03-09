@@ -437,7 +437,7 @@ pub async fn structure_project(
         for (track_idx, track_data) in timeline_output.tracks.iter().enumerate() {
             let track_input = CreateTrack {
                 label: track_data.label.clone(),
-                position: Some((track_idx as f64 + 1.0) * 1024.0),
+                position: Some(track_idx as f64),
             };
             let track = match state.timeline_service().create_track(project_id, &track_input).await {
                 Ok(t) => t,
@@ -459,7 +459,7 @@ pub async fn structure_project(
                 let scene_input = CreateScene {
                     track_id: track.id,
                     title: scene_data.title.clone(),
-                    start_position: Some(scene_idx as f64 * 1024.0),
+                    start_position: Some(scene_idx as f64),
                     duration: Some(1.0),
                     plot_summary: scene_data.plot_summary.clone(),
                     location: scene_data.location.clone(),

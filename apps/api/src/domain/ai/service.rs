@@ -70,12 +70,13 @@ where
         user_id: Uuid,
         project_id: Uuid,
         scene_id: Uuid,
+        locale: &str,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<SseEvent, Infallible>> + Send>>, AiError> {
         self.check_quota(user_id).await?;
         let ctx = self.context_repo.assemble_context(project_id, scene_id).await?;
 
-        let system = PromptBuilder::system_prompt(&ctx);
-        let user = PromptBuilder::user_prompt(&ctx);
+        let system = PromptBuilder::system_prompt(&ctx, locale);
+        let user = PromptBuilder::user_prompt(&ctx, locale);
         let req = GenerateRequest {
             system_prompt: system,
             user_prompt: user,
@@ -207,13 +208,15 @@ where
         project_id: Uuid,
         scene_id: Uuid,
         edit_req: &EditDraftRequest,
+        locale: &str,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<SseEvent, Infallible>> + Send>>, AiError> {
         self.check_quota(user_id).await?;
-        let system = PromptBuilder::edit_system_prompt();
+        let system = PromptBuilder::edit_system_prompt(locale);
         let user = PromptBuilder::edit_user_prompt(
             &edit_req.content,
             edit_req.selected_text.as_deref(),
             &edit_req.direction,
+            locale,
         );
 
         let req = GenerateRequest {

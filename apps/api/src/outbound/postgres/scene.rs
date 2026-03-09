@@ -272,7 +272,7 @@ impl SceneRepository for Postgres {
 
     async fn find_max_position(&self, track_id: Uuid) -> Result<f64, TimelineError> {
         let row = sqlx::query_as::<_, MaxPositionRow>(
-            "SELECT MAX(start_position) as max_pos FROM scene WHERE track_id = $1",
+            "SELECT MAX(start_position + duration) as max_pos FROM scene WHERE track_id = $1",
         )
         .bind(track_id)
         .fetch_one(self.pool())

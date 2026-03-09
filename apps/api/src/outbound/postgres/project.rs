@@ -118,6 +118,7 @@ struct SceneRow {
     plot_summary: Option<String>,
     location: Option<String>,
     mood_tags: Vec<String>,
+    content: Option<String>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -138,7 +139,7 @@ impl SceneRow {
             plot_summary: self.plot_summary,
             location: self.location,
             mood_tags: self.mood_tags,
-            content: None,
+            content: self.content,
             character_ids,
             created_at: self.created_at,
             updated_at: self.updated_at,
@@ -453,7 +454,7 @@ impl ProjectRepository for Postgres {
             .fetch_all(self.pool()),
 
             sqlx::query_as::<_, SceneRow>(
-                "SELECT id, track_id, project_id, start_position, duration, status::text, title, plot_summary, location, mood_tags, created_at, updated_at \
+                "SELECT id, track_id, project_id, start_position, duration, status::text, title, plot_summary, location, mood_tags, content, created_at, updated_at \
                  FROM scene WHERE project_id = $1 ORDER BY start_position"
             )
             .bind(id)

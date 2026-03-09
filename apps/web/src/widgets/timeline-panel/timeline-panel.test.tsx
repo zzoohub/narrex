@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@solidjs/testing-library'
 import { I18nProvider } from '@/shared/lib/i18n'
-import { TimelinePanel, computeFitScale, computeSimultaneousBands } from './index'
+import { TimelinePanel, computeFitScale, computeSimultaneousBands, computeTimelineWidth } from './index'
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -15,6 +15,8 @@ const mockUpdateTrack = vi.fn()
 const mockMoveScene = vi.fn()
 const mockRemoveScene = vi.fn()
 const mockAddConnection = vi.fn()
+
+let mockSelectedSceneId: string | null = null
 
 vi.mock('@/features/workspace', () => ({
   useWorkspace: () => ({
@@ -44,7 +46,15 @@ vi.mock('@/features/workspace', () => ({
         { id: 'conn1', projectId: 'p1', sourceSceneId: 's1', targetSceneId: 's3', connectionType: 'branch', createdAt: '' },
       ],
     },
-    selectedSceneId: () => null,
+    selectedSceneId: () => mockSelectedSceneId,
+    prevScene: () => {
+      if (mockSelectedSceneId === 's2') return { id: 's1', trackId: 't1', startPosition: 0, duration: 1, title: 'Opening', status: 'ai_draft' } as any
+      return undefined
+    },
+    nextScene: () => {
+      if (mockSelectedSceneId === 's1') return { id: 's2', trackId: 't1', startPosition: 2, duration: 1, title: 'Conflict', status: 'empty' } as any
+      return undefined
+    },
     trackScenes: () => [
       {
         id: 't1', projectId: 'p1', position: 0, label: 'Main Track', createdAt: '', updatedAt: '',
@@ -100,6 +110,7 @@ function renderTimeline(props: { onCollapse?: () => void } = {}) {
 describe('TimelinePanel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockSelectedSceneId = null
   })
 
   it('renders track labels', () => {
@@ -226,6 +237,41 @@ describe('TimelinePanel', () => {
     })
   })
 
+  describe('computeTimelineWidth', () => {
+    it('returns at least viewportWidth when content is small', () => {
+      // contentEnd=5, scale=120, viewportWidth=800, labelWidth=112
+      // contentPx = 5 * 120 = 600, viewportContent = 800 - 112 = 688
+      // max(600, 688) + 688 = 1376
+      const result = computeTimelineWidth(5, 120, 800, 112)
+      expect(result).toBe(688 + 688)
+    })
+
+    it('extends beyond content when content is larger than viewport', () => {
+      // contentEnd=20, scale=120, viewportWidth=800, labelWidth=112
+      // contentPx = 20 * 120 = 2400, viewportContent = 688
+      // max(2400, 688) + 688 = 3088
+      const result = computeTimelineWidth(20, 120, 800, 112)
+      expect(result).toBe(2400 + 688)
+    })
+
+    it('handles zero viewport gracefully', () => {
+      const result = computeTimelineWidth(5, 120, 0, 112)
+      // viewportContent = max(0, 0-112) = 0, contentPx = 600
+      // max(600, 0) + 0 = 600
+      expect(result).toBe(600)
+    })
+
+    it('always provides scrollable space beyond content', () => {
+      const contentEnd = 10
+      const scale = 120
+      const vp = 800
+      const lw = 112
+      const result = computeTimelineWidth(contentEnd, scale, vp, lw)
+      const contentPx = contentEnd * scale
+      expect(result).toBeGreaterThan(contentPx)
+    })
+  })
+
   describe('track collapse (no chevron)', () => {
     it('does not render chevron toggle buttons in track labels', () => {
       renderTimeline()
@@ -341,7 +387,304 @@ describe('TimelinePanel', () => {
     })
   })
 
-  describe('track delete context menu', () => {
+  describe('add scene button in track label', () => {
+    it('renders add-scene button inside each track label area', () => {
+      renderTimeline()
+      const buttons = screen.getAllByLabelText('Add scene')
+      expect(buttons).toHaveLength(2)
+    })
+
+    it('calls addScene with track id and end position on click', async () => {
+      renderTimeline()
+      const buttons = screen.getAllByLabelText('Add scene')
+      // First track (t1): scenes end at max(0+1, 2+1) = 3
+      await fireEvent.click(buttons[0])
+      expect(mockAddScene).toHaveBeenCalledWith('t1', 3)
+    })
+
+    it('shows add-scene button even when track is collapsed', async () => {
+      renderTimeline()
+      // Collapse first track
+      const label = screen.getByText('Main Track')
+      await fireEvent.dblClick(label)
+      expect(screen.getByText('2 scenes')).toBeInTheDocument()
+      // Button should still be present
+      const buttons = screen.getAllByLabelText('Add scene')
+      expect(buttons.length).toBeGreaterThanOrEqual(2)
+    })
+  })
+
+  describe('connection lines', () => {
+    it('renders connection paths with sufficient visibility', () => {
+      const { container } = renderTimeline()
+      const svgHtml = container.innerHTML
+      // Mock has one connection (s1 → s3, branch) — path should be rendered
+      expect(svgHtml).toContain('<path')
+      // Stroke width must be >= 2 for good visibility
+      expect(svgHtml).toMatch(/stroke-width="[2-9]/)
+      // Opacity must be >= 0.8 for good visibility
+      expect(svgHtml).toMatch(/opacity="0\.[89]/)
+    })
+
+    it('renders branch connections with accent color and solid stroke', () => {
+      const { container } = renderTimeline()
+      const svgHtml = container.innerHTML
+      expect(svgHtml).toContain('stroke="var(--accent)"')
+      // Branch connections should NOT have a dasharray (solid line)
+      // Check that the path with accent color has stroke-dasharray="none"
+      expect(svgHtml).toContain('stroke-dasharray="none"')
+    })
+  })
+
+  describe('keyboard shortcuts', () => {
+    describe('zoom (Ctrl/⌘ + =/−)', () => {
+      it('Ctrl+= zooms in', async () => {
+        renderTimeline()
+        await fireEvent.keyDown(document, { key: '=', ctrlKey: true })
+        expect(screen.getByTestId('timeline-zoom-toolbar').textContent).toContain('125%')
+      })
+
+      it('Ctrl+- zooms out', async () => {
+        renderTimeline()
+        await fireEvent.keyDown(document, { key: '-', ctrlKey: true })
+        expect(screen.getByTestId('timeline-zoom-toolbar').textContent).toContain('75%')
+      })
+
+      it('Meta+= zooms in on macOS', async () => {
+        renderTimeline()
+        await fireEvent.keyDown(document, { key: '=', metaKey: true })
+        expect(screen.getByTestId('timeline-zoom-toolbar').textContent).toContain('125%')
+      })
+
+      it('Meta+- zooms out on macOS', async () => {
+        renderTimeline()
+        await fireEvent.keyDown(document, { key: '-', metaKey: true })
+        expect(screen.getByTestId('timeline-zoom-toolbar').textContent).toContain('75%')
+      })
+
+      it('clamps zoom in at max scale', async () => {
+        renderTimeline()
+        // Zoom in many times to exceed max
+        for (let i = 0; i < 10; i++) {
+          await fireEvent.keyDown(document, { key: '=', ctrlKey: true })
+        }
+        // MAX_SCALE=240, DEFAULT_SCALE=120 → 200% max
+        expect(screen.getByTestId('timeline-zoom-toolbar').textContent).toContain('200%')
+      })
+
+      it('clamps zoom out at min scale', async () => {
+        renderTimeline()
+        for (let i = 0; i < 10; i++) {
+          await fireEvent.keyDown(document, { key: '-', ctrlKey: true })
+        }
+        // MIN_SCALE=60, DEFAULT_SCALE=120 → 50% min
+        expect(screen.getByTestId('timeline-zoom-toolbar').textContent).toContain('50%')
+      })
+    })
+
+    describe('fit to window (Shift+Z)', () => {
+      it('Shift+Z resets zoom to fit', async () => {
+        renderTimeline()
+        // Change zoom first
+        await fireEvent.keyDown(document, { key: '=', ctrlKey: true })
+        expect(screen.getByTestId('timeline-zoom-toolbar').textContent).toContain('125%')
+        // Fit
+        await fireEvent.keyDown(document, { key: 'Z', shiftKey: true })
+        expect(screen.getByTestId('timeline-zoom-toolbar').textContent).toContain('100%')
+      })
+
+      it('lowercase shift+z also works', async () => {
+        renderTimeline()
+        await fireEvent.keyDown(document, { key: '=', ctrlKey: true })
+        await fireEvent.keyDown(document, { key: 'z', shiftKey: true })
+        expect(screen.getByTestId('timeline-zoom-toolbar').textContent).toContain('100%')
+      })
+
+      it('Ctrl+Shift+Z does not trigger fit (reserved for undo)', async () => {
+        renderTimeline()
+        await fireEvent.keyDown(document, { key: '=', ctrlKey: true })
+        expect(screen.getByTestId('timeline-zoom-toolbar').textContent).toContain('125%')
+        await fireEvent.keyDown(document, { key: 'Z', shiftKey: true, ctrlKey: true })
+        // Should remain at 125%
+        expect(screen.getByTestId('timeline-zoom-toolbar').textContent).toContain('125%')
+      })
+    })
+
+    describe('track navigation (ArrowUp/ArrowDown)', () => {
+      it('ArrowDown from track 1 selects nearest scene on track 2', async () => {
+        mockSelectedSceneId = 's1' // t1, position 0
+        renderTimeline()
+        await fireEvent.keyDown(document, { key: 'ArrowDown' })
+        // s3 on t2 at position 0 is nearest
+        expect(mockSelectScene).toHaveBeenCalledWith('s3')
+      })
+
+      it('ArrowUp from track 2 selects nearest scene on track 1', async () => {
+        mockSelectedSceneId = 's3' // t2, position 0
+        renderTimeline()
+        await fireEvent.keyDown(document, { key: 'ArrowUp' })
+        // s1 on t1 at position 0 is nearest (closer than s2 at position 2)
+        expect(mockSelectScene).toHaveBeenCalledWith('s1')
+      })
+
+      it('ArrowUp on topmost track does nothing', async () => {
+        mockSelectedSceneId = 's1' // already on t1 (top)
+        renderTimeline()
+        await fireEvent.keyDown(document, { key: 'ArrowUp' })
+        expect(mockSelectScene).not.toHaveBeenCalled()
+      })
+
+      it('ArrowDown on bottommost track does nothing', async () => {
+        mockSelectedSceneId = 's3' // on t2 (bottom)
+        renderTimeline()
+        await fireEvent.keyDown(document, { key: 'ArrowDown' })
+        expect(mockSelectScene).not.toHaveBeenCalled()
+      })
+
+      it('selects nearest scene by position when multiple on target track', async () => {
+        mockSelectedSceneId = 's3' // t2, position 0
+        renderTimeline()
+        await fireEvent.keyDown(document, { key: 'ArrowUp' })
+        // t1 has s1(pos=0) and s2(pos=2), s1 is nearest to pos 0
+        expect(mockSelectScene).toHaveBeenCalledWith('s1')
+      })
+    })
+
+    describe('duplicate scene (Ctrl/⌘+D)', () => {
+      it('Ctrl+D duplicates selected scene after its end', async () => {
+        mockSelectedSceneId = 's1' // t1, pos=0, dur=1 → end=1
+        renderTimeline()
+        await fireEvent.keyDown(document, { key: 'd', ctrlKey: true })
+        expect(mockAddScene).toHaveBeenCalledWith('t1', 1)
+      })
+
+      it('Meta+D duplicates on macOS', async () => {
+        mockSelectedSceneId = 's2' // t1, pos=2, dur=1 → end=3
+        renderTimeline()
+        await fireEvent.keyDown(document, { key: 'd', metaKey: true })
+        expect(mockAddScene).toHaveBeenCalledWith('t1', 3)
+      })
+
+      it('does nothing when no scene selected', async () => {
+        mockSelectedSceneId = null
+        renderTimeline()
+        await fireEvent.keyDown(document, { key: 'd', ctrlKey: true })
+        expect(mockAddScene).not.toHaveBeenCalled()
+      })
+    })
+
+    describe('does not fire in text inputs', () => {
+      it('Shift+Z does not trigger fit when typing in input', async () => {
+        renderTimeline()
+        await fireEvent.keyDown(document, { key: '=', ctrlKey: true })
+        expect(screen.getByTestId('timeline-zoom-toolbar').textContent).toContain('125%')
+        // Simulate keydown with target being an input
+        const input = document.createElement('input')
+        document.body.appendChild(input)
+        await fireEvent.keyDown(input, { key: 'Z', shiftKey: true })
+        // Should still be 125%
+        expect(screen.getByTestId('timeline-zoom-toolbar').textContent).toContain('125%')
+        document.body.removeChild(input)
+      })
+
+      it('Ctrl+D does not duplicate when typing in input', async () => {
+        mockSelectedSceneId = 's1'
+        renderTimeline()
+        const input = document.createElement('input')
+        document.body.appendChild(input)
+        await fireEvent.keyDown(input, { key: 'd', ctrlKey: true })
+        expect(mockAddScene).not.toHaveBeenCalled()
+        document.body.removeChild(input)
+      })
+    })
+
+    describe('horizontal scroll (wheel)', () => {
+      it('redirects vertical wheel to horizontal scroll', () => {
+        const { container } = renderTimeline()
+        const body = container.querySelector('.flex-1.overflow-auto') as HTMLElement
+        expect(body).toBeTruthy()
+        // Fire a vertical wheel event (mouse wheel)
+        const event = new WheelEvent('wheel', { deltaY: 100, deltaX: 0, bubbles: true })
+        const spy = vi.spyOn(event, 'preventDefault')
+        body.dispatchEvent(event)
+        expect(spy).toHaveBeenCalled()
+      })
+
+      it('preserves Ctrl+wheel for zoom (does not scroll)', () => {
+        const { container } = renderTimeline()
+        const body = container.querySelector('.flex-1.overflow-auto') as HTMLElement
+        const event = new WheelEvent('wheel', { deltaY: -100, deltaX: 0, ctrlKey: true, bubbles: true })
+        const spy = vi.spyOn(event, 'preventDefault')
+        body.dispatchEvent(event)
+        // Should still call preventDefault (for zoom), not for scroll
+        expect(spy).toHaveBeenCalled()
+      })
+    })
+  })
+
+  describe('keyboard shortcuts modal', () => {
+    it('renders shortcuts help button in header', () => {
+      renderTimeline()
+      const header = screen.getByTestId('timeline-header')
+      const btn = screen.getByLabelText(/Keyboard shortcuts|단축키/)
+      expect(header.contains(btn)).toBe(true)
+    })
+
+    it('opens modal on button click', async () => {
+      renderTimeline()
+      await fireEvent.click(screen.getByLabelText(/Keyboard shortcuts|단축키/))
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    it('? key opens modal', async () => {
+      renderTimeline()
+      await fireEvent.keyDown(document, { key: '?' })
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    it('Escape closes modal', async () => {
+      renderTimeline()
+      await fireEvent.click(screen.getByLabelText(/Keyboard shortcuts|단축키/))
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      await fireEvent.keyDown(document, { key: 'Escape' })
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+
+    it('displays shortcut entries', async () => {
+      renderTimeline()
+      await fireEvent.click(screen.getByLabelText(/Keyboard shortcuts|단축키/))
+      expect(screen.getByText(/Zoom in|줌 인/)).toBeInTheDocument()
+      expect(screen.getByText(/Zoom out|줌 아웃/)).toBeInTheDocument()
+      expect(screen.getByText(/Duplicate|복제/)).toBeInTheDocument()
+    })
+
+    it('blocks other shortcuts when modal is open', async () => {
+      renderTimeline()
+      await fireEvent.click(screen.getByLabelText(/Keyboard shortcuts|단축키/))
+      const zoomBefore = screen.getByTestId('timeline-zoom-toolbar').textContent
+      await fireEvent.keyDown(document, { key: '=', ctrlKey: true })
+      // Zoom should not change
+      expect(screen.getByTestId('timeline-zoom-toolbar').textContent).toBe(zoomBefore)
+    })
+  })
+
+  describe('track context menu', () => {
+    it('shows add scene option in track context menu', async () => {
+      renderTimeline()
+      const label = screen.getByText('Main Track')
+      await fireEvent.contextMenu(label)
+      expect(screen.getByText(/Add Scene|씬 추가/)).toBeInTheDocument()
+    })
+
+    it('calls addScene when clicking add scene in context menu', async () => {
+      renderTimeline()
+      const label = screen.getByText('Main Track')
+      await fireEvent.contextMenu(label)
+      const addOption = screen.getByText(/Add Scene|씬 추가/)
+      await fireEvent.click(addOption.closest('button')!)
+      expect(mockAddScene).toHaveBeenCalledWith('t1', expect.any(Number))
+    })
+
     it('disables remove option in context menu when track has scenes', async () => {
       renderTimeline()
       const label = screen.getByText('Main Track')

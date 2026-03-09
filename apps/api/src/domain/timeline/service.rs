@@ -114,7 +114,7 @@ where
         let mut input = input.clone();
         if input.start_position.is_none() {
             let max = self.scene_repo.find_max_position(input.track_id).await?;
-            input.start_position = Some(max + 1024.0);
+            input.start_position = Some(max);
         }
         if input.duration.is_none() {
             input.duration = Some(1.0);
@@ -372,7 +372,7 @@ mod tests {
             let scenes = self.scenes.lock().unwrap();
             let max = scenes.iter()
                 .filter(|s| s.track_id == track_id)
-                .map(|s| s.start_position)
+                .map(|s| s.start_position + s.duration)
                 .fold(0.0_f64, f64::max);
             Ok(max)
         }
@@ -496,7 +496,7 @@ mod tests {
             plot_summary: None, location: None, mood_tags: vec![], character_ids: vec![],
         };
         let scene = svc.create_scene(pid, &input).await.unwrap();
-        assert_eq!(scene.start_position, 1124.0); // max(100) + 1024
+        assert_eq!(scene.start_position, 101.0); // max(100 + 1) = 101
         assert_eq!(scene.duration, 1.0);
     }
 

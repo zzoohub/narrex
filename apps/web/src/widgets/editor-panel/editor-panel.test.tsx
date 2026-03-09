@@ -168,7 +168,23 @@ describe('EditorPanel', () => {
     expect(screen.getByText(/11/)).toBeInTheDocument()
   })
 
-  it('shows streaming content during generation', () => {
+  it('shows "Thinking..." when generation starts but no content yet', () => {
+    selectedSceneFn.mockReturnValue({
+      id: 's1', trackId: 't1', projectId: 'p1', title: 'My Scene',
+      status: 'empty', characterIds: [], moodTags: [], content: null,
+      location: null, plotSummary: 'A summary',
+      startPosition: 0, duration: 1,
+      createdAt: '', updatedAt: '',
+    })
+    isGeneratingFn.mockReturnValue(true)
+    generatingSceneIdFn.mockReturnValue('s1')
+    streamedContentFn.mockReturnValue('')
+    renderEditor()
+    expect(screen.getByText('Thinking...')).toBeInTheDocument()
+    expect(screen.queryByText('Generating...')).not.toBeInTheDocument()
+  })
+
+  it('shows "Generating..." once streamed content arrives', () => {
     selectedSceneFn.mockReturnValue({
       id: 's1', trackId: 't1', projectId: 'p1', title: 'My Scene',
       status: 'empty', characterIds: [], moodTags: [], content: null,
@@ -182,6 +198,7 @@ describe('EditorPanel', () => {
     renderEditor()
     expect(screen.getByText('Once upon a time...')).toBeInTheDocument()
     expect(screen.getByText('Generating...')).toBeInTheDocument()
+    expect(screen.queryByText('Thinking...')).not.toBeInTheDocument()
   })
 
   it('populates editable div with draft content on mount', () => {

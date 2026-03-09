@@ -8,6 +8,7 @@ import {
   batch,
 } from 'solid-js'
 import type { JSX } from 'solid-js'
+import { Portal } from 'solid-js/web'
 import { useI18n } from '@/shared/lib/i18n'
 import {
   Button,
@@ -21,6 +22,8 @@ import {
   IconSparkles,
   IconTrash,
   IconChevronDown,
+  IconKeyboard,
+  IconX,
   ContextMenu,
   Separator,
   type ContextMenuItem,
@@ -33,7 +36,7 @@ import type { SceneConnection } from '@/entities/connection'
 // ---- Constants ---------------------------------------------------------------
 
 const TRACK_HEIGHT = 56
-const TRACK_LABEL_WIDTH = 112
+const TRACK_LABEL_WIDTH = 148
 const MIN_SCALE = 60
 const MAX_SCALE = 240
 const DEFAULT_SCALE = 120
@@ -139,6 +142,21 @@ function computeTimelineEnd(tracks: Array<{ scenes: Scene[] }>): number {
   return Math.ceil(max) + 2
 }
 
+/**
+ * Compute timeline canvas width in px (NLE-style: content + 1 viewport of padding).
+ * Always provides scrollable space beyond the last scene, like Premiere/FCPX.
+ */
+export function computeTimelineWidth(
+  contentEnd: number,
+  scale: number,
+  viewportWidth: number,
+  trackLabelWidth: number,
+): number {
+  const viewportContent = Math.max(0, viewportWidth - trackLabelWidth)
+  const contentPx = contentEnd * scale
+  return Math.max(contentPx, viewportContent) + viewportContent
+}
+
 /** Find a scene by id in a flat lookup built from trackScenes. */
 function buildSceneLookup(tracks: Array<{ scenes: Scene[] }>): Map<string, { scene: Scene; trackIndex: number }> {
   const map = new Map<string, { scene: Scene; trackIndex: number }>()
@@ -182,6 +200,24 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
   } | null>(null)
   let tooltipTimer: ReturnType<typeof setTimeout> | undefined
 
+  // Shortcuts modal
+  const [showShortcutsModal, setShowShortcutsModal] = createSignal(false)
+  const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent)
+  const mod = isMac ? '⌘' : 'Ctrl'
+  const shortcutEntries = createMemo<[string[], string][]>(() => [
+    [[mod, '='], t('shortcuts.zoomIn')],
+    [[mod, '−'], t('shortcuts.zoomOut')],
+    [['Shift', 'Z'], t('shortcuts.fitToWindow')],
+    [['←', '→'], t('shortcuts.prevScene') + ' / ' + t('shortcuts.nextScene')],
+    [['↑', '↓'], t('shortcuts.trackUp') + ' / ' + t('shortcuts.trackDown')],
+    [[mod, 'D'], t('shortcuts.duplicateScene')],
+    [['Delete'], t('shortcuts.deleteScene')],
+    [['Esc'], t('shortcuts.cancelDrag')],
+    [['Scroll'], t('shortcuts.horizontalScroll')],
+    [[mod, 'Scroll'], t('shortcuts.zoom')],
+    [['?'], t('shortcuts.showShortcuts')],
+  ])
+
   // Delete confirmation dialogs
   const [deleteSceneId, setDeleteSceneId] = createSignal<string | null>(null)
   const [deleteTrackId, setDeleteTrackId] = createSignal<string | null>(null)
@@ -203,6 +239,8 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
   } | null = null
   // Thin signal only to toggle visual states (z-index, shadow) on drag start/end
   const [dragActiveId, setDragActiveId] = createSignal<string | null>(null)
+  // Drag pixel offset — drives SVG connection line updates during drag
+  const [dragOffset, setDragOffset] = createSignal<{ sceneId: string; dx: number; dy: number } | null>(null)
 
   // Resize: direct DOM manipulation
   let resizeState: {
@@ -237,9 +275,30 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
 
   function handleWheel(e: WheelEvent) {
     if (e.ctrlKey || e.metaKey) {
+      // Ctrl/Cmd + scroll = zoom centered on cursor (NLE standard)
       e.preventDefault()
+      const body = timelineBodyRef
+      if (!body) return
+
+      // Timeline position under cursor before zoom
+      const cursorX = e.clientX - body.getBoundingClientRect().left + body.scrollLeft - TRACK_LABEL_WIDTH
+      const posBeforeZoom = cursorX / scale()
+
       const delta = e.deltaY > 0 ? -SCALE_STEP / 2 : SCALE_STEP / 2
-      setScale((s) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s + delta)))
+      const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale() + delta))
+      setScale(newScale)
+
+      // Adjust scroll so the same timeline position stays under cursor
+      const newCursorX = posBeforeZoom * newScale
+      body.scrollLeft = newCursorX - (e.clientX - body.getBoundingClientRect().left) + TRACK_LABEL_WIDTH
+    } else {
+      // NLE standard: all wheel input scrolls horizontally
+      // Mouse wheel (deltaY) → horizontal, trackpad swipe (deltaX) → horizontal
+      e.preventDefault()
+      if (timelineBodyRef) {
+        const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
+        timelineBodyRef.scrollLeft += delta
+      }
     }
   }
 
@@ -407,11 +466,18 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
   // ---- Computed ----
 
   const timelineEnd = createMemo(() => computeTimelineEnd(ws.trackScenes()))
-  const timelineWidth = createMemo(() => timelineEnd() * scale())
+  const timelineWidth = createMemo(() => {
+    const vw = timelineBodyRef?.clientWidth ?? 0
+    return computeTimelineWidth(timelineEnd(), scale(), vw, TRACK_LABEL_WIDTH)
+  })
 
   const rulerTicks = createMemo(() => {
+    const end = timelineEnd()
+    // Extend ruler to cover the full canvas width
+    const canvasEnd = Math.ceil(timelineWidth() / scale())
+    const tickEnd = Math.max(end, canvasEnd)
     const ticks: number[] = []
-    for (let i = 0; i <= timelineEnd(); i++) {
+    for (let i = 0; i <= tickEnd; i++) {
       ticks.push(i)
     }
     return ticks
@@ -472,10 +538,12 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
       setDragActiveId(dragState.sceneId) // signal: blocks click, hides tooltip
     }
 
-    // Direct DOM write — no signal, no reactivity, no GC
+    // Direct DOM write for clip position (no reactivity for perf)
     const dx = e.clientX - dragState.startX
     const dy = e.clientY - dragState.startY
     dragState.el.style.transform = `translate3d(${dx}px,${dy}px,0)`
+    // Signal write for SVG connection lines to follow the dragged clip
+    setDragOffset({ sceneId: dragState.sceneId, dx, dy })
   }
 
   function handlePointerUp(e: PointerEvent) {
@@ -498,7 +566,7 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
     const bodyRect = timelineBodyRef?.getBoundingClientRect()
     if (bodyRect) {
       const tracks = ws.trackScenes()
-      const relY = e.clientY - bodyRect.top - RULER_HEIGHT
+      const relY = e.clientY - bodyRect.top + (timelineBodyRef?.scrollTop ?? 0) - RULER_HEIGHT
       let ti = Math.floor(relY / TRACK_HEIGHT)
       ti = Math.max(0, Math.min(tracks.length - 1, ti))
       const targetTrack = tracks[ti]
@@ -516,6 +584,7 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
 
     dragState = null
     setDragActiveId(null)
+    setDragOffset(null)
     suppressNextClick = true
   }
 
@@ -596,8 +665,17 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
     document.body.style.cursor = 'ew-resize'
   }
 
-  // Cancel drag on Escape
   function handleKeyDown(e: KeyboardEvent) {
+    // When shortcuts modal is open, only handle Escape to close
+    if (showShortcutsModal()) {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setShowShortcutsModal(false)
+      }
+      return
+    }
+
+    // Escape — cancel drag/resize (always works)
     if (e.key === 'Escape' && (dragState || resizeState)) {
       if (dragState) {
         dragState.el.style.transform = ''
@@ -607,9 +685,9 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
         dragState.el.style.cursor = ''
         dragState = null
         setDragActiveId(null)
+        setDragOffset(null)
       }
       if (resizeState) {
-        // Cancel: restore original values
         const sc = scale()
         resizeState.el.style.left = `${resizeState.origStartPosition * sc}px`
         resizeState.el.style.width = `${Math.max(resizeState.origDuration * sc, 24)}px`
@@ -620,7 +698,41 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
       return
     }
 
-    // Keyboard navigation for scenes
+    const modKey = e.ctrlKey || e.metaKey
+
+    // Zoom shortcuts — work everywhere (Ctrl/⌘ + =/-)
+    if (modKey && (e.key === '=' || e.key === '+')) {
+      e.preventDefault()
+      zoomIn()
+      return
+    }
+    if (modKey && e.key === '-') {
+      e.preventDefault()
+      zoomOut()
+      return
+    }
+
+    // Skip remaining shortcuts when editing text
+    const target = e.target as HTMLElement
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+      return
+    }
+
+    // ? key — open shortcuts modal
+    if (e.key === '?') {
+      e.preventDefault()
+      setShowShortcutsModal(true)
+      return
+    }
+
+    // Shift+Z — fit to window (no Ctrl/⌘ modifier — reserved for undo)
+    if (!modKey && e.shiftKey && (e.key === 'Z' || e.key === 'z')) {
+      e.preventDefault()
+      zoomFit()
+      return
+    }
+
+    // Scene-dependent shortcuts
     const selId = ws.selectedSceneId()
     if (!selId) return
 
@@ -632,15 +744,50 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
       e.preventDefault()
       const next = ws.nextScene()
       if (next) ws.selectScene(next.id)
-    } else if (e.key === 'Delete' || e.key === 'Backspace') {
-      const target = e.target as HTMLElement
-      if (
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.isContentEditable
-      ) {
-        return
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      // Track navigation — find nearest scene on adjacent track
+      e.preventDefault()
+      const tracks = ws.trackScenes()
+      let currentTrackIdx = -1
+      let currentScene: Scene | undefined
+      for (let i = 0; i < tracks.length; i++) {
+        const found = tracks[i]!.scenes.find((s) => s.id === selId)
+        if (found) {
+          currentScene = found
+          currentTrackIdx = i
+          break
+        }
       }
+      if (!currentScene || currentTrackIdx === -1) return
+
+      const targetIdx = e.key === 'ArrowUp' ? currentTrackIdx - 1 : currentTrackIdx + 1
+      if (targetIdx < 0 || targetIdx >= tracks.length) return
+
+      const targetTrack = tracks[targetIdx]!
+      if (targetTrack.scenes.length === 0) return
+
+      let nearest = targetTrack.scenes[0]!
+      let minDist = Math.abs(nearest.startPosition - currentScene.startPosition)
+      for (const s of targetTrack.scenes) {
+        const dist = Math.abs(s.startPosition - currentScene.startPosition)
+        if (dist < minDist) {
+          minDist = dist
+          nearest = s
+        }
+      }
+      ws.selectScene(nearest.id)
+    } else if (modKey && (e.key === 'd' || e.key === 'D')) {
+      // Ctrl/⌘+D — duplicate scene (add after current)
+      e.preventDefault()
+      const tracks = ws.trackScenes()
+      for (const track of tracks) {
+        const found = track.scenes.find((s) => s.id === selId)
+        if (found) {
+          ws.addScene(found.trackId, found.startPosition + found.duration)
+          return
+        }
+      }
+    } else if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault()
       setDeleteSceneId(selId)
     }
@@ -698,9 +845,17 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
 
   // ---- Track context menu items ----
 
-  function trackContextItems(trackId: string, trackLabel: string | null): (ContextMenuItem | typeof Separator)[] {
+  const [trackCtxInsertPos, setTrackCtxInsertPos] = createSignal(0)
+
+  function trackContextItems(trackId: string, trackLabel: string | null, insertPos: number): (ContextMenuItem | typeof Separator)[] {
     const hasScenes = ws.scenesForTrack(trackId).length > 0
     return [
+      {
+        label: t('timeline.addScene'),
+        icon: <IconPlus size={14} />,
+        onClick: () => ws.addScene(trackId, insertPos),
+      },
+      Separator,
       {
         label: t('config.theme') === 'Theme' ? 'Rename Track' : '\uD2B8\uB799 \uC774\uB984 \uBCC0\uACBD',
         icon: <IconPen size={14} />,
@@ -793,38 +948,51 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
             {t('timeline.addTrack')}
           </Button>
 
-          {/* Zoom toolbar */}
-          <div
-            data-testid="timeline-zoom-toolbar"
-            class="flex items-center gap-0.5"
-          >
-            <button
-              type="button"
-              class="p-1 rounded-md text-fg-muted hover:text-fg hover:bg-surface-raised transition-colors cursor-pointer"
-              aria-label="Zoom out"
-              onClick={zoomOut}
+          <div class="flex items-center gap-1">
+            {/* Zoom toolbar */}
+            <div
+              data-testid="timeline-zoom-toolbar"
+              class="flex items-center gap-0.5"
             >
-              <IconZoomOut size={14} />
-            </button>
-            <span class="text-[10px] text-fg-muted tabular-nums min-w-[4ch] text-center select-none">
-              {Math.round((scale() / DEFAULT_SCALE) * 100)}%
-            </span>
-            <button
-              type="button"
-              class="p-1 rounded-md text-fg-muted hover:text-fg hover:bg-surface-raised transition-colors cursor-pointer"
-              aria-label="Zoom in"
-              onClick={zoomIn}
-            >
-              <IconZoomIn size={14} />
-            </button>
+              <button
+                type="button"
+                class="p-1 rounded-md text-fg-muted hover:text-fg hover:bg-surface-raised transition-colors cursor-pointer"
+                aria-label="Zoom out"
+                onClick={zoomOut}
+              >
+                <IconZoomOut size={14} />
+              </button>
+              <span class="text-[10px] text-fg-muted tabular-nums min-w-[4ch] text-center select-none">
+                {Math.round((scale() / DEFAULT_SCALE) * 100)}%
+              </span>
+              <button
+                type="button"
+                class="p-1 rounded-md text-fg-muted hover:text-fg hover:bg-surface-raised transition-colors cursor-pointer"
+                aria-label="Zoom in"
+                onClick={zoomIn}
+              >
+                <IconZoomIn size={14} />
+              </button>
+              <div class="w-px h-3.5 bg-border-default mx-0.5" />
+              <button
+                type="button"
+                class="p-1 rounded-md text-fg-muted hover:text-fg hover:bg-surface-raised transition-colors cursor-pointer"
+                aria-label={t('timeline.fit')}
+                onClick={zoomFit}
+              >
+                <IconMaximize size={14} />
+              </button>
+            </div>
+
+            {/* Shortcuts help button */}
             <div class="w-px h-3.5 bg-border-default mx-0.5" />
             <button
               type="button"
               class="p-1 rounded-md text-fg-muted hover:text-fg hover:bg-surface-raised transition-colors cursor-pointer"
-              aria-label={t('timeline.fit')}
-              onClick={zoomFit}
+              aria-label={t('shortcuts.showShortcuts')}
+              onClick={() => setShowShortcutsModal(true)}
             >
-              <IconMaximize size={14} />
+              <IconKeyboard size={14} />
             </button>
           </div>
         </div>
@@ -880,14 +1048,31 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
 
           <For each={ws.state.connections}>
             {(conn: SceneConnection) => {
-              const lookup = sceneLookup()
-              const source = lookup.get(conn.sourceSceneId)
-              const target = lookup.get(conn.targetSceneId)
-              if (!source || !target) return null
+              // Reactive accessor — SolidJS compiles d={pathD()} into an
+              // effect so the <path> d attribute updates whenever
+              // sceneLookup or dragOffset change.
+              const pathD = () => {
+                const lookup = sceneLookup()
+                const source = lookup.get(conn.sourceSceneId)
+                const target = lookup.get(conn.targetSceneId)
+                if (!source || !target) return ''
 
-              const from = sceneBottomCenter(source.scene, source.trackIndex)
-              const to = sceneTopCenter(target.scene, target.trackIndex)
-              const midY = (from.y + to.y) / 2
+                const offset = dragOffset()
+                let from = sceneBottomCenter(source.scene, source.trackIndex)
+                let to = sceneTopCenter(target.scene, target.trackIndex)
+
+                if (offset) {
+                  if (conn.sourceSceneId === offset.sceneId) {
+                    from = { x: from.x + offset.dx, y: from.y + offset.dy }
+                  }
+                  if (conn.targetSceneId === offset.sceneId) {
+                    to = { x: to.x + offset.dx, y: to.y + offset.dy }
+                  }
+                }
+
+                const midY = (from.y + to.y) / 2
+                return `M ${from.x} ${from.y} C ${from.x} ${midY}, ${to.x} ${midY}, ${to.x} ${to.y}`
+              }
 
               const strokeColor = conn.connectionType === 'branch'
                 ? 'var(--accent)'
@@ -895,12 +1080,12 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
 
               return (
                 <path
-                  d={`M ${from.x} ${from.y} C ${from.x} ${midY}, ${to.x} ${midY}, ${to.x} ${to.y}`}
+                  d={pathD()}
                   fill="none"
                   stroke={strokeColor}
-                  stroke-width="1.5"
+                  stroke-width="2"
                   stroke-dasharray={conn.connectionType === 'merge' ? '6 3' : 'none'}
-                  opacity="0.6"
+                  opacity="0.85"
                 />
               )
             }}
@@ -947,14 +1132,26 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
               const height = () => getTrackHeight(track.id)
 
               return (
-                <ContextMenu items={trackContextItems(track.id, track.label)}>
+                <ContextMenu items={trackContextItems(track.id, track.label, trackCtxInsertPos())}>
                   <div
                     class="flex border-b border-border-subtle relative"
                     style={{ height: `${collapsed() ? MIN_TRACK_HEIGHT : height()}px` }}
+                    onContextMenu={(e) => {
+                      const trackRow = e.currentTarget
+                      const clipsArea = trackRow.querySelector<HTMLElement>('[data-clips-area]')
+                      if (clipsArea) {
+                        const rect = clipsArea.getBoundingClientRect()
+                        const posInPx = e.clientX - rect.left
+                        const pos = Math.max(0, Math.round(posInPx / scale() * 2) / 2)
+                        setTrackCtxInsertPos(pos)
+                      } else {
+                        setTrackCtxInsertPos(endPos())
+                      }
+                    }}
                   >
                     {/* Track label */}
                     <div
-                      class="flex-shrink-0 flex items-center px-3 border-r border-border-subtle"
+                      class="flex-shrink-0 flex items-center justify-between pl-3 pr-1.5 border-r border-border-subtle"
                       style={{ width: `${TRACK_LABEL_WIDTH}px` }}
                     >
                       <Show
@@ -984,11 +1181,19 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
                           autofocus
                         />
                       </Show>
+                      <button
+                        type="button"
+                        class="flex-shrink-0 ml-1.5 flex items-center justify-center w-5 h-5 rounded border border-dashed border-border-default text-fg-muted hover:border-accent hover:text-accent hover:bg-accent-muted transition-colors cursor-pointer"
+                        aria-label="Add scene"
+                        onClick={() => ws.addScene(track.id, endPos())}
+                      >
+                        <IconPlus size={12} />
+                      </button>
                     </div>
 
                     {/* Clips area */}
                     <Show when={!collapsed()}>
-                      <div class="relative flex-1" style={{ width: `${timelineWidth()}px` }}>
+                      <div data-clips-area class="relative flex-1" style={{ width: `${timelineWidth()}px` }}>
                         <For each={track.scenes}>
                           {(scene) => (
                             <ContextMenu items={sceneContextItems(scene.id)}>
@@ -1040,16 +1245,6 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
                           )}
                         </For>
 
-                        {/* [+] Add scene button at end of track */}
-                        <button
-                          type="button"
-                          class="absolute top-1/2 -translate-y-1/2 flex items-center justify-center w-7 h-7 rounded-md border border-dashed border-border-default text-fg-muted hover:border-accent hover:text-accent hover:bg-accent-muted transition-colors cursor-pointer"
-                          style={{ left: `${endPos() * scale() + 8}px` }}
-                          aria-label="Add scene"
-                          onClick={() => ws.addScene(track.id, endPos())}
-                        >
-                          <IconPlus size={14} />
-                        </button>
                       </div>
                     </Show>
                     <Show when={collapsed()}>
@@ -1120,6 +1315,50 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
             </Show>
           </div>
         )}
+      </Show>
+
+      {/* -- Keyboard shortcuts modal --------------------------------------- */}
+      <Show when={showShortcutsModal()}>
+        <Portal>
+          <div
+            class="fixed inset-0 z-[9998] bg-black/60 backdrop-blur-sm animate-fade-in"
+            onClick={() => setShowShortcutsModal(false)}
+            aria-hidden="true"
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={t('shortcuts.title')}
+            class="fixed z-[9999] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-2rem)] max-w-sm rounded-xl border border-border-default bg-surface-raised p-5 shadow-2xl shadow-black/40 animate-scale-in origin-center"
+          >
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="text-sm font-semibold text-fg">{t('shortcuts.title')}</h2>
+              <button
+                type="button"
+                class="p-1 rounded-md text-fg-muted hover:text-fg hover:bg-surface transition-colors cursor-pointer"
+                onClick={() => setShowShortcutsModal(false)}
+              >
+                <IconX size={14} />
+              </button>
+            </div>
+            <div class="space-y-1.5 text-xs">
+              {(shortcutEntries()).map(([keys, desc]) => (
+                <div class="flex items-center justify-between py-1 border-b border-border-subtle last:border-0">
+                  <span class="text-fg-muted">{desc}</span>
+                  <div class="ml-4 flex items-center gap-1">
+                    <For each={keys}>
+                      {(k) => (
+                        <kbd class="px-1.5 py-0.5 rounded bg-surface border border-border-default text-[11px] text-fg-secondary font-mono">
+                          {k}
+                        </kbd>
+                      )}
+                    </For>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Portal>
       </Show>
     </div>
   )

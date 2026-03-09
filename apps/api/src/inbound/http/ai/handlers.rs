@@ -44,9 +44,14 @@ pub async fn generate_scene_draft(
         .await?;
     verify_scene_ownership(&state, project_id, scene_id).await?;
 
+    let user = state.auth_service().get_user(auth.user_id).await.map_err(|_| {
+        ApiError::Unauthorized("user not found".into())
+    })?;
+    let locale = user.language_preference;
+
     let stream = state
         .ai_service()
-        .generate_scene_draft(auth.user_id, project_id, scene_id)
+        .generate_scene_draft(auth.user_id, project_id, scene_id, &locale)
         .await?;
 
     let sse_stream = stream.map(|result| match result {
@@ -70,10 +75,15 @@ pub async fn edit_scene_draft(
         .await?;
     verify_scene_ownership(&state, project_id, scene_id).await?;
 
+    let user = state.auth_service().get_user(auth.user_id).await.map_err(|_| {
+        ApiError::Unauthorized("user not found".into())
+    })?;
+    let locale = user.language_preference;
+
     let edit_req = body.into();
     let stream = state
         .ai_service()
-        .edit_scene_draft(auth.user_id, project_id, scene_id, &edit_req)
+        .edit_scene_draft(auth.user_id, project_id, scene_id, &edit_req, &locale)
         .await?;
 
     let sse_stream = stream.map(|result| match result {

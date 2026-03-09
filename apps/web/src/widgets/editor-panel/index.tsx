@@ -433,7 +433,7 @@ export function EditorPanel() {
                             class="inline-block w-2 h-2 rounded-full bg-accent"
                             style={{ animation: 'pulse-dot 1.2s ease-in-out infinite' }}
                           />
-                          {t('editor.generating')}
+                          {ws.streamedContent() ? t('editor.generating') : t('editor.thinking')}
                         </div>
                       </div>
                     }
