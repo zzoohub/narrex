@@ -40,6 +40,8 @@ A desktop-first web application. The writer interacts with a SolidJS frontend th
 ### Non-Goals
 
 - Episode organization layer (Phase 2).
+- Episode assembly — merge per-scene drafts into a single episode text (Phase 2).
+- Full manuscript assembly — combine all episodes into a complete book (Phase 2-3).
 - Multiple draft variations or tone/style sliders (Phase 2).
 - World map, temporal relationship tracking (Phase 3).
 - Mobile app, real-time collaboration, social features (out of scope per PRD).

@@ -316,46 +316,43 @@ function WorkspaceLayout() {
 
           {/* Center — Config toggle */}
           <Show when={ws.state.project}>
-            <div class="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => setConfigOpen((v) => !v)}
-                class={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs transition-colors cursor-pointer ${
-                  configOpen()
-                    ? 'text-accent bg-accent/10'
-                    : 'text-fg-muted hover:text-fg hover:bg-surface-raised'
-                }`}
-                aria-label={t('config.title')}
-                aria-expanded={configOpen()}
-              >
-                <IconSliders size={14} />
-                <span class="hidden sm:inline">{t('config.title')}</span>
-                <IconChevronDown
-                  size={12}
-                  class={`transition-transform duration-200 ${configOpen() ? 'rotate-180' : ''}`}
-                />
-              </button>
-
-              <Show when={!configOpen() && summaryItems().length > 0}>
-                <div class="hidden md:flex items-center gap-1 ml-1">
-                  <span class="text-fg-muted/40 text-xs">|</span>
-                  <For each={summaryItems()}>
-                    {(item, i) => (
-                      <>
-                        <Show when={i() > 0}>
-                          <span class="text-fg-muted/30 text-xs">·</span>
-                        </Show>
-                        <span class="text-xs text-fg-muted truncate max-w-24">{item}</span>
-                      </>
-                    )}
-                  </For>
-                </div>
-              </Show>
-            </div>
+            <button
+              type="button"
+              onClick={() => setConfigOpen((v) => !v)}
+              class={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs transition-colors cursor-pointer ${
+                configOpen()
+                  ? 'text-accent bg-accent/10'
+                  : 'text-fg-muted hover:text-fg hover:bg-surface-raised'
+              }`}
+              aria-label={t('config.title')}
+              aria-expanded={configOpen()}
+            >
+              <IconSliders size={14} />
+              <span class="hidden sm:inline">{t('config.title')}</span>
+              <IconChevronDown
+                size={12}
+                class={`transition-transform duration-200 ${configOpen() ? 'rotate-180' : ''}`}
+              />
+            </button>
           </Show>
 
-          {/* Right */}
-          <div class="flex items-center justify-end flex-1">
+          {/* Right — Summary + Save status */}
+          <div class="flex items-center justify-end gap-2 flex-1">
+            <Show when={!configOpen() && summaryItems().length > 0}>
+              <div class="hidden md:flex items-center gap-1">
+                <For each={summaryItems()}>
+                  {(item, i) => (
+                    <>
+                      <Show when={i() > 0}>
+                        <span class="text-fg-muted/30 text-xs">·</span>
+                      </Show>
+                      <span class="text-xs text-fg-muted truncate max-w-24">{item}</span>
+                    </>
+                  )}
+                </For>
+              </div>
+              <span class="hidden md:inline text-fg-muted/40 text-xs">|</span>
+            </Show>
             <span class={`text-xs hidden lg:inline ${saveStatusColor()}`}>
               {saveStatusText()}
             </span>

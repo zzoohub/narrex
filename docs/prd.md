@@ -553,6 +553,8 @@ Prove that a user can go from idea to a multi-episode AI-assisted draft using th
 
 **Deferred to Phase 2+:**
 - Episode organization layer (scenes map 1:1 to episodes initially)
+- Episode assembly — merge per-scene drafts into a single cohesive episode text
+- Full manuscript assembly — combine all episodes into a complete book
 - World map
 - Temporal relationship tracking
 - Genre templates
@@ -566,7 +568,7 @@ Prove that a user can go from idea to a multi-episode AI-assisted draft using th
 
 ### Phase 2: Episode Layer & Polish
 
-Add episode organization, variations, and export.
+Add episode organization, episode assembly (merge scene drafts into episodes), full manuscript assembly, variations, and export.
 
 ### Phase 3: Depth & Delight
 

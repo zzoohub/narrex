@@ -201,6 +201,39 @@ describe('TimelinePanel', () => {
     })
   })
 
+  describe('track collapse (no chevron)', () => {
+    it('does not render chevron toggle buttons in track labels', () => {
+      renderTimeline()
+      expect(screen.queryByLabelText('Collapse track')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Expand track')).not.toBeInTheDocument()
+    })
+
+    it('collapses track on double-click of track label', async () => {
+      renderTimeline()
+      const label = screen.getByText('Main Track')
+      await fireEvent.dblClick(label)
+      // After collapse, should show scene count instead of clips
+      expect(screen.getByText('2 scenes')).toBeInTheDocument()
+    })
+
+    it('expands collapsed track on double-click of track label', async () => {
+      renderTimeline()
+      const label = screen.getByText('Main Track')
+      await fireEvent.dblClick(label)
+      expect(screen.getByText('2 scenes')).toBeInTheDocument()
+      // Double-click again to expand
+      const collapsedLabel = screen.getByText('Main Track')
+      await fireEvent.dblClick(collapsedLabel)
+      expect(screen.getByText('Opening')).toBeInTheDocument()
+    })
+
+    it('renders resize handle at bottom of each track', () => {
+      renderTimeline()
+      const handles = screen.getAllByTestId('track-resize-handle')
+      expect(handles).toHaveLength(2)
+    })
+  })
+
   describe('zoom controls', () => {
     it('renders zoom controls in a dedicated toolbar', () => {
       renderTimeline()

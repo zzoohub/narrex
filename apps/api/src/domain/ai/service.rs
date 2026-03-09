@@ -77,7 +77,7 @@ where
         let req = GenerateRequest {
             system_prompt: system,
             user_prompt: user,
-            max_tokens: Some(4096),
+            max_tokens: Some(16384),
             temperature: Some(0.8),
         };
 
@@ -211,7 +211,7 @@ where
         let req = GenerateRequest {
             system_prompt: system,
             user_prompt: user,
-            max_tokens: Some(4096),
+            max_tokens: Some(16384),
             temperature: Some(0.7),
         };
 
@@ -406,7 +406,7 @@ where
         let req = GenerateRequest {
             system_prompt: system,
             user_prompt: user,
-            max_tokens: Some(8192),
+            max_tokens: Some(16384),
             temperature: Some(0.7),
         };
 
@@ -453,7 +453,7 @@ where
         let req = GenerateRequest {
             system_prompt: system,
             user_prompt: user,
-            max_tokens: Some(2048),
+            max_tokens: Some(4096),
             temperature: Some(0.7),
         };
         self.llm
@@ -475,7 +475,7 @@ where
         let req = GenerateRequest {
             system_prompt: system,
             user_prompt: user,
-            max_tokens: Some(4096),
+            max_tokens: Some(8192),
             temperature: Some(0.7),
         };
         self.llm
@@ -486,7 +486,6 @@ where
 
     /// Stream Phase 3: timeline tracks + scenes.
     /// `world_context` and `characters_context` are raw JSON from Phases 1 & 2.
-    /// Uses 8192 max_tokens — timeline JSON with multiple tracks/scenes is large.
     pub async fn stream_timeline(
         &self,
         source_input: &str,
@@ -499,7 +498,7 @@ where
         let req = GenerateRequest {
             system_prompt: system,
             user_prompt: user,
-            max_tokens: Some(8192),
+            max_tokens: Some(16384),
             temperature: Some(0.7),
         };
         self.llm

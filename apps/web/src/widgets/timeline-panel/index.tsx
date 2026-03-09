@@ -21,7 +21,6 @@ import {
   IconSparkles,
   IconTrash,
   IconChevronDown,
-  IconChevronRight,
   ContextMenu,
   Separator,
   type ContextMenuItem,
@@ -41,6 +40,7 @@ const DEFAULT_SCALE = 120
 const SCALE_STEP = 30
 const RULER_HEIGHT = 28
 const DRAG_THRESHOLD = 5
+const MIN_TRACK_HEIGHT = 24
 
 // ---- Helpers -----------------------------------------------------------------
 
@@ -140,8 +140,8 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
   const [showHint, setShowHint] = createSignal(true)
   const [scale, setScale] = createSignal(DEFAULT_SCALE)
 
-  // Track collapse state
-  const [collapsedTracks, setCollapsedTracks] = createSignal<Set<string>>(new Set())
+  // Track height state (supports drag resize + double-click minimize)
+  const [trackHeights, setTrackHeights] = createSignal<Map<string, number>>(new Map())
 
   // Branch-creation drag state
   const [branchDrag, setBranchDrag] = createSignal<{
@@ -218,15 +218,56 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
     }
   }
 
-  // ---- Track collapse helpers ----
+  // ---- Track height helpers ----
+
+  function getTrackHeight(trackId: string): number {
+    return trackHeights().get(trackId) ?? TRACK_HEIGHT
+  }
+
+  function isTrackCollapsed(trackId: string): boolean {
+    return getTrackHeight(trackId) <= MIN_TRACK_HEIGHT
+  }
 
   function toggleTrackCollapse(trackId: string) {
-    setCollapsedTracks((prev) => {
-      const next = new Set(prev)
-      if (next.has(trackId)) next.delete(trackId)
-      else next.add(trackId)
+    setTrackHeights((prev) => {
+      const next = new Map(prev)
+      if (isTrackCollapsed(trackId)) {
+        next.set(trackId, TRACK_HEIGHT)
+      } else {
+        next.set(trackId, MIN_TRACK_HEIGHT)
+      }
       return next
     })
+  }
+
+  // ---- Track resize (drag bottom edge) ----
+
+  function handleTrackResizeDown(e: PointerEvent, trackId: string) {
+    e.preventDefault()
+    e.stopPropagation()
+
+    const startY = e.clientY
+    const startHeight = getTrackHeight(trackId)
+
+    const onMove = (ev: PointerEvent) => {
+      const deltaY = ev.clientY - startY
+      const newHeight = Math.max(MIN_TRACK_HEIGHT, startHeight + deltaY)
+      setTrackHeights((prev) => {
+        const next = new Map(prev)
+        next.set(trackId, newHeight)
+        return next
+      })
+    }
+
+    const onUp = () => {
+      document.removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointerup', onUp)
+      document.body.style.cursor = ''
+    }
+
+    document.addEventListener('pointermove', onMove)
+    document.addEventListener('pointerup', onUp)
+    document.body.style.cursor = 'ns-resize'
   }
 
   // ---- Tooltip helpers ----
@@ -880,36 +921,26 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
           <For each={ws.trackScenes()}>
             {(track, trackIndex) => {
               const endPos = () => trackEndPosition(track.scenes)
-              const isCollapsed = () => collapsedTracks().has(track.id)
+              const collapsed = () => isTrackCollapsed(track.id)
+              const height = () => getTrackHeight(track.id)
 
               return (
                 <ContextMenu items={trackContextItems(track.id, track.label)}>
                   <div
-                    class="flex border-b border-border-subtle"
-                    style={{ height: isCollapsed() ? '24px' : `${TRACK_HEIGHT}px` }}
+                    class="flex border-b border-border-subtle relative"
+                    style={{ height: `${collapsed() ? MIN_TRACK_HEIGHT : height()}px` }}
                   >
                     {/* Track label */}
                     <div
-                      class="flex-shrink-0 flex items-center gap-1.5 px-2 border-r border-border-subtle"
+                      class="flex-shrink-0 flex items-center px-3 border-r border-border-subtle"
                       style={{ width: `${TRACK_LABEL_WIDTH}px` }}
                     >
-                      <button
-                        type="button"
-                        class="p-1 rounded-md text-fg-muted hover:text-fg hover:bg-surface-raised transition-colors cursor-pointer flex-shrink-0"
-                        onClick={() => toggleTrackCollapse(track.id)}
-                        aria-label={isCollapsed() ? 'Expand track' : 'Collapse track'}
-                        aria-expanded={!isCollapsed()}
-                      >
-                        <Show when={isCollapsed()} fallback={<IconChevronDown size={14} />}>
-                          <IconChevronRight size={14} />
-                        </Show>
-                      </button>
                       <Show
                         when={renamingTrackId() === track.id}
                         fallback={
                           <span
-                            class="text-xs font-medium text-fg-secondary truncate cursor-default min-w-0"
-                            onDblClick={() => startRenamingTrack(track.id, track.label)}
+                            class="text-xs font-medium text-fg-secondary truncate cursor-default min-w-0 select-none"
+                            onDblClick={() => toggleTrackCollapse(track.id)}
                           >
                             {track.label ?? `Track ${trackIndex() + 1}`}
                           </span>
@@ -934,7 +965,7 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
                     </div>
 
                     {/* Clips area */}
-                    <Show when={!isCollapsed()}>
+                    <Show when={!collapsed()}>
                       <div class="relative flex-1" style={{ width: `${timelineWidth()}px` }}>
                         <For each={track.scenes}>
                           {(scene) => (
@@ -999,11 +1030,18 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
                         </button>
                       </div>
                     </Show>
-                    <Show when={isCollapsed()}>
+                    <Show when={collapsed()}>
                       <div class="relative flex-1 flex items-center px-2">
                         <span class="text-[10px] text-fg-muted">{track.scenes.length} scenes</span>
                       </div>
                     </Show>
+
+                    {/* Track resize handle (bottom edge) */}
+                    <div
+                      data-testid="track-resize-handle"
+                      class="absolute bottom-0 left-0 right-0 h-1 cursor-ns-resize hover:bg-accent/30 transition-colors z-10"
+                      onPointerDown={(e) => handleTrackResizeDown(e, track.id)}
+                    />
                   </div>
                 </ContextMenu>
               )
