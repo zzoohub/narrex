@@ -12,7 +12,8 @@ use super::error::AiError;
 use super::models::{
     CharactersOutput, CostSummary, CreateDraftParams, CreateManualDraft, Draft, DraftSource,
     DraftSummary, EditDraftRequest, GenerationLog, GenerationStatus, GenerationType,
-    SceneSummary, StructuredOutput, TimelineOutput, WorldOutput,
+    QuotaInfo, SceneSummary, StructuredOutput, TimelineOutput, WorldOutput,
+    MONTHLY_GENERATION_LIMIT, MONTHLY_GENERATION_WARNING_THRESHOLD,
 };
 use super::ports::{
     ContextAssemblyRepository, DraftRepository, GenerationLogRepository, SceneSummaryRepository,
@@ -70,6 +71,7 @@ where
         project_id: Uuid,
         scene_id: Uuid,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<SseEvent, Infallible>> + Send>>, AiError> {
+        self.check_quota(user_id).await?;
         let ctx = self.context_repo.assemble_context(project_id, scene_id).await?;
 
         let system = PromptBuilder::system_prompt(&ctx);
@@ -146,11 +148,12 @@ where
                                 }
                             };
 
-                            // Update scene status.
+                            // Update scene status and content.
                             let _ = scene_repo
                                 .update(
                                     scene_id,
                                     &crate::domain::timeline::models::UpdateScene {
+                                        content: Some(Some(full_text.clone())),
                                         ..Default::default()
                                     },
                                 )
@@ -201,6 +204,7 @@ where
         scene_id: Uuid,
         edit_req: &EditDraftRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<SseEvent, Infallible>> + Send>>, AiError> {
+        self.check_quota(user_id).await?;
         let system = PromptBuilder::edit_system_prompt();
         let user = PromptBuilder::edit_user_prompt(
             &edit_req.content,
@@ -505,6 +509,58 @@ where
             .generate_stream(req)
             .await
             .map_err(|e| AiError::GenerationFailed(e.to_string()))
+    }
+
+    /// Check quota and return error if exceeded. Used before generation calls.
+    pub async fn check_quota(&self, user_id: Uuid) -> Result<QuotaInfo, AiError> {
+        let quota = self.get_quota(user_id).await?;
+        if quota.exceeded {
+            return Err(AiError::QuotaExceeded {
+                used: quota.used,
+                limit: quota.limit,
+                resets_at: quota.resets_at,
+            });
+        }
+        Ok(quota)
+    }
+
+    /// Get quota info without erroring on exceeded. Used for the GET endpoint.
+    pub async fn get_quota(&self, user_id: Uuid) -> Result<QuotaInfo, AiError> {
+        use chrono::{Datelike, TimeZone, Utc};
+
+        let now = Utc::now();
+        let month_start = Utc
+            .with_ymd_and_hms(now.year(), now.month(), 1, 0, 0, 0)
+            .single()
+            .expect("valid date");
+
+        let used = self
+            .log_repo
+            .count_by_user_since(user_id, month_start)
+            .await?;
+
+        let remaining = (MONTHLY_GENERATION_LIMIT - used).max(0);
+        let exceeded = used >= MONTHLY_GENERATION_LIMIT;
+        let warning = used >= MONTHLY_GENERATION_WARNING_THRESHOLD;
+
+        let resets_at = if now.month() == 12 {
+            Utc.with_ymd_and_hms(now.year() + 1, 1, 1, 0, 0, 0)
+                .single()
+                .expect("valid date")
+        } else {
+            Utc.with_ymd_and_hms(now.year(), now.month() + 1, 1, 0, 0, 0)
+                .single()
+                .expect("valid date")
+        };
+
+        Ok(QuotaInfo {
+            used,
+            limit: MONTHLY_GENERATION_LIMIT,
+            remaining,
+            warning,
+            exceeded,
+            resets_at,
+        })
     }
 
     /// Log a generation event.
@@ -1089,11 +1145,21 @@ mod tests {
     #[derive(Clone)]
     struct MockLogRepo {
         logs: std::sync::Arc<std::sync::Mutex<Vec<GenerationLog>>>,
+        count_override: std::sync::Arc<std::sync::Mutex<Option<i64>>>,
     }
 
     impl MockLogRepo {
         fn new() -> Self {
-            Self { logs: std::sync::Arc::new(std::sync::Mutex::new(vec![])) }
+            Self {
+                logs: std::sync::Arc::new(std::sync::Mutex::new(vec![])),
+                count_override: std::sync::Arc::new(std::sync::Mutex::new(None)),
+            }
+        }
+        fn with_count(count: i64) -> Self {
+            Self {
+                logs: std::sync::Arc::new(std::sync::Mutex::new(vec![])),
+                count_override: std::sync::Arc::new(std::sync::Mutex::new(Some(count))),
+            }
         }
     }
 
@@ -1108,6 +1174,9 @@ mod tests {
         }
         async fn cost_summary_by_project(&self, _: uuid::Uuid) -> Result<CostSummary, AiError> {
             Ok(CostSummary { total_generations: 0, total_tokens_input: 0, total_tokens_output: 0, total_cost_usd: 0.0 })
+        }
+        async fn count_by_user_since(&self, _: uuid::Uuid, _: chrono::DateTime<chrono::Utc>) -> Result<i64, AiError> {
+            Ok(self.count_override.lock().unwrap().unwrap_or(0))
         }
     }
 
@@ -1161,4 +1230,145 @@ mod tests {
             llm,
         )
     }
+
+    fn build_test_ai_service_with_log_repo(
+        llm: Arc<dyn narrex_llm::LlmProvider>,
+        log_repo: MockLogRepo,
+    ) -> AiServiceImpl<MockDraftRepo, MockSummaryRepo, MockLogRepo, MockContextRepo, MockSceneRepo> {
+        AiServiceImpl::new(
+            MockDraftRepo,
+            MockSummaryRepo,
+            log_repo,
+            MockContextRepo,
+            MockSceneRepo,
+            llm,
+        )
+    }
+
+    // ---- quota tests ----
+
+    #[tokio::test]
+    async fn get_quota_below_warning() {
+        let log_repo = MockLogRepo::with_count(10);
+        let svc = build_test_ai_service_with_log_repo(
+            MockLlmProvider::new("{}".into()),
+            log_repo,
+        );
+        let quota = svc.get_quota(Uuid::new_v4()).await.unwrap();
+        assert_eq!(quota.used, 10);
+        assert_eq!(quota.limit, 50);
+        assert_eq!(quota.remaining, 40);
+        assert!(!quota.warning);
+        assert!(!quota.exceeded);
+    }
+
+    #[tokio::test]
+    async fn get_quota_at_warning_threshold() {
+        let log_repo = MockLogRepo::with_count(40);
+        let svc = build_test_ai_service_with_log_repo(
+            MockLlmProvider::new("{}".into()),
+            log_repo,
+        );
+        let quota = svc.get_quota(Uuid::new_v4()).await.unwrap();
+        assert_eq!(quota.used, 40);
+        assert_eq!(quota.remaining, 10);
+        assert!(quota.warning);
+        assert!(!quota.exceeded);
+    }
+
+    #[tokio::test]
+    async fn get_quota_between_warning_and_limit() {
+        let log_repo = MockLogRepo::with_count(45);
+        let svc = build_test_ai_service_with_log_repo(
+            MockLlmProvider::new("{}".into()),
+            log_repo,
+        );
+        let quota = svc.get_quota(Uuid::new_v4()).await.unwrap();
+        assert_eq!(quota.used, 45);
+        assert_eq!(quota.remaining, 5);
+        assert!(quota.warning);
+        assert!(!quota.exceeded);
+    }
+
+    #[tokio::test]
+    async fn get_quota_at_limit_shows_exceeded() {
+        let log_repo = MockLogRepo::with_count(50);
+        let svc = build_test_ai_service_with_log_repo(
+            MockLlmProvider::new("{}".into()),
+            log_repo,
+        );
+        let quota = svc.get_quota(Uuid::new_v4()).await.unwrap();
+        assert_eq!(quota.used, 50);
+        assert_eq!(quota.remaining, 0);
+        assert!(quota.warning);
+        assert!(quota.exceeded);
+    }
+
+    #[tokio::test]
+    async fn get_quota_over_limit_remaining_is_zero() {
+        let log_repo = MockLogRepo::with_count(55);
+        let svc = build_test_ai_service_with_log_repo(
+            MockLlmProvider::new("{}".into()),
+            log_repo,
+        );
+        let quota = svc.get_quota(Uuid::new_v4()).await.unwrap();
+        assert_eq!(quota.remaining, 0);
+        assert!(quota.exceeded);
+    }
+
+    #[tokio::test]
+    async fn check_quota_ok_below_limit() {
+        let log_repo = MockLogRepo::with_count(30);
+        let svc = build_test_ai_service_with_log_repo(
+            MockLlmProvider::new("{}".into()),
+            log_repo,
+        );
+        let result = svc.check_quota(Uuid::new_v4()).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn check_quota_errors_at_limit() {
+        let log_repo = MockLogRepo::with_count(50);
+        let svc = build_test_ai_service_with_log_repo(
+            MockLlmProvider::new("{}".into()),
+            log_repo,
+        );
+        let err = svc.check_quota(Uuid::new_v4()).await.unwrap_err();
+        match err {
+            AiError::QuotaExceeded { used, limit, .. } => {
+                assert_eq!(used, 50);
+                assert_eq!(limit, 50);
+            }
+            other => panic!("expected QuotaExceeded, got: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn check_quota_errors_over_limit() {
+        let log_repo = MockLogRepo::with_count(60);
+        let svc = build_test_ai_service_with_log_repo(
+            MockLlmProvider::new("{}".into()),
+            log_repo,
+        );
+        let err = svc.check_quota(Uuid::new_v4()).await.unwrap_err();
+        assert!(matches!(err, AiError::QuotaExceeded { .. }));
+    }
+
+    #[tokio::test]
+    async fn get_quota_resets_at_is_next_month() {
+        let log_repo = MockLogRepo::with_count(0);
+        let svc = build_test_ai_service_with_log_repo(
+            MockLlmProvider::new("{}".into()),
+            log_repo,
+        );
+        let quota = svc.get_quota(Uuid::new_v4()).await.unwrap();
+        let now = chrono::Utc::now();
+        assert!(quota.resets_at > now);
+        // resets_at should be the 1st of next month
+        assert_eq!(quota.resets_at.day(), 1);
+        assert_eq!(quota.resets_at.hour(), 0);
+    }
+
+    use chrono::{Datelike, Timelike};
 }

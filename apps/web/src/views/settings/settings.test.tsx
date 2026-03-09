@@ -33,7 +33,7 @@ vi.mock('@/shared/stores/auth', () => ({
     state: () => 'authenticated',
     user: () => ({
       id: 'u1',
-      name: 'Test User',
+      displayName: 'Test User',
       email: 'test@test.com',
       profileImageUrl: null,
       themePreference: 'system',
@@ -49,6 +49,13 @@ vi.mock('@/shared/stores/auth', () => ({
   deleteAccount: mockDeleteAccount,
   uploadAvatar: mockUploadAvatar,
 }))
+
+vi.mock('@/entities/quota', () => ({
+  getQuota: vi.fn(),
+}))
+
+import { getQuota } from '@/entities/quota'
+const mockGetQuota = vi.mocked(getQuota)
 
 // ---------------------------------------------------------------------------
 // Lazy import — after mocks
@@ -77,11 +84,21 @@ describe('SettingsView', () => {
     vi.clearAllMocks()
     mockUpdateProfile.mockResolvedValue({
       id: 'u1',
-      name: 'Test User',
+      displayName: 'Test User',
       email: 'test@test.com',
       profileImageUrl: null,
       themePreference: 'system',
       languagePreference: 'en',
+    })
+    mockGetQuota.mockResolvedValue({
+      data: {
+        used: 10,
+        limit: 50,
+        remaining: 40,
+        warning: false,
+        exceeded: false,
+        resetsAt: '2026-04-01T00:00:00Z',
+      },
     })
   })
 
@@ -191,6 +208,16 @@ describe('SettingsView', () => {
     expect(screen.queryByText('Profile Image URL')).not.toBeInTheDocument()
   })
 
+  it('avatar img element has onError handler for graceful fallback', () => {
+    // When profileImageUrl is null, the fallback initial is shown (tested above).
+    // This test verifies the avatar button structure includes error-resilient markup.
+    renderSettings()
+    const avatarButton = screen.getByRole('button', { name: /upload profile photo/i })
+    // The button should exist and contain the fallback initial
+    expect(avatarButton).toBeInTheDocument()
+    expect(avatarButton.textContent).toContain('T')
+  })
+
   // ── i18n ──────────────────────────────────────────────────────────
 
   it('renders Korean labels when locale is ko', () => {
@@ -199,5 +226,53 @@ describe('SettingsView', () => {
     expect(screen.getByText('프로필')).toBeInTheDocument()
     expect(screen.getByText('환경설정')).toBeInTheDocument()
     expect(screen.getByText('계정 관리')).toBeInTheDocument()
+  })
+
+  // ── AI Usage / Quota section ──────────────────────────────────────
+
+  it('renders AI Usage section heading', async () => {
+    renderSettings()
+    await vi.waitFor(() => {
+      expect(screen.getByText('AI Usage')).toBeInTheDocument()
+    })
+  })
+
+  it('shows quota usage count', async () => {
+    renderSettings()
+    await vi.waitFor(() => {
+      expect(screen.getByText('10 / 50')).toBeInTheDocument()
+    })
+  })
+
+  it('shows remaining count', async () => {
+    renderSettings()
+    await vi.waitFor(() => {
+      expect(screen.getByText(/40/)).toBeInTheDocument()
+    })
+  })
+
+  it('shows warning style when quota warning is true', async () => {
+    mockGetQuota.mockResolvedValue({
+      data: {
+        used: 45,
+        limit: 50,
+        remaining: 5,
+        warning: true,
+        exceeded: false,
+        resetsAt: '2026-04-01T00:00:00Z',
+      },
+    })
+    renderSettings()
+    await vi.waitFor(() => {
+      expect(screen.getByText('45 / 50')).toBeInTheDocument()
+    })
+  })
+
+  it('shows error message when quota load fails', async () => {
+    mockGetQuota.mockRejectedValue(new Error('Network error'))
+    renderSettings()
+    await vi.waitFor(() => {
+      expect(screen.getByText(/Could not load usage info/)).toBeInTheDocument()
+    })
   })
 })

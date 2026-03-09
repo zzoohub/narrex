@@ -123,7 +123,7 @@ Code structure is **hexagonal (ports & adapters)**. Domain logic has no infrastr
 
 | Store | Holds | Why | Consistency |
 |---|---|---|---|
-| **Neon PostgreSQL** | Users, projects, tracks, scenes (metadata + prose content), characters, relationships, scene summaries, generation logs | Relational data with complex joins (scene → characters → relationships). `start_position` + `duration` NLE model requires range queries. pgvector available for future semantic search. | Strong (single writer, single DB) |
+| **Neon PostgreSQL** | Users, projects, tracks, scenes (metadata + manuscript content in `scene.content`), characters, relationships, AI draft history (`drafts` table — append-only), scene summaries, generation logs | Relational data with complex joins (scene → characters → relationships). `start_position` + `duration` NLE model requires range queries. `scene.content` is the user's manuscript; `drafts` is AI generation history. pgvector available for future semantic search. | Strong (single writer, single DB) |
 | **Upstash Redis** | Rate limiting counters, cached assembled prompt context, hot scene summaries | Fast reads for hot data. TTL-based expiration. HTTP API works from Cloud Run. | Eventual (cache; Postgres is source of truth) |
 
 No object storage in Phase 1 — character profile images stored as URLs (placeholder or user-provided link).
@@ -156,7 +156,21 @@ User selects scene → clicks Generate
   → Assemble prompt (~4-8K tokens)
   → llm crate: generate_stream via LlmGateway
   → Stream tokens to client via SSE
-  → On completion: insert versioned draft row (draft table), update scene.status, generate + store scene summary
+  → On completion:
+      - Insert versioned draft row (draft table) — AI generation history
+      - If scene.content is empty: copy draft to scene.content (auto-apply)
+      - If scene.content exists: client shows confirmation before replacing
+      - Update scene.status, generate + store scene summary
+```
+
+**Flow 2b: Editor Auto-Save (User Edits)**
+
+```
+User edits text in editor
+  → Frontend: debounce 1-2 seconds
+  → API: PATCH /api/scenes/{id} with { content: "..." }
+  → Update scene.content in Postgres
+  → Update scene.status to 'edited' if currently 'ai_draft'
 ```
 
 **Flow 3: Direction-Based Edit**
@@ -167,7 +181,8 @@ User selects text → enters direction ("more tension")
   → Same context assembly as Flow 2 + selected text + surrounding text
   → llm crate: generate_stream via LlmGateway
   → Stream replacement to client
-  → On completion: insert new draft version (draft table), update scene.status
+  → On completion: insert new draft version (draft table, source: ai_edit),
+    update scene.content with new text, update scene.status
 ```
 
 ### 4.3 Caching
@@ -324,6 +339,7 @@ At 15 scenes with 250-token summaries ≈ 3750 tokens — well within limits. Qu
 - **Context compression**: Reduces per-generation input by ~80% compared to full prior scene text.
 - **No prompt caching API in Phase 1**: Stable context (config, characters) changes rarely but native provider caching is deferred to Phase 2.
 - **Generation logging**: Every request logged with token counts and estimated cost for real-time burn rate tracking.
+- **Monthly quota**: 50 AI generations per user per month (resets 1st of each month UTC). Enforced in the domain service layer before any LLM call. Uses existing `generation_log` table with `idx_genlog_user_created` index for efficient counting. Warning at 80% (40/50). Quota exceeded returns 429 with reset date. At worst-case Gemini-only pricing: ~$0.03/user/month, supporting ~1,600 users on a $50/month budget.
 
 ### 9.6 Guardrails
 

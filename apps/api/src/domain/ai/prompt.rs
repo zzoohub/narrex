@@ -437,6 +437,7 @@ mod tests {
             plot_summary: Some("주인공이 마을을 떠난다".into()),
             location: Some("마을 광장".into()),
             mood_tags: vec!["긴장".into(), "결의".into()],
+            content: None,
             character_ids: vec![],
             created_at: Utc::now(),
             updated_at: Utc::now(),
@@ -572,7 +573,7 @@ mod tests {
                 id: Uuid::new_v4(), track_id: Uuid::new_v4(), project_id: Uuid::new_v4(),
                 start_position: 0.0, duration: 1.0, status: SceneStatus::Empty,
                 title: "병렬 장면".into(), plot_summary: Some("다른 곳에서 벌어지는 일".into()),
-                location: None, mood_tags: vec![], character_ids: vec![],
+                location: None, mood_tags: vec![], content: None, character_ids: vec![],
                 created_at: Utc::now(), updated_at: Utc::now(),
             },
         ];
@@ -587,7 +588,7 @@ mod tests {
             id: Uuid::new_v4(), track_id: Uuid::new_v4(), project_id: Uuid::new_v4(),
             start_position: 0.0, duration: 1.0, status: SceneStatus::Empty,
             title: "다음".into(), plot_summary: None,
-            location: None, mood_tags: vec![], character_ids: vec![],
+            location: None, mood_tags: vec![], content: None, character_ids: vec![],
             created_at: Utc::now(), updated_at: Utc::now(),
         });
         let prompt = PromptBuilder::user_prompt(&ctx);

@@ -187,11 +187,11 @@ REQ-014  User can open a scene detail panel to edit: event title, episode
          tags, episode-end hook type, foreshadowing links to other scenes,
          and expected word count.
 
-REQ-015  System displays scene visual states: empty (no content),
-         draft (partial fill — AI generated or manually written, not yet
-         confirmed), confirmed (full fill — author marked as done), and
-         needs review (warning indicator — prior changes may affect
-         consistency).
+REQ-015  System displays scene visual states: empty (no content in
+         scene.content), ai_draft (content originated from AI generation,
+         user has not yet edited), edited (user has modified the content),
+         and needs_revision (config or character data changed since content
+         was last generated/edited — prior changes may affect consistency).
 
 REQ-016  User can create foreshadowing connection lines between scenes to
          indicate narrative links (setup/payoff relationships).
@@ -317,11 +317,37 @@ REQ-041  System applies model tiering via a provider-agnostic LLM gateway:
          uses Ollama for cost-free iteration.
 ```
 
-### 5.8 Editor
+### 5.8 Content Model (Manuscript vs Drafts)
 
 ```
-REQ-042  User can edit AI-generated text directly in a scene-level editor
-         with standard text editing capabilities.
+REQ-052  System separates manuscript content from AI drafts:
+         - scene.content: the user's actual manuscript text, auto-saved
+           from the editor. This is the single source of truth for what
+           the user has written.
+         - drafts[]: AI-generated draft history (append-only log). Each
+           draft records version, source, model, token counts, and cost.
+         The editor always reads from and writes to scene.content.
+         AI drafts are reference material stored separately.
+
+REQ-053  When AI generates a draft for a scene with no existing content
+         (scene.content is empty), the generated text is automatically
+         applied to scene.content. No separate "apply" step required.
+
+REQ-054  When AI generates a draft for a scene with existing content
+         (scene.content is non-empty), the system shows a confirmation
+         before replacing. The previous content is preserved via undo.
+         (Phase 2: side-by-side comparison view, selective apply.)
+
+REQ-055  User can browse AI draft history for a scene and apply any
+         previous draft version to scene.content. (Phase 2)
+```
+
+### 5.9 Editor
+
+```
+REQ-042  User can edit scene content (scene.content) directly in a
+         scene-level editor with standard text editing capabilities.
+         All edits are auto-saved.
 
 REQ-043  User can make direction-based partial edit requests on selected
          text (e.g., "more tension", "more dialogue", "make this scene
@@ -334,7 +360,7 @@ REQ-045  User can navigate between previous and next scenes directly
          from the editor.
 ```
 
-### 5.9 Revision & Quality Checks
+### 5.10 Revision & Quality Checks
 
 ```
 REQ-046  System can perform a character consistency check across all
@@ -350,14 +376,14 @@ REQ-049  System can review style and tone consistency across episodes and
          flag deviations from the established voice.
 ```
 
-### 5.10 Export
+### 5.11 Export
 
 ```
 REQ-050  User can export the full manuscript in standard formats (DOCX,
          EPUB, plain text) with episode structure preserved.
 ```
 
-### 5.11 Observability & Analytics
+### 5.12 Observability & Analytics
 
 ```
 REQ-051  Product team can monitor: user acquisition funnel, project
@@ -386,8 +412,8 @@ REQ-051  Product team can monitor: user acquisition funnel, project
 7. Editor panel opens. User presses "Generate AI Draft."
 8. System assembles prompt from all context sources and generates 2-3 variations.
    - If generation fails -> system shows error with retry option and suggests checking scene details for completeness.
-9. User reads the variations, selects one (or mixes sections from multiple), and edits the text.
-10. Scene status updates from "Unwritten" to "AI Draft Complete" (and to "Author-Edited" once the user modifies text).
+9. User reads the variations, selects one (or mixes sections from multiple). The selected draft is applied to `scene.content`. User edits the text in the editor — all changes auto-save.
+10. Scene status updates from "Empty" to "AI Draft" (and to "Edited" once the user modifies text).
 
 **Drop-off risks:**
 - Step 3: Auto-structuring produces a result that doesn't match the user's vision. Mitigation: make every element editable, show a "This is a starting point — edit freely" message.
@@ -494,7 +520,7 @@ REQ-051  Product team can monitor: user acquisition funnel, project
 
 | Plan | Price (USD) | Included | Target User |
 |------|-------------|----------|-------------|
-| Free | $0 | Unlimited structure, timeline, and character map editing. 10 AI generations/month. | Trial users, evaluators, pure planners |
+| Free | $0 | Unlimited structure, timeline, and character map editing. 50 AI generations/month (resets 1st of each month UTC). Warning at 80% usage (40/50). | Trial users, evaluators, pure planners |
 | Basic | ~$12/month | 100 AI generations/month. 2 draft variations per scene. Tone/style sliders. | Hobbyist writers producing their first novel |
 | Pro | ~$25/month | Unlimited AI generations. 3 draft variations. AI Surprise mode. Advanced model access. Revision tools. | Active serializers, serious hobbyists |
 | Pay-as-you-go | Credit packs | Overage credits for any plan | Users who exceed plan limits occasionally |
@@ -555,6 +581,8 @@ Prove that a user can go from idea to a multi-episode AI-assisted draft using th
 - Episode organization layer (scenes map 1:1 to episodes initially)
 - Episode assembly — merge per-scene drafts into a single cohesive episode text
 - Full manuscript assembly — combine all episodes into a complete book
+- Draft history browsing and selective apply (REQ-055)
+- Side-by-side draft comparison when re-generating with existing content (REQ-054 full)
 - World map
 - Temporal relationship tracking
 - Genre templates
@@ -568,7 +596,7 @@ Prove that a user can go from idea to a multi-episode AI-assisted draft using th
 
 ### Phase 2: Episode Layer & Polish
 
-Add episode organization, episode assembly (merge scene drafts into episodes), full manuscript assembly, variations, and export.
+Add episode organization, episode assembly (merge scene content into episodes), full manuscript assembly, variations, draft history browsing (REQ-055), side-by-side draft comparison (REQ-054), and export.
 
 ### Phase 3: Depth & Delight
 

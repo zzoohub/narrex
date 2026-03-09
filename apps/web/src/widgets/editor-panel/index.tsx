@@ -2,6 +2,8 @@ import { createSignal, createEffect, Show, onCleanup } from 'solid-js'
 import { useI18n } from '@/shared/lib/i18n'
 import { useWorkspace } from '@/features/workspace'
 import { streamGeneration, streamEdit } from '@/features/generation'
+import { ApiError } from '@/shared/api'
+import type { QuotaInfo } from '@/entities/quota'
 import {
   Button,
   Dialog,
@@ -27,6 +29,8 @@ export function EditorPanel() {
   const [showAiInput, setShowAiInput] = createSignal(false)
   const [aiDirection, setAiDirection] = createSignal('')
   const [showRegenDialog, setShowRegenDialog] = createSignal(false)
+  const [quotaWarning, setQuotaWarning] = createSignal<QuotaInfo | null>(null)
+  const [quotaError, setQuotaError] = createSignal<string | null>(null)
 
   // ---- Undo/Redo stack (per scene) ----------------------------------------
 
@@ -154,6 +158,7 @@ export function EditorPanel() {
   async function handleGenerate() {
     const s = scene()
     if (!s) return
+    setQuotaError(null)
     ws.startGeneration(s.id)
     const { stream, abort } = streamGeneration(ws.projectId, s.id)
     abortRef = abort
@@ -162,11 +167,18 @@ export function EditorPanel() {
         if (event.event === 'token') {
           ws.appendStreamContent((event.data as { text: string }).text)
         } else if (event.event === 'completed') {
+          const data = event.data as { draft?: unknown; quota?: QuotaInfo }
+          if (data.quota?.warning) {
+            setQuotaWarning(data.quota)
+          }
           ws.finishGeneration(ws.streamedContent())
           break
         }
       }
-    } catch {
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 429) {
+        setQuotaError(t('quota.exceeded', { date: new Date().toLocaleDateString() }))
+      }
       ws.cancelGeneration()
     } finally {
       abortRef = null
@@ -203,6 +215,7 @@ export function EditorPanel() {
     setShowAiInput(false)
     setShowToolbar(false)
     setAiDirection('')
+    setQuotaError(null)
 
     ws.startGeneration(s.id)
     const { stream, abort } = streamEdit(ws.projectId, s.id, {
@@ -216,11 +229,18 @@ export function EditorPanel() {
         if (event.event === 'token') {
           ws.appendStreamContent((event.data as { text: string }).text)
         } else if (event.event === 'completed') {
+          const data = event.data as { draft?: unknown; quota?: QuotaInfo }
+          if (data.quota?.warning) {
+            setQuotaWarning(data.quota)
+          }
           ws.finishGeneration(ws.streamedContent())
           break
         }
       }
-    } catch {
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 429) {
+        setQuotaError(t('quota.exceeded', { date: new Date().toLocaleDateString() }))
+      }
       ws.cancelGeneration()
     } finally {
       abortRef = null
@@ -294,39 +314,34 @@ export function EditorPanel() {
         {(s) => (
           <>
             {/* -- Header -------------------------------------------------- */}
-            <div class="flex items-center justify-between px-4 h-11 border-b border-border-subtle flex-shrink-0">
-              {/* Prev / title / next */}
-              <div class="flex items-center gap-2 min-w-0">
+            <div class="relative flex items-center px-4 h-9 border-b border-border-subtle flex-shrink-0">
+              {/* Centered: prev / title / next */}
+              <div class="absolute inset-0 flex items-center justify-center gap-2 pointer-events-none">
                 <button
                   type="button"
                   onClick={handlePrev}
                   disabled={!ws.prevScene()}
-                  class="p-1 rounded-md text-fg-muted hover:text-fg hover:bg-surface-raised disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  class="p-1 rounded-md text-fg-muted hover:text-fg hover:bg-surface-raised disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer pointer-events-auto"
                   aria-label="Previous scene"
                 >
                   <IconChevronLeft size={16} />
                 </button>
-                <span class="text-sm font-medium text-fg truncate">
+                <span class="text-sm font-medium text-fg truncate max-w-[200px]">
                   {s().title}
                 </span>
                 <button
                   type="button"
                   onClick={handleNext}
                   disabled={!ws.nextScene()}
-                  class="p-1 rounded-md text-fg-muted hover:text-fg hover:bg-surface-raised disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  class="p-1 rounded-md text-fg-muted hover:text-fg hover:bg-surface-raised disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer pointer-events-auto"
                   aria-label="Next scene"
                 >
                   <IconChevronRight size={16} />
                 </button>
               </div>
 
-              {/* Actions */}
-              <div class="flex items-center gap-2">
-                <Show when={hasDraft() && !ws.isGenerating()}>
-                  <Button variant="ghost" size="sm" onClick={handleRegenerate}>
-                    {t('editor.regenerate')}
-                  </Button>
-                </Show>
+              {/* Actions — right side */}
+              <div class="ml-auto flex items-center gap-2 z-10">
                 <Show when={ws.isGenerating() && ws.generatingSceneId() === s().id}>
                   <Button
                     variant="ghost"
@@ -337,12 +352,12 @@ export function EditorPanel() {
                     {t('editor.stop')}
                   </Button>
                 </Show>
-                <Show when={!ws.isGenerating()}>
+                <Show when={hasDraft() && !ws.isGenerating()}>
                   <Button
                     variant="primary"
                     size="sm"
                     icon={<IconSparkles size={14} />}
-                    onClick={handleGenerate}
+                    onClick={handleRegenerate}
                     disabled={!s().plotSummary}
                   >
                     {t('editor.generate')}
@@ -350,6 +365,25 @@ export function EditorPanel() {
                 </Show>
               </div>
             </div>
+
+            {/* -- Quota warning / error banners ----------------------------- */}
+            <Show when={quotaError()}>
+              <div class="px-4 py-2.5 bg-red-500/10 border-b border-red-500/20 text-red-400 text-sm">
+                {quotaError()}
+              </div>
+            </Show>
+            <Show when={quotaWarning() && !quotaError()}>
+              <div class="flex items-center justify-between px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 text-amber-400 text-sm">
+                <span>{t('quota.warning', { used: quotaWarning()!.used, limit: quotaWarning()!.limit })}</span>
+                <button
+                  type="button"
+                  class="text-amber-500/60 hover:text-amber-400 text-xs cursor-pointer"
+                  onClick={() => setQuotaWarning(null)}
+                >
+                  {t('common.close')}
+                </button>
+              </div>
+            </Show>
 
             {/* -- Body ---------------------------------------------------- */}
             <div class="flex-1 overflow-y-auto relative">
@@ -394,29 +428,32 @@ export function EditorPanel() {
                         >
                           {ws.streamedContent()}
                         </div>
-                        <div class="flex items-center gap-3 mt-6">
-                          <div class="flex items-center gap-2 text-accent text-sm">
-                            <span
-                              class="inline-block w-2 h-2 rounded-full bg-accent"
-                              style={{ animation: 'pulse-dot 1.2s ease-in-out infinite' }}
-                            />
-                            {t('editor.generating')}
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            icon={<IconStop size={14} />}
-                            onClick={handleStop}
-                          >
-                            {t('editor.stop')}
-                          </Button>
+                        <div class="flex items-center gap-2 text-accent text-sm mt-6">
+                          <span
+                            class="inline-block w-2 h-2 rounded-full bg-accent"
+                            style={{ animation: 'pulse-dot 1.2s ease-in-out infinite' }}
+                          />
+                          {t('editor.generating')}
                         </div>
                       </div>
                     }
                   >
                     {/* Editable content */}
                     <div
-                      ref={editorEl}
+                      ref={(el) => {
+                        editorEl = el
+                        // Sync content on mount (fixes stale ref after generation completes)
+                        const sc = scene()
+                        if (sc) {
+                          const content = ws.draftContent(sc.id)
+                          if (el.textContent !== content) {
+                            el.textContent = content
+                          }
+                          if (content && !undoStacks.has(sc.id)) {
+                            undoStacks.set(sc.id, [content])
+                          }
+                        }
+                      }}
                       contentEditable
                       class="outline-none text-fg text-[15px] leading-[1.85] min-h-[50vh]"
                       style={{ 'white-space': 'pre-wrap' }}

@@ -5,7 +5,7 @@ import { setAccessToken, getAccessToken, BASE_URL, post, patch, del, ApiError } 
 
 export interface AuthUser {
   id: string
-  name: string
+  displayName: string | null
   email: string
   profileImageUrl: string | null
   themePreference: string

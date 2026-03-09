@@ -314,14 +314,25 @@ body {
   border-bottom: none;
   border-radius: 6px 6px 0 0;
 }
+.edge-tab--top {
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 56px;
+  height: 24px;
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+}
 
 /* Inner edge tabs (inside open panels — same shape, opposite direction) */
 .edge-tab--left-inner,
-.edge-tab--bottom-inner {
+.edge-tab--bottom-inner,
+.edge-tab--top-inner {
   opacity: 0.5;
 }
 .edge-tab--left-inner:hover,
-.edge-tab--bottom-inner:hover {
+.edge-tab--bottom-inner:hover,
+.edge-tab--top-inner:hover {
   opacity: 1;
 }
 .edge-tab--left-inner {
@@ -341,6 +352,15 @@ body {
   height: 24px;
   border-top: none;
   border-radius: 0 0 6px 6px;
+}
+.edge-tab--top-inner {
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 56px;
+  height: 24px;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
 }
 
 /* ── Streaming cursor ──────────────────────────────────────────────────── */

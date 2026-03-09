@@ -1,7 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent } from '@solidjs/testing-library'
 import { I18nProvider } from '@/shared/lib/i18n'
-import { CharacterMap } from './index'
+import { CharacterMap, getNodeRadius, getConnectionCount } from './index'
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -94,6 +94,11 @@ function renderCharacterMap(props: { fullscreen?: boolean; onExitFullscreen?: ()
 describe('CharacterMap', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('renders add character button', () => {
@@ -111,6 +116,54 @@ describe('CharacterMap', () => {
     const addBtn = screen.getByText('Add Character')
     await fireEvent.click(addBtn)
     expect(mockAddCharacter).toHaveBeenCalled()
+  })
+
+  // ── Connection-based node sizing ─────────────────────────────────────
+
+  describe('getConnectionCount', () => {
+    it('returns 0 for character with no connections', () => {
+      expect(getConnectionCount('c99', [])).toBe(0)
+    })
+
+    it('counts connections where character is on either side', () => {
+      const rels = [
+        { characterAId: 'c1', characterBId: 'c2' },
+        { characterAId: 'c3', characterBId: 'c1' },
+      ]
+      expect(getConnectionCount('c1', rels)).toBe(2)
+      expect(getConnectionCount('c2', rels)).toBe(1)
+      expect(getConnectionCount('c3', rels)).toBe(1)
+    })
+
+    it('counts self-referencing relationship as 1', () => {
+      const rels = [{ characterAId: 'c1', characterBId: 'c1' }]
+      expect(getConnectionCount('c1', rels)).toBe(1)
+    })
+  })
+
+  describe('getNodeRadius', () => {
+    it('returns base radius for 0 connections', () => {
+      expect(getNodeRadius(0)).toBe(22)
+    })
+
+    it('increases radius with more connections', () => {
+      expect(getNodeRadius(2)).toBeGreaterThan(getNodeRadius(1))
+      expect(getNodeRadius(3)).toBeGreaterThan(getNodeRadius(2))
+    })
+
+    it('caps radius at maximum value', () => {
+      expect(getNodeRadius(25)).toBeLessThanOrEqual(45)
+      expect(getNodeRadius(100)).toBeLessThanOrEqual(45)
+    })
+
+    it('still grows meaningfully at high connection counts', () => {
+      // A protagonist with 20 connections should be noticeably larger than 5
+      expect(getNodeRadius(20)).toBeGreaterThan(getNodeRadius(5) + 2)
+    })
+
+    it('returns consistent values for same input', () => {
+      expect(getNodeRadius(3)).toBe(getNodeRadius(3))
+    })
   })
 
   // ── Fullscreen feature ──────────────────────────────────────────────

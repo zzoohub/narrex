@@ -1,6 +1,6 @@
 import { createSignal, createMemo, Show, For, batch } from 'solid-js'
 import { useI18n } from '@/shared/lib/i18n'
-import { Chip, IconPlus, IconCheck, IconChevronDown } from '@/shared/ui'
+import { Chip, IconPlus, IconCheck, IconChevronDown, IconChevronUp } from '@/shared/ui'
 import { useWorkspace } from '@/features/workspace'
 import type { PovType } from '@/entities/project'
 
@@ -28,6 +28,7 @@ function joinToneTags(tags: string[]): string {
 
 interface ConfigBarProps {
   open: boolean
+  onClose?: () => void
 }
 
 export function ConfigBar(props: ConfigBarProps) {
@@ -107,7 +108,19 @@ export function ConfigBar(props: ConfigBarProps) {
       }}
     >
       <div class="min-h-0 overflow-hidden">
-        <div class="px-5 py-4">
+        <div class="px-5 py-5 relative">
+          {/* Close button */}
+          <Show when={props.onClose}>
+            <button
+              type="button"
+              class="edge-tab edge-tab--top-inner"
+              aria-label="Close config panel"
+              onClick={props.onClose}
+            >
+              <IconChevronUp size={14} />
+            </button>
+          </Show>
+
           {/* Row 1: Genre, Theme, Era, POV — 4 equal columns */}
           <div class="grid grid-cols-4 gap-x-5 max-w-5xl">
             {/* Genre */}
@@ -173,7 +186,7 @@ export function ConfigBar(props: ConfigBarProps) {
           </div>
 
           {/* Row 2: Mood / Tone — full width */}
-          <div class="flex items-center gap-3 mt-4 max-w-5xl">
+          <div class="flex items-center gap-3 mt-6 max-w-5xl">
             <span class={`${labelClass} flex-shrink-0`}>{t('config.mood')}</span>
             <div class="flex items-center gap-2 flex-wrap min-h-[28px]">
               <For each={toneTags()}>

@@ -1,10 +1,12 @@
-import { createSignal, Show } from 'solid-js'
+import { createSignal, onMount, Show } from 'solid-js'
 import { Portal } from 'solid-js/web'
 import { Link } from '@tanstack/solid-router'
 import { useI18n } from '@/shared/lib/i18n'
 import { useTheme, type ThemePreference } from '@/shared/stores/theme'
 import { useAuth, updateProfile, deleteAccount, uploadAvatar } from '@/shared/stores/auth'
-import { Button, TextInput } from '@/shared/ui'
+import { Button, TextInput, Skeleton } from '@/shared/ui'
+import { getQuota } from '@/entities/quota'
+import type { QuotaInfo } from '@/entities/quota'
 import type { Locale } from '@/shared/types'
 
 export function SettingsView() {
@@ -13,7 +15,7 @@ export function SettingsView() {
   const { user, logout } = useAuth()
 
   // Profile form state
-  const [displayName, setDisplayName] = createSignal(user()?.name ?? '')
+  const [displayName, setDisplayName] = createSignal(user()?.displayName ?? '')
   const [saving, setSaving] = createSignal(false)
   const [saveSuccess, setSaveSuccess] = createSignal(false)
   const [saveError, setSaveError] = createSignal('')
@@ -29,6 +31,23 @@ export function SettingsView() {
   let fileInputRef: HTMLInputElement | undefined
   const [avatarUploading, setAvatarUploading] = createSignal(false)
   const [avatarError, setAvatarError] = createSignal('')
+  const [avatarImgFailed, setAvatarImgFailed] = createSignal(false)
+
+  // Quota state
+  const [quota, setQuota] = createSignal<QuotaInfo | null>(null)
+  const [quotaLoading, setQuotaLoading] = createSignal(true)
+  const [quotaError, setQuotaError] = createSignal(false)
+
+  onMount(async () => {
+    try {
+      const res = await getQuota()
+      setQuota(res.data)
+    } catch {
+      setQuotaError(true)
+    } finally {
+      setQuotaLoading(false)
+    }
+  })
 
   const handleAvatarUpload = async (e: Event) => {
     const input = e.target as HTMLInputElement
@@ -51,6 +70,7 @@ export function SettingsView() {
     }
 
     setAvatarError('')
+    setAvatarImgFailed(false)
     setAvatarUploading(true)
     try {
       await uploadAvatar(file)
@@ -65,7 +85,7 @@ export function SettingsView() {
   const isDirty = () => {
     const u = user()
     if (!u) return false
-    return displayName() !== (u.name ?? '')
+    return displayName() !== (u.displayName ?? '')
   }
 
   // Validate display name
@@ -148,7 +168,7 @@ export function SettingsView() {
 
   // Avatar initial
   const avatarInitial = () => {
-    const name = displayName() || user()?.name || user()?.email || '?'
+    const name = displayName() || user()?.displayName || user()?.email || '?'
     return name.charAt(0).toUpperCase()
   }
 
@@ -182,7 +202,7 @@ export function SettingsView() {
                 aria-label={t('settings.avatar.upload')}
               >
                 <Show
-                  when={user()?.profileImageUrl}
+                  when={user()?.profileImageUrl && !avatarImgFailed()}
                   fallback={
                     <div class="w-full h-full bg-accent text-canvas flex items-center justify-center font-display font-semibold text-xl">
                       {avatarInitial()}
@@ -193,6 +213,7 @@ export function SettingsView() {
                     src={user()!.profileImageUrl!}
                     alt=""
                     class="w-full h-full object-cover"
+                    onError={() => setAvatarImgFailed(true)}
                   />
                 </Show>
                 {/* Hover overlay */}
@@ -214,7 +235,7 @@ export function SettingsView() {
                 onChange={handleAvatarUpload}
               />
               <div class="min-w-0">
-                <p class="text-sm font-medium text-fg truncate">{displayName() || user()?.name}</p>
+                <p class="text-sm font-medium text-fg truncate">{displayName() || user()?.displayName}</p>
                 <p class="text-xs text-fg-muted truncate">{user()?.email}</p>
                 <Show when={avatarError()}>
                   <p class="mt-1 text-xs text-error">{avatarError()}</p>
@@ -329,6 +350,33 @@ export function SettingsView() {
               </div>
             </div>
           </div>
+        </section>
+
+        {/* ── AI Usage Section ── */}
+        <section class="bg-surface border border-border-default rounded-xl p-6">
+          <h2 class="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-6">
+            {t('settings.quota')}
+          </h2>
+          <Show when={!quotaLoading()} fallback={<Skeleton height="60px" />}>
+            <Show when={!quotaError()} fallback={<p class="text-sm text-fg-muted">{t('settings.quota.loadError')}</p>}>
+              <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                  <span class="text-sm text-fg-secondary">{t('settings.quota.used')}</span>
+                  <span class="text-sm font-medium text-fg">{quota()!.used} / {quota()!.limit}</span>
+                </div>
+                <div class="h-2 rounded-full bg-surface-raised overflow-hidden">
+                  <div
+                    class={`h-full rounded-full transition-all ${quota()!.warning ? 'bg-amber-500' : 'bg-accent'}`}
+                    style={{ width: `${Math.min(100, (quota()!.used / quota()!.limit) * 100)}%` }}
+                  />
+                </div>
+                <div class="flex items-center justify-between text-xs text-fg-muted">
+                  <span>{t('settings.quota.remaining')}: {quota()!.remaining}</span>
+                  <span>{t('settings.quota.resetsAt')}: {new Date(quota()!.resetsAt).toLocaleDateString()}</span>
+                </div>
+              </div>
+            </Show>
+          </Show>
         </section>
 
         {/* ── Account Section ── */}

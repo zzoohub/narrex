@@ -30,10 +30,12 @@ vi.mock('@/features/workspace', () => ({
 // Helpers
 // ---------------------------------------------------------------------------
 
+const mockOnClose = vi.fn()
+
 function renderConfigBar(open = true) {
   return render(() => (
     <I18nProvider initial="en">
-      <ConfigBar open={open} />
+      <ConfigBar open={open} onClose={mockOnClose} />
     </I18nProvider>
   ))
 }
@@ -83,5 +85,17 @@ describe('ConfigBar', () => {
     const { container } = renderConfigBar(false)
     const panel = container.querySelector('[data-testid="config-panel"]')
     expect(panel).toBeInTheDocument()
+  })
+
+  it('renders a close button inside the panel when open', () => {
+    renderConfigBar(true)
+    expect(screen.getByLabelText('Close config panel')).toBeInTheDocument()
+  })
+
+  it('calls onClose when close button is clicked', async () => {
+    renderConfigBar(true)
+    const closeBtn = screen.getByLabelText('Close config panel')
+    await fireEvent.click(closeBtn)
+    expect(mockOnClose).toHaveBeenCalledTimes(1)
   })
 })

@@ -208,8 +208,9 @@ fn build_router(state: AppState, cors_origin: &str) -> Router {
             post(auth_handlers::upload_avatar)
                 .layer(DefaultBodyLimit::max(2 * 1024 * 1024 + 512)), // 2MB + multipart overhead
         )
-        // Cost analytics
+        // Cost analytics & quota
         .route("/v1/me/costs", get(ai_handlers::get_user_costs))
+        .route("/v1/me/quota", get(ai_handlers::get_quota))
         // Projects
         .route(
             "/v1/projects/structure",

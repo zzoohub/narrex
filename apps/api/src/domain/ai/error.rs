@@ -1,5 +1,7 @@
 use std::fmt;
 
+use chrono::{DateTime, Utc};
+
 #[derive(Debug)]
 pub enum AiError {
     SceneNotFound,
@@ -7,6 +9,11 @@ pub enum AiError {
     DraftNotFound,
     GenerationFailed(String),
     RateLimited,
+    QuotaExceeded {
+        used: i64,
+        limit: i64,
+        resets_at: DateTime<Utc>,
+    },
     Unknown(anyhow::Error),
 }
 
@@ -18,6 +25,14 @@ impl fmt::Display for AiError {
             Self::DraftNotFound => write!(f, "draft not found"),
             Self::GenerationFailed(msg) => write!(f, "generation failed: {msg}"),
             Self::RateLimited => write!(f, "rate limited"),
+            Self::QuotaExceeded {
+                used,
+                limit,
+                resets_at,
+            } => write!(
+                f,
+                "monthly generation quota exceeded ({used}/{limit}), resets at {resets_at}"
+            ),
             Self::Unknown(err) => write!(f, "unknown AI error: {err}"),
         }
     }
@@ -78,5 +93,28 @@ mod tests {
     #[test]
     fn source_draft_not_found_returns_none() {
         assert!(AiError::DraftNotFound.source().is_none());
+    }
+
+    #[test]
+    fn display_quota_exceeded() {
+        let err = AiError::QuotaExceeded {
+            used: 50,
+            limit: 50,
+            resets_at: chrono::Utc::now(),
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("monthly generation quota exceeded"));
+        assert!(msg.contains("50/50"));
+        assert!(msg.contains("resets at"));
+    }
+
+    #[test]
+    fn source_quota_exceeded_returns_none() {
+        let err = AiError::QuotaExceeded {
+            used: 50,
+            limit: 50,
+            resets_at: chrono::Utc::now(),
+        };
+        assert!(err.source().is_none());
     }
 }

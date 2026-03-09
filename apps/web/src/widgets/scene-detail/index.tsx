@@ -183,7 +183,7 @@ export function SceneDetail() {
       {(s) => (
         <div class="flex flex-col h-full bg-surface">
           {/* -- Header ---------------------------------------------------- */}
-          <div class="flex items-center justify-between px-4 h-10 border-b border-border-subtle flex-shrink-0">
+          <div class="flex items-center justify-between px-4 h-9 border-b border-border-subtle flex-shrink-0">
             <span class="text-xs font-medium text-fg-secondary uppercase tracking-wide">
               {t('sceneDetail.title')}
             </span>

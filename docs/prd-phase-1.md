@@ -83,7 +83,7 @@ The core loop is: idea in -> visual structure out -> arrange story -> generate s
 | P0 | REQ-012 | User can create merge points and branch points on the timeline | Branch point: a scene on one track splits into scenes on two or more tracks (storylines diverge). Merge point: scenes from multiple tracks converge into a single scene (storylines reconverge). Visual indicators distinguish branch/merge points from regular scenes. | Branch and merge points represent the moments where storylines split apart or come together — critical narrative structure for multi-POV stories. |
 | P0 | REQ-013 | System vertically aligns simultaneous events across tracks | Scenes whose timeline ranges (start_position + duration) overlap across different tracks are vertically aligned so users can see what is happening simultaneously. Alignment is automatic based on range overlap but can be manually adjusted. | Without vertical alignment, the multi-track timeline loses its primary benefit — showing what happens at the same time across different storylines. |
 | P0 | REQ-014 | User can open a scene detail panel to edit event details | Phase 1 panel fields: event title (required), involved characters (multi-select from character map), location (free text), plot summary (free text, used as primary context for AI generation), mood/tone tags (optional, override config-level tone for this scene). Deferred fields: episode assignment, episode-end hook type, foreshadowing links, expected word count. | The scene detail panel is where users shape what the AI generates for each scene. Plot summary is the most critical field — it's the user's creative direction for the scene. |
-| P0 | REQ-015 | System displays scene visual states | Four states: (a) Empty — no content, no draft generated; (b) AI Draft — AI has generated a draft, user has not edited; (c) Edited — user has modified the AI draft or written original content; (d) Needs Revision — config or character data changed since draft was generated. Visual distinction via color, icon, or fill level. | Users need to see at a glance which scenes are done, which need work, and which may be stale. Essential for managing a multi-scene project. |
+| P0 | REQ-015 | System displays scene visual states | Four states: (a) Empty — scene.content is empty; (b) AI Draft — content originated from AI generation, user has not yet edited; (c) Edited — user has modified the content; (d) Needs Revision — config or character data changed since content was last generated/edited. Visual distinction via color, icon, or fill level. | Users need to see at a glance which scenes are done, which need work, and which may be stale. Essential for managing a multi-scene project. |
 
 **Acceptance criteria for REQ-010:**
 - User can add a new scene between any two existing scenes with a single interaction (click "+").
@@ -138,32 +138,78 @@ The core loop is: idea in -> visual structure out -> arrange story -> generate s
 - Pressing "Generate" on a scene with a plot summary and at least one assigned character produces a prose draft within 30 seconds.
 - Pressing "Generate" on a scene with no plot summary produces a draft based on the scene title, config, and surrounding context — but the system shows a suggestion to add a plot summary for better results.
 - Generated prose is in natural Korean appropriate to the configured genre and tone.
-- User can re-generate (overwrite the current draft) with a single action and a confirmation dialog.
+- Generated draft is stored in the `drafts` table (AI history) and auto-applied to `scene.content` when content is empty (REQ-053).
+- When `scene.content` already exists, re-generation shows a confirmation dialog before replacing (REQ-054).
 
 **Acceptance criteria for REQ-035:**
 - A scene involving Character A (described as "cold and calculating" in their character card) who has a "rival" relationship with Character B produces prose that reflects both the personality and the relationship dynamic.
 - A scene at start_position 10 in the timeline references relevant events from earlier scenes (via compressed summaries) without contradicting them.
 - Changing a preceding scene's draft and re-generating a later scene's draft reflects the updated earlier content in the summary context.
 
-### 3.6 Editor
+### 3.6 Content Model (Manuscript vs Drafts)
 
 | Priority | REQ-ID | Requirement | Phase 1 Detail | Rationale |
 |----------|--------|-------------|-----------------|-----------|
-| P0 | REQ-042 | User can edit AI-generated text directly in the editor | A scene-level text editor opens when a user selects a scene for editing. Supports standard text editing: typing, selecting, cut/copy/paste, undo/redo. Editor displays the current scene's title and shows navigation to previous/next scenes. Word/character count displayed. | Users must be able to modify AI output. The product philosophy is "revise, don't write from scratch" — this requires a functional editor. |
-| P0 | REQ-043 | User can make direction-based partial edit requests | User selects a passage of text, then enters a natural-language direction (e.g., "more tension," "expand this dialogue," "make this shorter," "add internal monologue"). System regenerates only the selected passage, preserving the surrounding text. If no text is selected, the direction applies to the entire scene draft. | This is the key interaction that makes AI-assisted editing accessible to non-writers. Instead of knowing how to rewrite prose, users describe what they want changed in plain language. |
+| P0 | REQ-052 | System separates manuscript content from AI drafts | `scene.content` holds the user's manuscript text (auto-saved from editor). `drafts[]` is an append-only log of AI-generated drafts (version, source, model, tokens, cost). The editor always reads/writes `scene.content`. | Clean separation: "my writing" vs "AI suggestions." Simplifies auto-save (one UPDATE), supports Phase 2 draft comparison without refactoring. |
+| P0 | REQ-053 | Auto-apply draft when scene has no content | When AI generates a draft for a scene where `scene.content` is empty, the generated text is automatically copied to `scene.content`. No separate "apply" button. | Phase 1 simplicity: generate → edit. One step, not two. |
+| P1 | REQ-054 | Confirmation when re-generating with existing content | When AI generates a draft for a scene that already has content, show a confirmation dialog before replacing `scene.content`. Previous content is recoverable via undo. Phase 2 adds side-by-side comparison and selective apply. | Protect user's work. "Never lose user content" is a core principle. |
+
+**Acceptance criteria for REQ-052:**
+- `scene.content` persists across sessions (refresh, navigate away, return — content is still there).
+- AI draft records are stored separately in the `drafts` table and do not affect `scene.content` unless explicitly applied.
+- Auto-save debounce: user edits are persisted within 2 seconds of the last keystroke.
+
+**Acceptance criteria for REQ-053:**
+- After AI generation completes on an empty scene, the editor immediately shows the generated text and it is already saved as `scene.content`.
+- Scene status transitions from `empty` to `ai_draft`.
+
+**Acceptance criteria for REQ-054:**
+- After AI generation completes on a scene with existing content, user sees a confirmation before content is replaced.
+- If user cancels, existing content is preserved and the new draft is still available in draft history for Phase 2.
+
+### 3.7 Editor
+
+| Priority | REQ-ID | Requirement | Phase 1 Detail | Rationale |
+|----------|--------|-------------|-----------------|-----------|
+| P0 | REQ-042 | User can edit scene content directly in the editor | A scene-level text editor opens when a user selects a scene. The editor reads from and writes to `scene.content`. Supports standard text editing: typing, selecting, cut/copy/paste, undo/redo. All edits are auto-saved. Editor displays the current scene's title and shows navigation to previous/next scenes. Word/character count displayed. | Users must be able to modify content. The product philosophy is "revise, don't write from scratch" — this requires a functional editor. |
+| P0 | REQ-043 | User can make direction-based partial edit requests | User selects a passage of text, then enters a natural-language direction (e.g., "more tension," "expand this dialogue," "make this shorter," "add internal monologue"). System regenerates only the selected passage, preserving the surrounding text. If no text is selected, the direction applies to the entire scene content. Result is saved to both `scene.content` and `drafts` (as `ai_edit` source). | This is the key interaction that makes AI-assisted editing accessible to non-writers. Instead of knowing how to rewrite prose, users describe what they want changed in plain language. |
 
 **Acceptance criteria for REQ-042:**
-- Editor loads the AI-generated draft immediately after generation completes.
+- Editor loads `scene.content` when a scene is selected. If content is empty, shows empty state with generate CTA.
 - Undo/redo supports at least 50 actions.
 - Character count updates in real time as the user types.
 - Editor preserves content across sessions (navigating away and returning does not lose edits).
+- Auto-save: content is persisted to server within 2 seconds of last edit.
 
 **Acceptance criteria for REQ-043:**
 - User selects 2 sentences, types "more dramatic," and receives a regenerated version of only those sentences within 10 seconds. Surrounding text is unchanged.
 - Direction-based edit preserves the overall narrative context (does not introduce characters or events not present in the scene).
 - User can undo a direction-based edit to restore the previous version.
 
-### 3.7 Observability (Phase 1 Subset)
+### 3.8 AI Usage Quota
+
+| Priority | REQ-ID | Requirement | Phase 1 Detail | Rationale |
+|----------|--------|-------------|-----------------|-----------|
+| P0 | REQ-060 | System enforces a monthly AI generation quota per user | Free tier: 50 AI generations per month. Each successful LLM call (scene generation, scene edit, project structuring) counts as 1 generation against the quota. Quota resets on the 1st of each month at 00:00 UTC. System checks remaining quota before every AI call; if exceeded, returns 429 with reset date. | MVP has no subscription revenue. Monthly cap prevents runaway AI costs while allowing enough usage to validate the core loop (~15 scenes + edits + structuring per project). |
+| P0 | REQ-061 | System warns users approaching quota limit | When a user reaches 80% of their monthly quota (40/50), the system includes a warning in the SSE `completed` event and the quota API response. Frontend displays a dismissible warning banner. | Users should not be surprised by hitting the limit. Early warning lets them prioritize remaining generations. |
+| P0 | REQ-062 | User can check their current quota status | `GET /v1/me/quota` returns: `used`, `limit`, `remaining`, `warning` (boolean), `resetsAt` (ISO 8601). Quota info is also embedded in SSE `completed` events after each generation. | Transparency. Users need to know how many generations they have left to plan their writing sessions. |
+
+**Acceptance criteria for REQ-060:**
+- A user who has used 50 successful generations this month receives a 429 response with a clear message and reset date when attempting any AI generation.
+- Failed or partial generations (LLM errors) do not count against the quota.
+- Project structuring counts as 1 generation (even though it makes multiple internal LLM calls).
+- Quota resets at 00:00 UTC on the 1st of each month — a user at 50/50 on March 31 can generate again on April 1.
+
+**Acceptance criteria for REQ-061:**
+- After the 40th successful generation, the SSE `completed` event includes `quota.warning: true`.
+- Frontend displays an amber warning banner: "You have used 40/50 AI generations this month."
+- The warning banner is dismissible but reappears on the next generation.
+
+**Acceptance criteria for REQ-062:**
+- `GET /v1/me/quota` returns accurate counts within 1 generation of the actual usage.
+- Quota info in SSE `completed` events matches the API response.
+
+### 3.9 Observability (Phase 1 Subset)
 
 | Priority | REQ-ID | Requirement | Phase 1 Detail | Rationale |
 |----------|--------|-------------|-----------------|-----------|
@@ -175,6 +221,7 @@ The core loop is: idea in -> visual structure out -> arrange story -> generate s
 
 | REQ-ID | Requirement | Why Deferred |
 |--------|-------------|--------------|
+| REQ-055 | Draft history browsing and selective apply | Phase 1 auto-applies AI drafts to scene.content. Browsing and selecting from past drafts requires a comparison UI. Deferred to Phase 2 alongside multiple draft variations (REQ-036). Data model already supports it — drafts table is append-only with versions. |
 | REQ-003 | Genre templates (pre-populated config and starter timeline) | Templates require curated genre-specific content (regression, romance-fantasy, martial arts structures). Auto-structuring from free text is the higher-priority entry point. Templates are a Phase 2 onboarding enhancement once we understand which genres users actually choose. |
 | REQ-005 | First-project onboarding tutorial | A guided tutorial requires a stable UI to build against. Phase 1 UI will iterate rapidly. Instead, rely on clear empty states, inline hints, and a simple first-time flow that pushes users to their first generation. Structured onboarding is a Phase 2 polish item. |
 | REQ-006 | AI chat panel (user-initiated questions and brainstorming) | Chat panel requires a working project context (Config, Timeline, Character Map) to be useful. Phase 1 focuses on getting the core data structures right. AI chat is a Phase 2 feature once the context it draws from is stable. |
@@ -222,12 +269,12 @@ This is the journey that validates the core hypothesis. A user who completes thi
 6. User selects a scene they're excited about (e.g., "Protagonist discovers regression ability").
 7. Scene detail panel opens. User reviews the auto-generated plot summary and edits it: "Protagonist wakes up in his 12-year-old body after dying in battle. He's in his childhood bedroom. Disbelief, then slowly realizes this is real. Ends with him clenching his fist — this time will be different."
 8. User presses "Generate AI Draft."
-9. System shows a loading indicator. Within 30 seconds, the editor panel fills with a prose draft (1,500-3,000 Korean characters).
+9. System shows a loading indicator. Within 30 seconds, the editor panel fills with a prose draft (1,500-3,000 Korean characters). Since the scene had no existing content, the draft is automatically applied to `scene.content` and auto-saved.
    - If generation fails -> system shows error with retry option.
 10. User reads the draft. It captures the regression moment but the emotional tone is too melodramatic. User selects the second paragraph, types the direction "more restrained, internal monologue, less dramatic," and presses "Apply."
-11. System regenerates only the selected passage. The new version is quieter, more internal.
-12. User makes a few manual edits — changes a word choice, adds a line of thought.
-13. Scene status updates from "Empty" to "Edited." User sees the scene fill in on the timeline.
+11. System regenerates only the selected passage. The new version is quieter, more internal. `scene.content` updates and auto-saves.
+12. User makes a few manual edits — changes a word choice, adds a line of thought. Each edit auto-saves to `scene.content`.
+13. Scene status updates from "AI Draft" to "Edited." User sees the scene fill in on the timeline.
 14. User selects the next scene and repeats steps 7-13.
 
 **Drop-off risks and mitigations:**
@@ -252,11 +299,11 @@ This is the journey that validates the core hypothesis. A user who completes thi
 ### Journey 3: Returning to Continue a Project
 
 1. User returns to Narrex the next day.
-2. User opens their existing project. The timeline shows their progress: 3 scenes are "Edited" (filled), 2 are "AI Draft" (partially filled), and 8 are "Empty."
+2. User opens their existing project. The timeline shows their progress: 3 scenes are "Edited" (filled), 2 are "AI Draft" (partially filled), and 8 are "Empty." All previous edits are preserved in `scene.content` — nothing was lost.
 3. User picks up where they left off — selects the next empty scene after their last edited one.
 4. User writes a plot summary in the scene detail panel, assigns characters, and generates an AI draft.
-5. The draft references events from earlier scenes (via compressed summaries of completed scenes), maintaining narrative continuity.
-6. User edits the draft, and the scene status updates.
+5. The draft references events from earlier scenes (via compressed summaries from `scene.content` of completed scenes), maintaining narrative continuity.
+6. User edits the draft, and the scene status updates. All edits auto-save.
 
 **Drop-off risk:** User forgot what they were doing. Mitigation: scene visual states make progress visible at a glance. The timeline serves as a persistent story map.
 
@@ -291,7 +338,7 @@ Phase 1 is considered validated — and the team should proceed to Phase 2 — w
 
 3. **Multi-scene engagement exists.** At least 15% of users who complete the core loop go on to generate and edit 5+ scenes. This signals that the tool is not a novelty — users see ongoing value.
 
-4. **Per-user AI cost is sustainable.** Average monthly AI cost per active user is below $5 (consistent with Basic plan pricing at $12/month with ~40% cost ceiling).
+4. **Per-user AI cost is sustainable.** Average monthly AI cost per active user is below $0.05 under the free quota (50 generations/month). At worst case (100% Gemini Flash fallback), cost is ~$0.03/user/month — a $50/month budget supports ~1,600 active users.
 
 5. **No critical quality blockers.** AI-generated Korean prose is rated as "good enough to revise" by at least 70% of test users in qualitative feedback (structured survey or interview).
 
@@ -319,7 +366,7 @@ If any of the first three criteria are not met after 8 weeks, the team should di
 | Multi-track timeline adds onboarding complexity for first-time users | Medium | Low | Provide a sensible default (single track) on project creation; parallel tracks appear only when auto-structuring detects simultaneous events or the user explicitly adds a track. Inline hints explain the track concept on first encounter. |
 | Context window limits cause quality degradation for projects with 15+ scenes | High | Medium | Phase 1 projects are likely 10-20 scenes. Implement summary-based context compression from the start. Monitor generation quality by scene position. If degradation is detected, invest in compression quality before Phase 2. |
 | Users generate one scene and leave — the tool is a novelty, not a workflow | High | Medium | Push toward multi-scene engagement in the UX: after first generation, suggest "Generate the next scene?" Show progress on the timeline. Track generation-to-second-generation conversion as an early warning metric. |
-| Per-user AI costs are higher than modeled due to re-generation and direction-based edits | Medium | Low | Monitor per-user token usage from day one. Set internal cost alerts. If costs exceed projections, consider generation limits even for beta users to collect accurate usage data. |
+| Per-user AI costs are higher than modeled due to re-generation and direction-based edits | Medium | Low | Mitigated by monthly 50-generation quota (REQ-060). Monitor per-user token usage from day one. Set internal cost alerts. Quota can be adjusted based on actual usage patterns. |
 | File import (Notion export) parsing fails on edge cases, creating a bad first impression | Low | Medium | Support a limited set of well-tested file formats (.md, .txt, Notion .zip). Show clear error messages for unsupported formats. Auto-structuring gracefully handles partial parse results. |
 
 ---

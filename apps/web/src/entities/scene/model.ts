@@ -11,6 +11,7 @@ export interface Scene {
   plotSummary: string | null
   location: string | null
   moodTags: string[]
+  content: string | null
   characterIds: string[]
   createdAt: string
   updatedAt: string
@@ -35,5 +36,6 @@ export interface UpdateSceneRequest {
   plotSummary?: string | null
   location?: string | null
   moodTags?: string[]
+  content?: string | null
   characterIds?: string[]
 }

@@ -116,6 +116,7 @@ pub struct Scene {
     pub plot_summary: Option<String>,
     pub location: Option<String>,
     pub mood_tags: Vec<String>,
+    pub content: Option<String>,
     pub character_ids: Vec<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -148,6 +149,7 @@ pub struct UpdateScene {
     pub plot_summary: Option<Option<String>>,
     pub location: Option<Option<String>>,
     pub mood_tags: Option<Vec<String>>,
+    pub content: Option<Option<String>>,
     pub character_ids: Option<Vec<Uuid>>,
 }
 
@@ -261,6 +263,7 @@ mod tests {
         assert!(us.plot_summary.is_none());
         assert!(us.location.is_none());
         assert!(us.mood_tags.is_none());
+        assert!(us.content.is_none());
         assert!(us.character_ids.is_none());
     }
 }

@@ -32,7 +32,6 @@ interface WorkspaceState {
   characters: Character[]
   relationships: CharacterRelationship[]
   connections: SceneConnection[]
-  draftContents: Record<string, string>
 }
 
 interface WorkspaceActions {
@@ -50,7 +49,7 @@ interface WorkspaceActions {
   removeTrack: (trackId: string) => void
 
   addCharacter: (name: string) => void
-  updateCharacter: (charId: string, updates: Partial<Pick<Character, 'name' | 'personality' | 'appearance' | 'secrets' | 'motivation' | 'graphX' | 'graphY'>>) => void
+  updateCharacter: (charId: string, updates: Partial<Pick<Character, 'name' | 'personality' | 'appearance' | 'secrets' | 'motivation' | 'profileImageUrl' | 'graphX' | 'graphY'>>) => void
   removeCharacter: (charId: string) => void
   selectCharacter: (charId: string | null) => void
 
@@ -120,7 +119,6 @@ export const WorkspaceProvider: ParentComponent<{ projectId: string }> = (props)
     characters: [],
     relationships: [],
     connections: [],
-    draftContents: {},
   })
 
   const [selectedSceneId, setSelectedSceneId] = createSignal<string | null>(null)
@@ -136,7 +134,39 @@ export const WorkspaceProvider: ParentComponent<{ projectId: string }> = (props)
     setSaveStatus('saved')
   }, 1000)
 
-  onCleanup(() => autoSave.cancel())
+  // Per-character debounced API saves
+  const charPendingUpdates = new Map<string, Partial<Character>>()
+  const charSaveTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+  function flushCharacterSave(charId: string) {
+    const pending = charPendingUpdates.get(charId)
+    if (pending) {
+      charPendingUpdates.delete(charId)
+      characterApi.updateCharacter(props.projectId, charId, pending).catch(() => setSaveStatus('error'))
+    }
+    charSaveTimers.delete(charId)
+  }
+
+  // Content auto-save (debounced per scene)
+  const contentSaveTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+  function saveContentToServer(sceneId: string, content: string) {
+    const existing = contentSaveTimers.get(sceneId)
+    if (existing) clearTimeout(existing)
+    contentSaveTimers.set(sceneId, setTimeout(() => {
+      contentSaveTimers.delete(sceneId)
+      sceneApi.updateScene(props.projectId, sceneId, { content: content || null })
+        .catch(() => setSaveStatus('error'))
+    }, 1500))
+  }
+
+  onCleanup(() => {
+    autoSave.cancel()
+    for (const timer of charSaveTimers.values()) clearTimeout(timer)
+    // Flush any pending character saves on cleanup
+    for (const charId of charPendingUpdates.keys()) flushCharacterSave(charId)
+    for (const timer of contentSaveTimers.values()) clearTimeout(timer)
+  })
 
   function markSaving() {
     setSaveStatus('saving')
@@ -226,7 +256,8 @@ export const WorkspaceProvider: ParentComponent<{ projectId: string }> = (props)
   })
 
   function draftContent(sceneId: string): string {
-    return state.draftContents[sceneId] ?? ''
+    const scene = state.scenes.find((s) => s.id === sceneId)
+    return scene?.content ?? ''
   }
 
   // ---- Scene CRUD ----
@@ -243,6 +274,7 @@ export const WorkspaceProvider: ParentComponent<{ projectId: string }> = (props)
       characterIds: [],
       location: null,
       moodTags: [],
+      content: null,
       plotSummary: null,
       startPosition,
       duration: 1,
@@ -424,12 +456,20 @@ export const WorkspaceProvider: ParentComponent<{ projectId: string }> = (props)
   }
 
   function updateCharacter(charId: string, updates: Partial<Character>): void {
+    // Update store immediately (optimistic)
     setState(produce((s) => {
       const char = s.characters.find((c) => c.id === charId)
       if (char) Object.assign(char, updates)
     }))
     markSaving()
-    characterApi.updateCharacter(props.projectId, charId, updates).catch(() => setSaveStatus('error'))
+
+    // Merge pending updates and debounce API call per character
+    const existing = charPendingUpdates.get(charId) ?? {}
+    charPendingUpdates.set(charId, { ...existing, ...updates })
+
+    const prevTimer = charSaveTimers.get(charId)
+    if (prevTimer) clearTimeout(prevTimer)
+    charSaveTimers.set(charId, setTimeout(() => flushCharacterSave(charId), 800))
   }
 
   function removeCharacter(charId: string): void {
@@ -562,8 +602,7 @@ export const WorkspaceProvider: ParentComponent<{ projectId: string }> = (props)
       if (isConfigChange) {
         for (const scene of s.scenes) {
           if (scene.status === 'ai_draft' || scene.status === 'edited') {
-            const hasDraft = s.draftContents[scene.id]?.length > 0
-            if (hasDraft) {
+            if (scene.content && scene.content.length > 0) {
               scene.status = 'needs_revision'
             }
           }
@@ -578,7 +617,12 @@ export const WorkspaceProvider: ParentComponent<{ projectId: string }> = (props)
   // ---- Draft content ----
 
   function setDraftContent(sceneId: string, content: string): void {
-    setState(produce((s) => { s.draftContents[sceneId] = content }))
+    setState(produce((s) => {
+      const scene = s.scenes.find((sc) => sc.id === sceneId)
+      if (scene) scene.content = content
+    }))
+    markSaving()
+    saveContentToServer(sceneId, content)
   }
 
   // ---- Generation ----
@@ -601,8 +645,10 @@ export const WorkspaceProvider: ParentComponent<{ projectId: string }> = (props)
       if (sceneId) {
         setState(produce((s) => {
           const scene = s.scenes.find((x) => x.id === sceneId)
-          if (scene) scene.status = 'ai_draft'
-          s.draftContents[sceneId] = finalContent
+          if (scene) {
+            scene.status = 'ai_draft'
+            scene.content = finalContent
+          }
         }))
       }
       setIsGenerating(false)

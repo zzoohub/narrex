@@ -25,6 +25,7 @@ vi.mock('@/features/workspace', () => ({
       characterIds: ['c1'],
       location: 'Castle',
       moodTags: ['tense', 'dramatic'],
+      content: null,
       plotSummary: 'The hero arrives at the castle.',
       startPosition: 0,
       duration: 1,
@@ -105,5 +106,19 @@ describe('SceneDetail', () => {
     const closeBtn = screen.getByLabelText('Close')
     await fireEvent.click(closeBtn)
     expect(mockSelectScene).toHaveBeenCalledWith(null)
+  })
+
+  it('shows add character button', () => {
+    renderSceneDetail()
+    // Both characters and mood sections have "Add" buttons
+    const addButtons = screen.getAllByText('Add')
+    expect(addButtons.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('shows add mood tag button', () => {
+    renderSceneDetail()
+    // There should be "Add" buttons in both characters and mood sections
+    const addButtons = screen.getAllByText('Add')
+    expect(addButtons.length).toBeGreaterThan(0)
   })
 })

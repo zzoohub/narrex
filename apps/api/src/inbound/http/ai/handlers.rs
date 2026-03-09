@@ -27,7 +27,8 @@ async fn verify_scene_ownership(
 
 use super::request::{EditDraftHttpRequest, SaveDraftRequest, UpsertSceneSummaryRequest};
 use super::response::{
-    CostSummaryResponse, DraftResponse, DraftSummaryResponse, SceneSummaryResponse,
+    CostSummaryResponse, DraftResponse, DraftSummaryResponse, QuotaInfoResponse,
+    SceneSummaryResponse,
 };
 
 /// `POST /v1/projects/{projectId}/scenes/{sceneId}/generate` — generate AI draft (SSE).
@@ -205,6 +206,15 @@ pub async fn upsert_scene_summary(
         .await?;
 
     Ok(ApiSuccess::new(SceneSummaryResponse::from(&summary)))
+}
+
+/// `GET /v1/me/quota` — get current user's monthly AI generation quota.
+pub async fn get_quota(
+    State(state): State<AppState>,
+    auth: AuthUser,
+) -> Result<ApiSuccess<QuotaInfoResponse>, ApiError> {
+    let quota = state.ai_service().get_quota(auth.user_id).await?;
+    Ok(ApiSuccess::new(QuotaInfoResponse::from(&quota)))
 }
 
 // ---------------------------------------------------------------------------

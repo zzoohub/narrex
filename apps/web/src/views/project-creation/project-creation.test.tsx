@@ -156,6 +156,35 @@ describe('ProjectCreationView', () => {
     })
   })
 
+  // ── File import ─────────────────────────────────────────────────────
+
+  describe('file import', () => {
+    it('renders file input that accepts .md, .txt, .zip', () => {
+      renderCreation()
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+      expect(fileInput).toBeInTheDocument()
+      expect(fileInput.accept).toBe('.md,.txt,.zip')
+    })
+
+    it('shows file name when file is attached', async () => {
+      renderCreation()
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+      const file = new File(['# My Story\nA tale of...'], 'notes.md', { type: 'text/markdown' })
+      await fireEvent.change(fileInput, { target: { files: [file] } })
+      expect(screen.getByText('notes.md')).toBeInTheDocument()
+    })
+
+    it('shows drop zone with correct label', () => {
+      renderCreation()
+      expect(screen.getByText(/Drop a file here/)).toBeInTheDocument()
+    })
+
+    it('shows browse files link', () => {
+      renderCreation()
+      expect(screen.getByText('Browse Files')).toBeInTheDocument()
+    })
+  })
+
   // ── Processing state ─────────────────────────────────────────────────────
 
   describe('processing state', () => {

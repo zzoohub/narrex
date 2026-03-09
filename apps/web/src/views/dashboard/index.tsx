@@ -40,6 +40,7 @@ export function DashboardView() {
   }
 
   // ── Profile dropdown ──
+  const [avatarImgFailed, setAvatarImgFailed] = createSignal(false)
   const [profileOpen, setProfileOpen] = createSignal(false)
   let profileRef: HTMLDivElement | undefined
 
@@ -124,27 +125,45 @@ export function DashboardView() {
                 class="p-2 rounded-lg text-fg-muted hover:text-fg hover:bg-surface-raised transition-colors cursor-pointer"
                 aria-label={t('nav.account')}
                 onClick={() => setProfileOpen((v) => !v)}
-                title={user()?.name ?? ''}
+                title={user()?.displayName ?? ''}
               >
                 <Show
-                  when={user()?.profileImageUrl}
+                  when={user()?.profileImageUrl && !avatarImgFailed()}
                   fallback={<IconUser size={18} />}
                 >
                   <img
                     src={user()!.profileImageUrl!}
                     alt=""
                     class="w-5 h-5 rounded-full"
+                    onError={() => setAvatarImgFailed(true)}
                   />
                 </Show>
               </button>
 
               <Show when={profileOpen()}>
                 <div class="absolute right-0 top-full mt-1 w-56 py-1.5 rounded-lg bg-surface-raised border border-border-default shadow-xl shadow-black/30 animate-scale-in origin-top-right z-50">
-                  <div class="px-3 py-2">
-                    <Show when={user()?.name}>
-                      <p class="text-sm font-medium text-fg truncate">{user()!.name}</p>
+                  <div class="px-3 py-2 flex items-center gap-3">
+                    <Show
+                      when={user()?.profileImageUrl && !avatarImgFailed()}
+                      fallback={
+                        <div class="w-9 h-9 rounded-full bg-accent text-canvas flex items-center justify-center font-display font-semibold text-sm shrink-0">
+                          {(user()?.displayName ?? user()?.email ?? '?').charAt(0).toUpperCase()}
+                        </div>
+                      }
+                    >
+                      <img
+                        src={user()!.profileImageUrl!}
+                        alt=""
+                        class="w-9 h-9 rounded-full object-cover shrink-0"
+                        onError={() => setAvatarImgFailed(true)}
+                      />
                     </Show>
-                    <p class="text-xs text-fg-muted truncate">{user()?.email}</p>
+                    <div class="min-w-0">
+                      <Show when={user()?.displayName}>
+                        <p class="text-sm font-medium text-fg truncate">{user()!.displayName}</p>
+                      </Show>
+                      <p class="text-xs text-fg-muted truncate">{user()?.email}</p>
+                    </div>
                   </div>
                   <div class="my-1 mx-2 h-px bg-border-default" />
                   <Link
@@ -181,11 +200,13 @@ export function DashboardView() {
           <h2 class="text-2xl font-display font-semibold text-fg">
             {t('dashboard.title')}
           </h2>
-          <Link to="/new">
-            <Button variant="primary" icon={<IconPlus size={16} />}>
-              {t('dashboard.newProject')}
-            </Button>
-          </Link>
+          <Show when={!projects.loading && (projects()?.length ?? 0) > 0}>
+            <Link to="/new">
+              <Button variant="primary" icon={<IconPlus size={16} />}>
+                {t('dashboard.newProject')}
+              </Button>
+            </Link>
+          </Show>
         </div>
 
         <Suspense

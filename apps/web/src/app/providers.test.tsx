@@ -50,7 +50,7 @@ describe('Providers', () => {
   it('syncs i18n locale from user languagePreference', () => {
     mockUser.mockReturnValue({
       id: 'u1',
-      name: 'Test',
+      displayName: 'Test',
       email: 'test@test.com',
       profileImageUrl: null,
       themePreference: 'system',
@@ -69,7 +69,7 @@ describe('Providers', () => {
   it('keeps ko when user languagePreference is ko', () => {
     mockUser.mockReturnValue({
       id: 'u1',
-      name: 'Test',
+      displayName: 'Test',
       email: 'test@test.com',
       profileImageUrl: null,
       themePreference: 'system',

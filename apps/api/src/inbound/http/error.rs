@@ -206,6 +206,7 @@ impl From<AiError> for ApiError {
             AiError::DraftNotFound => Self::NotFound("draft not found".into()),
             AiError::GenerationFailed(msg) => Self::Internal(msg),
             AiError::RateLimited => Self::TooManyRequests,
+            AiError::QuotaExceeded { .. } => Self::TooManyRequests,
             AiError::Unknown(err) => Self::Internal(err.to_string()),
         }
     }
@@ -408,6 +409,17 @@ mod tests {
     fn from_ai_draft_not_found() {
         let err: ApiError = AiError::DraftNotFound.into();
         assert!(matches!(err, ApiError::NotFound(_)));
+    }
+
+    #[test]
+    fn from_ai_quota_exceeded() {
+        let err: ApiError = AiError::QuotaExceeded {
+            used: 50,
+            limit: 50,
+            resets_at: chrono::Utc::now(),
+        }
+        .into();
+        assert!(matches!(err, ApiError::TooManyRequests));
     }
 
     // ---- Display ----

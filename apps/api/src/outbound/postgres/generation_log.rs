@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use sqlx::FromRow;
 use uuid::Uuid;
 
@@ -92,5 +93,26 @@ impl GenerationLogRepository for Postgres {
         .map_err(|e| AiError::Unknown(e.into()))?;
 
         Ok(row.into_domain())
+    }
+
+    async fn count_by_user_since(
+        &self,
+        user_id: Uuid,
+        since: DateTime<Utc>,
+    ) -> Result<i64, AiError> {
+        let row: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) \
+             FROM generation_log \
+             WHERE user_id = $1 \
+               AND created_at >= $2 \
+               AND status = 'success'",
+        )
+        .bind(user_id)
+        .bind(since)
+        .fetch_one(self.pool())
+        .await
+        .map_err(|e| AiError::Unknown(e.into()))?;
+
+        Ok(row.0)
     }
 }

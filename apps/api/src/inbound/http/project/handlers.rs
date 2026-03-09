@@ -162,6 +162,9 @@ pub async fn structure_project(
     auth: AuthUser,
     Json(body): Json<CreateProjectTextRequest>,
 ) -> Result<Sse<impl futures::Stream<Item = Result<Event, Infallible>>>, ApiError> {
+    // Check quota before starting generation.
+    state.ai_service().check_quota(auth.user_id).await?;
+
     tracing::info!(user_id = %auth.user_id, input_len = body.source_input.len(), "structure_project: started");
     let source_input = body.source_input.clone();
     let clarification_answers = body.clarification_answers.clone();

@@ -75,6 +75,7 @@ pub struct UpdateSceneRequest {
     pub plot_summary: Option<Option<String>>,
     pub location: Option<Option<String>>,
     pub mood_tags: Option<Vec<String>>,
+    pub content: Option<Option<String>>,
     pub character_ids: Option<Vec<Uuid>>,
 }
 
@@ -88,6 +89,7 @@ impl From<UpdateSceneRequest> for UpdateScene {
             plot_summary: r.plot_summary,
             location: r.location,
             mood_tags: r.mood_tags,
+            content: r.content,
             character_ids: r.character_ids,
         }
     }

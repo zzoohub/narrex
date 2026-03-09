@@ -134,6 +134,7 @@ impl SceneRow {
             plot_summary: self.plot_summary,
             location: self.location,
             mood_tags: self.mood_tags,
+            content: None,
             character_ids,
             created_at: self.created_at,
             updated_at: self.updated_at,

@@ -105,6 +105,28 @@ export function computeFitScale(
   return Math.min(maxScale, Math.max(minScale, idealScale))
 }
 
+/** Compute simultaneous event bands (overlap regions across different tracks). */
+export function computeSimultaneousBands(
+  tracks: Array<{ scenes: Array<{ startPosition: number; duration: number }> }>,
+): Array<{ start: number; end: number }> {
+  if (tracks.length < 2) return []
+  const bands: Array<{ start: number; end: number }> = []
+  for (let i = 0; i < tracks.length; i++) {
+    for (let j = i + 1; j < tracks.length; j++) {
+      for (const sa of tracks[i]!.scenes) {
+        for (const sb of tracks[j]!.scenes) {
+          const overlapStart = Math.max(sa.startPosition, sb.startPosition)
+          const overlapEnd = Math.min(sa.startPosition + sa.duration, sb.startPosition + sb.duration)
+          if (overlapEnd > overlapStart) {
+            bands.push({ start: overlapStart, end: overlapEnd })
+          }
+        }
+      }
+    }
+  }
+  return bands
+}
+
 /** Compute the end position of the last scene across all tracks. */
 function computeTimelineEnd(tracks: Array<{ scenes: Scene[] }>): number {
   let max = 0
@@ -137,7 +159,10 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
 
   // ---- Signals ----
 
-  const [showHint, setShowHint] = createSignal(true)
+  const HINT_DISMISSED_KEY = 'narrex:timeline-hint-dismissed'
+  const [showHint, setShowHint] = createSignal(
+    localStorage.getItem(HINT_DISMISSED_KEY) !== 'true',
+  )
   const [scale, setScale] = createSignal(DEFAULT_SCALE)
 
   // Track height state (supports drag resize + double-click minimize)
@@ -373,27 +398,9 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
 
   // ---- Simultaneous event bands ----
 
-  const simultaneousBands = createMemo(() => {
-    const tracks = ws.trackScenes()
-    if (tracks.length < 2) return []
-
-    // Collect all unique overlap regions across tracks
-    const bands: Array<{ start: number; end: number }> = []
-    for (let i = 0; i < tracks.length; i++) {
-      for (let j = i + 1; j < tracks.length; j++) {
-        for (const sa of tracks[i]!.scenes) {
-          for (const sb of tracks[j]!.scenes) {
-            const overlapStart = Math.max(sa.startPosition, sb.startPosition)
-            const overlapEnd = Math.min(sa.startPosition + sa.duration, sb.startPosition + sb.duration)
-            if (overlapEnd > overlapStart) {
-              bands.push({ start: overlapStart, end: overlapEnd })
-            }
-          }
-        }
-      }
-    }
-    return bands
-  })
+  const simultaneousBands = createMemo(() =>
+    computeSimultaneousBands(ws.trackScenes()),
+  )
 
   // ---- Computed ----
 
@@ -624,6 +631,14 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
       const next = ws.nextScene()
       if (next) ws.selectScene(next.id)
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
+      const target = e.target as HTMLElement
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable
+      ) {
+        return
+      }
       e.preventDefault()
       setDeleteSceneId(selId)
     }
@@ -725,7 +740,10 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
           <span>{t('timeline.hint')}</span>
           <button
             type="button"
-            onClick={() => setShowHint(false)}
+            onClick={() => {
+              localStorage.setItem(HINT_DISMISSED_KEY, 'true')
+              setShowHint(false)
+            }}
             class="ml-4 underline underline-offset-2 hover:no-underline cursor-pointer"
           >
             {t('common.close')}
@@ -737,7 +755,7 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
       <div
         data-testid="timeline-header"
         class="flex items-center flex-shrink-0 border-b border-border-subtle"
-        style={{ height: '32px' }}
+        style={{ height: '24px' }}
       >
         {/* Left: label column — "TIMELINE" + collapse */}
         <div

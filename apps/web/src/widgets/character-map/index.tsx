@@ -1,4 +1,4 @@
-import { createSignal, createEffect, onMount, onCleanup, untrack, For, Show } from 'solid-js'
+import { createSignal, createEffect, onMount, onCleanup, untrack, For, Index, Show } from 'solid-js'
 import { Portal } from 'solid-js/web'
 import { useI18n } from '@/shared/lib/i18n'
 import { useWorkspace } from '@/features/workspace'
@@ -30,6 +30,27 @@ interface PopoverState {
   /** When creating: the two character ids */
   characterAId: string
   characterBId: string
+}
+
+/* ── Node sizing helpers ─────────────────────────────────────────────── */
+
+const NODE_RADIUS_BASE = 22
+const NODE_RADIUS_MAX = 45
+const NODE_RADIUS_SCALE = 5
+
+/** Count how many relationships a character participates in. */
+export function getConnectionCount(
+  charId: string,
+  relationships: readonly { characterAId: string; characterBId: string }[],
+): number {
+  return relationships.filter(
+    (r) => r.characterAId === charId || r.characterBId === charId,
+  ).length
+}
+
+/** Map connection count → node circle radius (sqrt scaling for natural growth). */
+export function getNodeRadius(connectionCount: number): number {
+  return Math.min(NODE_RADIUS_MAX, NODE_RADIUS_BASE + NODE_RADIUS_SCALE * Math.sqrt(connectionCount))
 }
 
 /* ── Main component ──────────────────────────────────────────────────── */
@@ -92,6 +113,7 @@ function GraphView(props: {
 
   const [nodePositions, setNodePositions] = createSignal<Map<string, { x: number; y: number }>>(new Map())
   const [popover, setPopover] = createSignal<PopoverState | null>(null)
+  const [failedAvatars, setFailedAvatars] = createSignal<Set<string>>(new Set())
 
   /* ── Zoom state (fullscreen only) ──────────────────────────────────── */
   const [zoomScale, setZoomScale] = createSignal(1)
@@ -143,6 +165,12 @@ function GraphView(props: {
 
     const pad = 40 // padding from edges
 
+    // Pre-compute connection counts for dynamic collide radii
+    const connCounts = new Map<string, number>()
+    for (const n of nodes) {
+      connCounts.set(n.id, getConnectionCount(n.id, rels))
+    }
+
     const sim = d3
       .forceSimulation<SimNode, SimLink>(nodes)
       .force(
@@ -155,7 +183,7 @@ function GraphView(props: {
       .force('charge', d3.forceManyBody().strength(-300))
       .force('x', d3.forceX(width / 2).strength(0.06))
       .force('y', d3.forceY(height / 2).strength(0.06))
-      .force('collide', d3.forceCollide(50))
+      .force('collide', d3.forceCollide<SimNode>().radius((n) => getNodeRadius(connCounts.get(n.id) ?? 0) + 28))
       .on('tick', () => {
         const map = new Map<string, { x: number; y: number }>()
         sim.nodes().forEach((n) => {
@@ -624,6 +652,8 @@ function GraphView(props: {
             <For each={ws.state.characters}>
               {(char) => {
                 const pos = () => nodePositions().get(char.id)
+                const r = () => getNodeRadius(getConnectionCount(char.id, ws.state.relationships))
+                const diameter = () => r() * 2
 
                 return (
                   <Show when={pos()}>
@@ -634,27 +664,28 @@ function GraphView(props: {
                           style={{ 'pointer-events': 'all' }}
                         >
                           {/* Main circle — drag to move */}
-                          <Show when={char.profileImageUrl}>
+                          <Show when={char.profileImageUrl && !failedAvatars().has(char.id)}>
                             <defs>
                               <clipPath id={`avatar-clip-${char.id}`}>
-                                <circle cx={p().x} cy={p().y} r={22} />
+                                <circle cx={p().x} cy={p().y} r={r()} />
                               </clipPath>
                             </defs>
                             <image
                               href={char.profileImageUrl!}
-                              x={p().x - 22}
-                              y={p().y - 22}
-                              width={44}
-                              height={44}
+                              x={p().x - r()}
+                              y={p().y - r()}
+                              width={diameter()}
+                              height={diameter()}
                               clip-path={`url(#avatar-clip-${char.id})`}
                               class="pointer-events-none"
+                              onError={() => setFailedAvatars((prev) => new Set(prev).add(char.id))}
                             />
                           </Show>
                           <circle
                             cx={p().x}
                             cy={p().y}
-                            r={22}
-                            class={char.profileImageUrl
+                            r={r()}
+                            class={char.profileImageUrl && !failedAvatars().has(char.id)
                               ? 'fill-none stroke-border-default hover:stroke-accent transition-colors'
                               : 'fill-surface-raised stroke-border-default hover:stroke-accent transition-colors'}
                             stroke-width={2}
@@ -666,7 +697,7 @@ function GraphView(props: {
                           />
 
                           {/* Initial letter (only if no image) */}
-                          <Show when={!char.profileImageUrl}>
+                          <Show when={!char.profileImageUrl || failedAvatars().has(char.id)}>
                             <text
                               x={p().x}
                               y={p().y}
@@ -681,7 +712,7 @@ function GraphView(props: {
                           {/* Name label below */}
                           <text
                             x={p().x}
-                            y={p().y + 34}
+                            y={p().y + r() + 12}
                             text-anchor="middle"
                             class="text-[11px] fill-fg-secondary select-none pointer-events-none"
                           >
@@ -690,8 +721,8 @@ function GraphView(props: {
 
                           {/* Edge handle for relationship creation (small circle at bottom-right) */}
                           <circle
-                            cx={p().x + 16}
-                            cy={p().y + 16}
+                            cx={p().x + r() * 0.7}
+                            cy={p().y + r() * 0.7}
                             r={6}
                             class="fill-accent/60 hover:fill-accent stroke-surface-raised cursor-crosshair transition-colors"
                             stroke-width={2}
@@ -869,6 +900,7 @@ function CharacterCard(props: {
 }) {
   const ws = useWorkspace()
   const [showDeleteDialog, setShowDeleteDialog] = createSignal(false)
+  const [avatarImgFailed, setAvatarImgFailed] = createSignal(false)
 
   function handleFieldInput(field: string, e: InputEvent & { currentTarget: HTMLTextAreaElement }) {
     ws.updateCharacter(props.character.id, { [field]: e.currentTarget.value })
@@ -879,14 +911,14 @@ function CharacterCard(props: {
     props.onDeleted()
   }
 
-  const fields = () =>
-    [
-      { key: 'name', labelKey: 'characters.name', value: props.character.name ?? '', rows: 1 },
-      { key: 'personality', labelKey: 'characters.personality', value: props.character.personality ?? '', rows: 3 },
-      { key: 'appearance', labelKey: 'characters.appearance', value: props.character.appearance ?? '', rows: 3 },
-      { key: 'secrets', labelKey: 'characters.secrets', value: props.character.secrets ?? '', rows: 3 },
-      { key: 'motivation', labelKey: 'characters.motivation', value: props.character.motivation ?? '', rows: 3 },
-    ] as const
+  // Static field descriptors — never changes, so <Index> won't re-create DOM
+  const FIELDS = [
+    { key: 'name' as const, labelKey: 'characters.name', rows: 1 },
+    { key: 'personality' as const, labelKey: 'characters.personality', rows: 3 },
+    { key: 'appearance' as const, labelKey: 'characters.appearance', rows: 3 },
+    { key: 'secrets' as const, labelKey: 'characters.secrets', rows: 3 },
+    { key: 'motivation' as const, labelKey: 'characters.motivation', rows: 3 },
+  ]
 
   return (
     <>
@@ -923,7 +955,7 @@ function CharacterCard(props: {
         <div class="flex flex-col items-center gap-2">
           <label class="relative cursor-pointer group">
             <Show
-              when={props.character.profileImageUrl}
+              when={props.character.profileImageUrl && !avatarImgFailed()}
               fallback={
                 <div class="w-16 h-16 rounded-full bg-surface-raised border-2 border-border-default flex items-center justify-center text-xl font-display font-semibold text-fg group-hover:border-accent/50 transition-colors">
                   {props.character.name?.charAt(0) ?? '?'}
@@ -934,6 +966,7 @@ function CharacterCard(props: {
                 src={props.character.profileImageUrl!}
                 alt={props.character.name}
                 class="w-16 h-16 rounded-full object-cover border-2 border-border-default group-hover:border-accent/50 transition-colors"
+                onError={() => setAvatarImgFailed(true)}
               />
             </Show>
             <div class="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -948,6 +981,7 @@ function CharacterCard(props: {
                 if (!file) return
                 const reader = new FileReader()
                 reader.onload = () => {
+                  setAvatarImgFailed(false)
                   ws.updateCharacter(props.character.id, {
                     profileImageUrl: reader.result as string,
                   })
@@ -958,22 +992,22 @@ function CharacterCard(props: {
           </label>
         </div>
 
-        {/* Editable fields */}
-        <For each={fields()}>
+        {/* Editable fields — <Index> preserves DOM elements across reactive updates */}
+        <Index each={FIELDS}>
           {(field) => (
             <label class="flex flex-col gap-1.5">
               <span class="text-xs font-medium text-fg-secondary uppercase tracking-wide">
-                {props.t(field.labelKey)}
+                {props.t(field().labelKey)}
               </span>
               <textarea
-                value={field.value}
-                rows={field.rows}
-                onInput={(e) => handleFieldInput(field.key, e)}
+                value={props.character[field().key] ?? ''}
+                rows={field().rows}
+                onInput={(e) => handleFieldInput(field().key, e)}
                 class="px-3 py-2 rounded-lg text-sm bg-canvas border border-border-default text-fg placeholder:text-fg-muted resize-none hover:border-accent/30 focus:border-accent focus:outline-none focus:ring-2 focus:ring-focus-ring transition-colors"
               />
             </label>
           )}
-        </For>
+        </Index>
 
         {/* Delete button */}
         <Button

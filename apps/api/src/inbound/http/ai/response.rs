@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 use uuid::Uuid;
 
-use crate::domain::ai::models::{CostSummary, Draft, DraftSummary, SceneSummary};
+use crate::domain::ai::models::{CostSummary, Draft, DraftSummary, QuotaInfo, SceneSummary};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -104,6 +104,30 @@ impl From<&CostSummary> for CostSummaryResponse {
             total_tokens_input: c.total_tokens_input,
             total_tokens_output: c.total_tokens_output,
             total_cost_usd: c.total_cost_usd,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuotaInfoResponse {
+    pub used: i64,
+    pub limit: i64,
+    pub remaining: i64,
+    pub warning: bool,
+    pub exceeded: bool,
+    pub resets_at: DateTime<Utc>,
+}
+
+impl From<&QuotaInfo> for QuotaInfoResponse {
+    fn from(q: &QuotaInfo) -> Self {
+        Self {
+            used: q.used,
+            limit: q.limit,
+            remaining: q.remaining,
+            warning: q.warning,
+            exceeded: q.exceeded,
+            resets_at: q.resets_at,
         }
     }
 }

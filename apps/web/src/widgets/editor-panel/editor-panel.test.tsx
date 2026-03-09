@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@solidjs/testing-library'
+import { render, screen, fireEvent } from '@solidjs/testing-library'
 import { I18nProvider } from '@/shared/lib/i18n'
 import { EditorPanel } from './index'
 
@@ -83,7 +83,7 @@ describe('EditorPanel', () => {
   it('shows scene title when scene is selected', () => {
     selectedSceneFn.mockReturnValue({
       id: 's1', trackId: 't1', projectId: 'p1', title: 'My Scene',
-      status: 'empty', characterIds: [], moodTags: [],
+      status: 'empty', characterIds: [], moodTags: [], content: null,
       location: null, plotSummary: 'A summary',
       startPosition: 0, duration: 1,
       createdAt: '', updatedAt: '',
@@ -92,29 +92,29 @@ describe('EditorPanel', () => {
     expect(screen.getByText('My Scene')).toBeInTheDocument()
   })
 
-  it('shows generate button when scene has plot summary', () => {
+  it('shows generate button in body CTA when no draft and scene has plot summary', () => {
     selectedSceneFn.mockReturnValue({
       id: 's1', trackId: 't1', projectId: 'p1', title: 'My Scene',
-      status: 'empty', characterIds: [], moodTags: [],
+      status: 'empty', characterIds: [], moodTags: [], content: null,
       location: null, plotSummary: 'A summary',
       startPosition: 0, duration: 1,
       createdAt: '', updatedAt: '',
     })
     renderEditor()
+    // Body CTA has Generate Draft button
     const generateBtns = screen.getAllByText('Generate Draft')
-    expect(generateBtns.length).toBeGreaterThan(0)
+    expect(generateBtns.length).toBe(1) // only body CTA, not header
   })
 
-  it('disables generate button when scene has no plot summary', () => {
+  it('disables body CTA generate button when scene has no plot summary', () => {
     selectedSceneFn.mockReturnValue({
       id: 's1', trackId: 't1', projectId: 'p1', title: 'My Scene',
-      status: 'empty', characterIds: [], moodTags: [],
+      status: 'empty', characterIds: [], moodTags: [], content: null,
       location: null, plotSummary: null,
       startPosition: 0, duration: 1,
       createdAt: '', updatedAt: '',
     })
     renderEditor()
-    // The primary generate buttons should be disabled
     const generateBtns = screen.getAllByText('Generate Draft')
     for (const btn of generateBtns) {
       const buttonEl = btn.closest('button')
@@ -124,10 +124,40 @@ describe('EditorPanel', () => {
     }
   })
 
+  it('shows header generate button only when draft exists', () => {
+    selectedSceneFn.mockReturnValue({
+      id: 's1', trackId: 't1', projectId: 'p1', title: 'My Scene',
+      status: 'ai_draft', characterIds: [], moodTags: [], content: null,
+      location: null, plotSummary: 'A summary',
+      startPosition: 0, duration: 1,
+      createdAt: '', updatedAt: '',
+    })
+    draftContentFn.mockReturnValue('Some draft content')
+    renderEditor()
+    // Header has Generate Draft, body editor is shown (no body CTA)
+    const generateBtns = screen.getAllByText('Generate Draft')
+    expect(generateBtns.length).toBe(1) // header only
+  })
+
+  it('does not show header generate button when no draft', () => {
+    selectedSceneFn.mockReturnValue({
+      id: 's1', trackId: 't1', projectId: 'p1', title: 'My Scene',
+      status: 'empty', characterIds: [], moodTags: [], content: null,
+      location: null, plotSummary: 'A summary',
+      startPosition: 0, duration: 1,
+      createdAt: '', updatedAt: '',
+    })
+    draftContentFn.mockReturnValue('')
+    renderEditor()
+    // Only body CTA Generate Draft — no header generate
+    const generateBtns = screen.getAllByText('Generate Draft')
+    expect(generateBtns.length).toBe(1)
+  })
+
   it('shows character count in footer', () => {
     selectedSceneFn.mockReturnValue({
       id: 's1', trackId: 't1', projectId: 'p1', title: 'My Scene',
-      status: 'ai_draft', characterIds: [], moodTags: [],
+      status: 'ai_draft', characterIds: [], moodTags: [], content: null,
       location: null, plotSummary: 'A summary',
       startPosition: 0, duration: 1,
       createdAt: '', updatedAt: '',
@@ -141,7 +171,7 @@ describe('EditorPanel', () => {
   it('shows streaming content during generation', () => {
     selectedSceneFn.mockReturnValue({
       id: 's1', trackId: 't1', projectId: 'p1', title: 'My Scene',
-      status: 'empty', characterIds: [], moodTags: [],
+      status: 'empty', characterIds: [], moodTags: [], content: null,
       location: null, plotSummary: 'A summary',
       startPosition: 0, duration: 1,
       createdAt: '', updatedAt: '',
@@ -154,10 +184,25 @@ describe('EditorPanel', () => {
     expect(screen.getByText('Generating...')).toBeInTheDocument()
   })
 
+  it('populates editable div with draft content on mount', () => {
+    selectedSceneFn.mockReturnValue({
+      id: 's1', trackId: 't1', projectId: 'p1', title: 'My Scene',
+      status: 'ai_draft', characterIds: [], moodTags: [], content: null,
+      location: null, plotSummary: 'A summary',
+      startPosition: 0, duration: 1,
+      createdAt: '', updatedAt: '',
+    })
+    draftContentFn.mockReturnValue('Generated story content here')
+    renderEditor()
+    const editable = document.querySelector('[contenteditable]')
+    expect(editable).not.toBeNull()
+    expect(editable!.textContent).toBe('Generated story content here')
+  })
+
   it('disables prev/next buttons when no adjacent scenes', () => {
     selectedSceneFn.mockReturnValue({
       id: 's1', trackId: 't1', projectId: 'p1', title: 'My Scene',
-      status: 'empty', characterIds: [], moodTags: [],
+      status: 'empty', characterIds: [], moodTags: [], content: null,
       location: null, plotSummary: null,
       startPosition: 0, duration: 1,
       createdAt: '', updatedAt: '',
@@ -167,5 +212,75 @@ describe('EditorPanel', () => {
     const nextBtn = screen.getByLabelText('Next scene')
     expect(prevBtn).toBeDisabled()
     expect(nextBtn).toBeDisabled()
+  })
+
+  it('shows stop button during generation', () => {
+    selectedSceneFn.mockReturnValue({
+      id: 's1', trackId: 't1', projectId: 'p1', title: 'My Scene',
+      status: 'empty', characterIds: [], moodTags: [], content: null,
+      location: null, plotSummary: 'A summary',
+      startPosition: 0, duration: 1, createdAt: '', updatedAt: '',
+    })
+    isGeneratingFn.mockReturnValue(true)
+    generatingSceneIdFn.mockReturnValue('s1')
+    streamedContentFn.mockReturnValue('Some content...')
+    renderEditor()
+    expect(screen.getByText('Stop')).toBeInTheDocument()
+  })
+
+  it('shows regeneration confirmation when draft exists and generate clicked', async () => {
+    selectedSceneFn.mockReturnValue({
+      id: 's1', trackId: 't1', projectId: 'p1', title: 'My Scene',
+      status: 'ai_draft', characterIds: [], moodTags: [], content: null,
+      location: null, plotSummary: 'A summary',
+      startPosition: 0, duration: 1, createdAt: '', updatedAt: '',
+    })
+    draftContentFn.mockReturnValue('Existing draft content')
+    renderEditor()
+    const generateBtn = screen.getByText('Generate Draft')
+    await fireEvent.click(generateBtn)
+    // Dialog should appear
+    expect(screen.getByText('Re-generate draft?')).toBeInTheDocument()
+  })
+
+  it('shows streamed content character count during generation', () => {
+    selectedSceneFn.mockReturnValue({
+      id: 's1', trackId: 't1', projectId: 'p1', title: 'My Scene',
+      status: 'empty', characterIds: [], moodTags: [], content: null,
+      location: null, plotSummary: 'A summary',
+      startPosition: 0, duration: 1, createdAt: '', updatedAt: '',
+    })
+    isGeneratingFn.mockReturnValue(true)
+    generatingSceneIdFn.mockReturnValue('s1')
+    streamedContentFn.mockReturnValue('Hello world!!')
+    renderEditor()
+    expect(screen.getByText(/13/)).toBeInTheDocument() // 13 chars
+  })
+
+  it('enables prev button when previous scene exists', () => {
+    selectedSceneFn.mockReturnValue({
+      id: 's2', trackId: 't1', projectId: 'p1', title: 'Scene 2',
+      status: 'empty', characterIds: [], moodTags: [], content: null,
+      location: null, plotSummary: null,
+      startPosition: 1, duration: 1, createdAt: '', updatedAt: '',
+    })
+    prevSceneFn.mockReturnValue({ id: 's1', title: 'Scene 1' })
+    nextSceneFn.mockReturnValue(undefined)
+    renderEditor()
+    const prevBtn = screen.getByLabelText('Previous scene')
+    expect(prevBtn).not.toBeDisabled()
+  })
+
+  it('shows plot summary hint when no plot summary and no draft', () => {
+    selectedSceneFn.mockReturnValue({
+      id: 's1', trackId: 't1', projectId: 'p1', title: 'My Scene',
+      status: 'empty', characterIds: [], moodTags: [], content: null,
+      location: null, plotSummary: null,
+      startPosition: 0, duration: 1, createdAt: '', updatedAt: '',
+    })
+    draftContentFn.mockReturnValue('')
+    renderEditor()
+    // Should show the plotPlaceholder hint
+    expect(screen.getByText(/What happens in this scene/)).toBeInTheDocument()
   })
 })

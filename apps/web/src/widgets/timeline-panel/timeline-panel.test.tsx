@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@solidjs/testing-library'
 import { I18nProvider } from '@/shared/lib/i18n'
-import { TimelinePanel, computeFitScale } from './index'
+import { TimelinePanel, computeFitScale, computeSimultaneousBands } from './index'
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -26,17 +26,17 @@ vi.mock('@/features/workspace', () => ({
       scenes: [
         {
           id: 's1', trackId: 't1', projectId: 'p1', title: 'Opening',
-          status: 'ai_draft', characterIds: [], moodTags: [], location: null,
+          status: 'ai_draft', characterIds: [], moodTags: [], content: null, location: null,
           plotSummary: null, startPosition: 0, duration: 1, createdAt: '', updatedAt: '',
         },
         {
           id: 's2', trackId: 't1', projectId: 'p1', title: 'Conflict',
-          status: 'empty', characterIds: [], moodTags: [], location: null,
+          status: 'empty', characterIds: [], moodTags: [], content: null, location: null,
           plotSummary: null, startPosition: 2, duration: 1, createdAt: '', updatedAt: '',
         },
         {
           id: 's3', trackId: 't2', projectId: 'p1', title: 'Parallel',
-          status: 'edited', characterIds: [], moodTags: [], location: null,
+          status: 'edited', characterIds: [], moodTags: [], content: null, location: null,
           plotSummary: null, startPosition: 0, duration: 2, createdAt: '', updatedAt: '',
         },
       ],
@@ -49,14 +49,14 @@ vi.mock('@/features/workspace', () => ({
       {
         id: 't1', projectId: 'p1', position: 0, label: 'Main Track', createdAt: '', updatedAt: '',
         scenes: [
-          { id: 's1', trackId: 't1', projectId: 'p1', title: 'Opening', status: 'ai_draft', characterIds: [], moodTags: [], location: null, plotSummary: null, startPosition: 0, duration: 1, createdAt: '', updatedAt: '' },
-          { id: 's2', trackId: 't1', projectId: 'p1', title: 'Conflict', status: 'empty', characterIds: [], moodTags: [], location: null, plotSummary: null, startPosition: 2, duration: 1, createdAt: '', updatedAt: '' },
+          { id: 's1', trackId: 't1', projectId: 'p1', title: 'Opening', status: 'ai_draft', characterIds: [], moodTags: [], content: null, location: null, plotSummary: null, startPosition: 0, duration: 1, createdAt: '', updatedAt: '' },
+          { id: 's2', trackId: 't1', projectId: 'p1', title: 'Conflict', status: 'empty', characterIds: [], moodTags: [], content: null, location: null, plotSummary: null, startPosition: 2, duration: 1, createdAt: '', updatedAt: '' },
         ],
       },
       {
         id: 't2', projectId: 'p1', position: 1, label: 'Sub Track', createdAt: '', updatedAt: '',
         scenes: [
-          { id: 's3', trackId: 't2', projectId: 'p1', title: 'Parallel', status: 'edited', characterIds: [], moodTags: [], location: null, plotSummary: null, startPosition: 0, duration: 2, createdAt: '', updatedAt: '' },
+          { id: 's3', trackId: 't2', projectId: 'p1', title: 'Parallel', status: 'edited', characterIds: [], moodTags: [], content: null, location: null, plotSummary: null, startPosition: 0, duration: 2, createdAt: '', updatedAt: '' },
         ],
       },
     ],
@@ -115,9 +115,34 @@ describe('TimelinePanel', () => {
     expect(screen.getByText('Parallel')).toBeInTheDocument()
   })
 
-  it('renders timeline hint banner', () => {
-    renderTimeline()
-    expect(screen.getByText(/starting point/)).toBeInTheDocument()
+  describe('timeline hint banner', () => {
+    beforeEach(() => {
+      localStorage.clear()
+    })
+
+    it('renders timeline hint banner when not dismissed', () => {
+      renderTimeline()
+      expect(screen.getByText(/starting point/)).toBeInTheDocument()
+    })
+
+    it('hides hint after clicking close and persists across re-renders', async () => {
+      const { unmount } = renderTimeline()
+      const closeBtn = screen.getByText('Close')
+      await fireEvent.click(closeBtn)
+      expect(screen.queryByText(/starting point/)).not.toBeInTheDocument()
+      expect(localStorage.getItem('narrex:timeline-hint-dismissed')).toBe('true')
+
+      // Re-render: hint should stay hidden
+      unmount()
+      renderTimeline()
+      expect(screen.queryByText(/starting point/)).not.toBeInTheDocument()
+    })
+
+    it('does not show hint when previously dismissed in localStorage', () => {
+      localStorage.setItem('narrex:timeline-hint-dismissed', 'true')
+      renderTimeline()
+      expect(screen.queryByText(/starting point/)).not.toBeInTheDocument()
+    })
   })
 
   describe('timeline header bar', () => {
@@ -231,6 +256,60 @@ describe('TimelinePanel', () => {
       renderTimeline()
       const handles = screen.getAllByTestId('track-resize-handle')
       expect(handles).toHaveLength(2)
+    })
+  })
+
+  describe('computeSimultaneousBands', () => {
+    it('returns empty array for single track', () => {
+      expect(computeSimultaneousBands([{ scenes: [{ startPosition: 0, duration: 1 }] }])).toEqual([])
+    })
+
+    it('returns empty array when no overlapping scenes', () => {
+      const tracks = [
+        { scenes: [{ startPosition: 0, duration: 1 }] },
+        { scenes: [{ startPosition: 2, duration: 1 }] },
+      ]
+      expect(computeSimultaneousBands(tracks)).toEqual([])
+    })
+
+    it('detects overlapping scenes across tracks', () => {
+      const tracks = [
+        { scenes: [{ startPosition: 0, duration: 2 }] },
+        { scenes: [{ startPosition: 1, duration: 2 }] },
+      ]
+      const bands = computeSimultaneousBands(tracks)
+      expect(bands).toEqual([{ start: 1, end: 2 }])
+    })
+
+    it('detects multiple overlapping regions', () => {
+      const tracks = [
+        { scenes: [{ startPosition: 0, duration: 2 }, { startPosition: 5, duration: 2 }] },
+        { scenes: [{ startPosition: 1, duration: 2 }, { startPosition: 6, duration: 1 }] },
+      ]
+      const bands = computeSimultaneousBands(tracks)
+      expect(bands.length).toBe(2)
+      expect(bands[0]).toEqual({ start: 1, end: 2 })
+      expect(bands[1]).toEqual({ start: 6, end: 7 })
+    })
+
+    it('handles fully contained scenes', () => {
+      const tracks = [
+        { scenes: [{ startPosition: 0, duration: 5 }] },
+        { scenes: [{ startPosition: 1, duration: 2 }] },
+      ]
+      const bands = computeSimultaneousBands(tracks)
+      expect(bands).toEqual([{ start: 1, end: 3 }])
+    })
+
+    it('handles three tracks with pairwise overlaps', () => {
+      const tracks = [
+        { scenes: [{ startPosition: 0, duration: 3 }] },
+        { scenes: [{ startPosition: 1, duration: 3 }] },
+        { scenes: [{ startPosition: 2, duration: 3 }] },
+      ]
+      const bands = computeSimultaneousBands(tracks)
+      // Pairs: (0,1) overlap [1,3], (0,2) overlap [2,3], (1,2) overlap [2,4]
+      expect(bands.length).toBe(3)
     })
   })
 

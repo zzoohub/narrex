@@ -252,7 +252,7 @@ mod tests {
         Scene {
             id, track_id, project_id, start_position: start, duration: 1.0,
             status: SceneStatus::Empty, title: "test".into(), plot_summary: None,
-            location: None, mood_tags: vec![], character_ids: vec![],
+            location: None, mood_tags: vec![], content: None, character_ids: vec![],
             created_at: Utc::now(), updated_at: Utc::now(),
         }
     }
@@ -345,7 +345,7 @@ mod tests {
                 duration: input.duration.unwrap_or(1.0),
                 status: SceneStatus::Empty, title: input.title.clone(),
                 plot_summary: input.plot_summary.clone(), location: input.location.clone(),
-                mood_tags: input.mood_tags.clone(), character_ids: input.character_ids.clone(),
+                mood_tags: input.mood_tags.clone(), content: None, character_ids: input.character_ids.clone(),
                 created_at: Utc::now(), updated_at: Utc::now(),
             };
             self.scenes.lock().unwrap().push(s.clone());

@@ -66,9 +66,9 @@ const WORKSPACE_DATA = {
     { id: 't2', projectId: 'p1', position: 1, label: 'Sub', createdAt: '2024-01-01T00:00:00Z', updatedAt: '2024-01-01T00:00:00Z' },
   ],
   scenes: [
-    { id: 's1', trackId: 't1', projectId: 'p1', startPosition: 0, duration: 1, status: 'empty' as const, title: 'Scene 1', plotSummary: null, location: null, moodTags: [], characterIds: ['c1'], createdAt: '2024-01-01T00:00:00Z', updatedAt: '2024-01-01T00:00:00Z' },
-    { id: 's2', trackId: 't1', projectId: 'p1', startPosition: 2, duration: 1, status: 'empty' as const, title: 'Scene 2', plotSummary: null, location: null, moodTags: [], characterIds: [], createdAt: '2024-01-01T00:00:00Z', updatedAt: '2024-01-01T00:00:00Z' },
-    { id: 's3', trackId: 't1', projectId: 'p1', startPosition: 4, duration: 1, status: 'empty' as const, title: 'Scene 3', plotSummary: null, location: null, moodTags: [], characterIds: [], createdAt: '2024-01-01T00:00:00Z', updatedAt: '2024-01-01T00:00:00Z' },
+    { id: 's1', trackId: 't1', projectId: 'p1', startPosition: 0, duration: 1, status: 'empty' as const, title: 'Scene 1', plotSummary: null, location: null, moodTags: [], content: null, characterIds: ['c1'], createdAt: '2024-01-01T00:00:00Z', updatedAt: '2024-01-01T00:00:00Z' },
+    { id: 's2', trackId: 't1', projectId: 'p1', startPosition: 2, duration: 1, status: 'empty' as const, title: 'Scene 2', plotSummary: null, location: null, moodTags: [], content: null, characterIds: [], createdAt: '2024-01-01T00:00:00Z', updatedAt: '2024-01-01T00:00:00Z' },
+    { id: 's3', trackId: 't1', projectId: 'p1', startPosition: 4, duration: 1, status: 'empty' as const, title: 'Scene 3', plotSummary: null, location: null, moodTags: [], content: null, characterIds: [], createdAt: '2024-01-01T00:00:00Z', updatedAt: '2024-01-01T00:00:00Z' },
   ],
   characters: [
     { id: 'c1', projectId: 'p1', name: 'Hero', personality: null, appearance: null, secrets: null, motivation: null, profileImageUrl: null, graphX: 100, graphY: 100, createdAt: '2024-01-01T00:00:00Z', updatedAt: '2024-01-01T00:00:00Z' },
@@ -250,7 +250,7 @@ describe('WorkspaceStore', () => {
 
     it('addScene adds optimistic scene and calls API', () => {
       vi.mocked(sceneApi.createScene).mockResolvedValue({
-        data: { id: 'server-s1', trackId: 't1', projectId: 'p1', title: '', status: 'empty' as const, startPosition: 5, duration: 1, plotSummary: null, location: null, moodTags: [], characterIds: [], createdAt: '2024-01-01T00:00:00Z', updatedAt: '2024-01-01T00:00:00Z' },
+        data: { id: 'server-s1', trackId: 't1', projectId: 'p1', title: '', status: 'empty' as const, startPosition: 5, duration: 1, plotSummary: null, location: null, moodTags: [], content: null, characterIds: [], createdAt: '2024-01-01T00:00:00Z', updatedAt: '2024-01-01T00:00:00Z' },
       })
 
       renderWorkspace((ctx, dispose) => {
@@ -403,15 +403,30 @@ describe('WorkspaceStore', () => {
       })
     })
 
-    it('updateCharacter updates optimistically and calls API', () => {
+    it('updateCharacter updates store immediately but debounces API call', () => {
+      vi.useFakeTimers()
       vi.mocked(characterApi.updateCharacter).mockResolvedValue({ data: {} as never })
 
       renderWorkspace((ctx, dispose) => {
-        ctx.updateCharacter('c1', { name: 'Updated Hero' })
-        expect(characterApi.updateCharacter).toHaveBeenCalledWith('p1', 'c1', { name: 'Updated Hero' })
-        expect(ctx.saveStatus()).toBe('saving')
+        // Calling updateCharacter on not-yet-loaded data won't find the character in store,
+        // but it should still debounce the API call
+        ctx.updateCharacter('c1', { name: 'A' })
+        // API should NOT be called yet (debounced)
+        expect(characterApi.updateCharacter).not.toHaveBeenCalled()
+
+        ctx.updateCharacter('c1', { name: 'AB' })
+        ctx.updateCharacter('c1', { name: 'ABC' })
+        // Still no API call — debounce resets on each call
+        expect(characterApi.updateCharacter).not.toHaveBeenCalled()
+
+        // Advance past debounce window (800ms)
+        vi.advanceTimersByTime(800)
+        // Now API should have been called once with the latest merged updates
+        expect(characterApi.updateCharacter).toHaveBeenCalledOnce()
+        expect(characterApi.updateCharacter).toHaveBeenCalledWith('p1', 'c1', { name: 'ABC' })
         dispose()
       })
+      vi.useRealTimers()
     })
 
     it('selectCharacter sets and clears selection', () => {
@@ -541,20 +556,56 @@ describe('WorkspaceStore', () => {
     })
   })
 
+  // ---- Loaded workspace helper (shared) ----
+
+  async function loadedWorkspace(): Promise<{ ctx: WorkspaceContextValue; dispose: () => void }> {
+    // Deep-clone to prevent SolidJS store proxy mutations from leaking
+    // between tests via shared object references.
+    const clonedData = JSON.parse(JSON.stringify(WORKSPACE_DATA))
+    vi.mocked(projectApi.getWorkspace).mockResolvedValue({ data: clonedData })
+
+    let ctxRef: WorkspaceContextValue | undefined
+    let disposeFn: (() => void) | undefined
+
+    createRoot((dispose) => {
+      const Wrapper = () => {
+        return WorkspaceProvider({
+          get projectId() { return 'p1' },
+          get children() {
+            const Consumer = () => {
+              ctxRef = useWorkspace()
+              return null
+            }
+            return Consumer()
+          },
+        })
+      }
+      Wrapper()
+      disposeFn = dispose
+    })
+
+    // Flush microtask queue so the resolved getWorkspace promise
+    // and the setState inside loadWorkspace both complete.
+    // Two ticks: one for the await inside loadWorkspace, one for the batch/setState.
+    await Promise.resolve()
+    await Promise.resolve()
+
+    return { ctx: ctxRef!, dispose: disposeFn! }
+  }
+
   // ---- Draft content ----
 
   describe('draft content', () => {
-    it('setDraftContent stores content for a scene', () => {
-      renderWorkspace((ctx, dispose) => {
-        expect(ctx.draftContent('s1')).toBe('')
+    it('setDraftContent stores content in scene.content', async () => {
+      const { ctx, dispose } = await loadedWorkspace()
+      expect(ctx.draftContent('s1')).toBe('')
 
-        ctx.setDraftContent('s1', 'Hello world')
-        expect(ctx.draftContent('s1')).toBe('Hello world')
+      ctx.setDraftContent('s1', 'Hello world')
+      expect(ctx.draftContent('s1')).toBe('Hello world')
 
-        ctx.setDraftContent('s1', 'Updated content')
-        expect(ctx.draftContent('s1')).toBe('Updated content')
-        dispose()
-      })
+      ctx.setDraftContent('s1', 'Updated content')
+      expect(ctx.draftContent('s1')).toBe('Updated content')
+      dispose()
     })
 
     it('returns empty string for unknown scene', () => {
@@ -562,6 +613,22 @@ describe('WorkspaceStore', () => {
         expect(ctx.draftContent('nonexistent')).toBe('')
         dispose()
       })
+    })
+
+    it('setDraftContent triggers debounced API save', async () => {
+      vi.mocked(sceneApi.updateScene).mockResolvedValue({ data: {} as never })
+      const { ctx, dispose } = await loadedWorkspace()
+
+      ctx.setDraftContent('s1', 'New content')
+
+      // Not called immediately (debounced)
+      expect(sceneApi.updateScene).not.toHaveBeenCalledWith('p1', 's1', expect.objectContaining({ content: 'New content' }))
+
+      // After debounce period
+      await vi.advanceTimersByTimeAsync(1500)
+      expect(sceneApi.updateScene).toHaveBeenCalledWith('p1', 's1', { content: 'New content' })
+
+      dispose()
     })
   })
 
@@ -596,19 +663,21 @@ describe('WorkspaceStore', () => {
       })
     })
 
-    it('finishGeneration resets state and stores content', () => {
-      renderWorkspace((ctx, dispose) => {
-        ctx.startGeneration('s1')
-        ctx.appendStreamContent('Generated text')
+    it('finishGeneration resets state and stores content', async () => {
+      const { ctx, dispose } = await loadedWorkspace()
+      ctx.startGeneration('s1')
+      ctx.appendStreamContent('Generated text')
 
-        ctx.finishGeneration('Final generated text')
+      ctx.finishGeneration('Final generated text')
 
-        expect(ctx.isGenerating()).toBe(false)
-        expect(ctx.generatingSceneId()).toBeNull()
-        expect(ctx.streamedContent()).toBe('')
-        expect(ctx.draftContent('s1')).toBe('Final generated text')
-        dispose()
-      })
+      expect(ctx.isGenerating()).toBe(false)
+      expect(ctx.generatingSceneId()).toBeNull()
+      expect(ctx.streamedContent()).toBe('')
+      expect(ctx.draftContent('s1')).toBe('Final generated text')
+      // Also verify scene.content directly
+      const scene = ctx.state.scenes.find(s => s.id === 's1')
+      expect(scene!.content).toBe('Final generated text')
+      dispose()
     })
 
     it('cancelGeneration resets state without saving', () => {
@@ -851,41 +920,6 @@ describe('WorkspaceStore', () => {
   // ---- Operations on loaded data (exercises async .then/.catch paths) ----
 
   describe('operations on loaded workspace data', () => {
-    async function loadedWorkspace(): Promise<{ ctx: WorkspaceContextValue; dispose: () => void }> {
-      // Deep-clone to prevent SolidJS store proxy mutations from leaking
-      // between tests via shared object references.
-      const clonedData = JSON.parse(JSON.stringify(WORKSPACE_DATA))
-      vi.mocked(projectApi.getWorkspace).mockResolvedValue({ data: clonedData })
-
-      let ctxRef: WorkspaceContextValue | undefined
-      let disposeFn: (() => void) | undefined
-
-      createRoot((dispose) => {
-        const Wrapper = () => {
-          return WorkspaceProvider({
-            get projectId() { return 'p1' },
-            get children() {
-              const Consumer = () => {
-                ctxRef = useWorkspace()
-                return null
-              }
-              return Consumer()
-            },
-          })
-        }
-        Wrapper()
-        disposeFn = dispose
-      })
-
-      // Flush microtask queue so the resolved getWorkspace promise
-      // and the setState inside loadWorkspace both complete.
-      // Two ticks: one for the await inside loadWorkspace, one for the batch/setState.
-      await Promise.resolve()
-      await Promise.resolve()
-
-      return { ctx: ctxRef!, dispose: disposeFn! }
-    }
-
     it('removeScene removes existing scene optimistically and calls API', async () => {
       vi.mocked(sceneApi.deleteScene).mockResolvedValue(undefined)
       const { ctx, dispose } = await loadedWorkspace()
@@ -1205,6 +1239,8 @@ describe('WorkspaceStore', () => {
 
       ctx.updateCharacter('c1', { name: 'X' })
 
+      // Flush the debounce timer (800ms) then microtask for the rejection
+      await vi.advanceTimersByTimeAsync(800)
       await vi.advanceTimersByTimeAsync(0)
       expect(ctx.saveStatus()).toBe('error')
 
@@ -1266,6 +1302,7 @@ describe('WorkspaceStore', () => {
         plotSummary: null,
         location: null,
         moodTags: [],
+        content: null,
         characterIds: [],
         createdAt: '2024-01-01T00:00:00Z',
         updatedAt: '2024-01-01T00:00:00Z',

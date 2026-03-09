@@ -245,6 +245,23 @@ pub struct CostSummary {
 }
 
 // ---------------------------------------------------------------------------
+// Quota
+// ---------------------------------------------------------------------------
+
+pub const MONTHLY_GENERATION_LIMIT: i64 = 50;
+pub const MONTHLY_GENERATION_WARNING_THRESHOLD: i64 = 40;
+
+#[derive(Debug, Clone)]
+pub struct QuotaInfo {
+    pub used: i64,
+    pub limit: i64,
+    pub remaining: i64,
+    pub warning: bool,
+    pub exceeded: bool,
+    pub resets_at: DateTime<Utc>,
+}
+
+// ---------------------------------------------------------------------------
 // StructuredOutput (LLM JSON response for project structuring)
 // ---------------------------------------------------------------------------
 
@@ -424,6 +441,59 @@ mod tests {
         for v in [GenerationStatus::Success, GenerationStatus::Failure, GenerationStatus::Partial] {
             assert_eq!(v.to_string().parse::<GenerationStatus>().unwrap(), v);
         }
+    }
+
+    // --- QuotaInfo ---
+
+    #[test]
+    fn quota_info_below_warning() {
+        let info = QuotaInfo {
+            used: 10,
+            limit: MONTHLY_GENERATION_LIMIT,
+            remaining: 40,
+            warning: false,
+            exceeded: false,
+            resets_at: Utc::now(),
+        };
+        assert!(!info.warning);
+        assert!(!info.exceeded);
+        assert_eq!(info.remaining, 40);
+    }
+
+    #[test]
+    fn quota_info_at_warning_threshold() {
+        let info = QuotaInfo {
+            used: MONTHLY_GENERATION_WARNING_THRESHOLD,
+            limit: MONTHLY_GENERATION_LIMIT,
+            remaining: 10,
+            warning: true,
+            exceeded: false,
+            resets_at: Utc::now(),
+        };
+        assert!(info.warning);
+        assert!(!info.exceeded);
+    }
+
+    #[test]
+    fn quota_info_exceeded() {
+        let info = QuotaInfo {
+            used: MONTHLY_GENERATION_LIMIT,
+            limit: MONTHLY_GENERATION_LIMIT,
+            remaining: 0,
+            warning: true,
+            exceeded: true,
+            resets_at: Utc::now(),
+        };
+        assert!(info.warning);
+        assert!(info.exceeded);
+        assert_eq!(info.remaining, 0);
+    }
+
+    #[test]
+    fn quota_constants() {
+        assert_eq!(MONTHLY_GENERATION_LIMIT, 50);
+        assert_eq!(MONTHLY_GENERATION_WARNING_THRESHOLD, 40);
+        assert!(MONTHLY_GENERATION_WARNING_THRESHOLD < MONTHLY_GENERATION_LIMIT);
     }
 
     // --- CostSummary ---

@@ -1,4 +1,4 @@
-import { createSignal, createMemo, Show, For, onMount, onCleanup } from 'solid-js'
+import { createSignal, Show, onMount, onCleanup } from 'solid-js'
 import { useParams, Link } from '@tanstack/solid-router'
 import { useI18n } from '@/shared/lib/i18n'
 import { WorkspaceProvider, useWorkspace } from '@/features/workspace'
@@ -7,10 +7,9 @@ import {
   IconChevronRight,
   IconChevronUp,
   IconChevronDown,
-  IconSliders,
   Dialog,
 } from '@/shared/ui'
-import { ConfigBar, POV_OPTIONS } from '@/widgets/config-bar'
+import { ConfigBar } from '@/widgets/config-bar'
 import { TimelinePanel } from '@/widgets/timeline-panel'
 import { CharacterMap } from '@/widgets/character-map'
 import { EditorPanel } from '@/widgets/editor-panel'
@@ -25,17 +24,6 @@ export function WorkspaceView() {
   )
 }
 
-// ---- Summary chip helpers ---------------------------------------------------
-
-function parseTonePreview(tone: string | null | undefined): string[] {
-  if (!tone) return []
-  return tone
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .slice(0, 2)
-}
-
 // ---- Layout -----------------------------------------------------------------
 
 function WorkspaceLayout() {
@@ -44,23 +32,8 @@ function WorkspaceLayout() {
   // ---- Config panel ----
   const [configOpen, setConfigOpen] = createSignal(false)
 
-  // ---- Summary chips (derived) ----
-  const summaryItems = createMemo(() => {
-    const p = ws.state.project
-    if (!p) return []
-    const items: string[] = []
-    if (p.genre) items.push(p.genre)
-    if (p.pov) {
-      const opt = POV_OPTIONS.find((o) => o.value === p.pov)
-      if (opt) items.push(t(opt.labelKey))
-    }
-    const tones = parseTonePreview(p.tone)
-    items.push(...tones)
-    return items
-  })
-
   // ---- Panel visibility ----
-  const [leftOpen, setLeftOpen] = createSignal(true)
+  const [leftOpen, setLeftOpen] = createSignal(false)
   const [rightOpen, setRightOpen] = createSignal(false)
   const [bottomOpen, setBottomOpen] = createSignal(true)
 
@@ -296,7 +269,7 @@ function WorkspaceLayout() {
     >
       <div class="h-screen flex flex-col overflow-hidden bg-canvas">
         {/* ── Top bar ──────────────────────────────────────────── */}
-        <header class="flex items-center px-4 h-11 border-b border-border-default bg-surface flex-shrink-0 z-30">
+        <header class="relative flex items-center px-4 h-9 border-b border-border-subtle bg-canvas flex-shrink-0 z-30">
           {/* Left */}
           <div class="flex items-center gap-3 min-w-0 flex-1">
             <Link
@@ -314,53 +287,26 @@ function WorkspaceLayout() {
             </span>
           </div>
 
-          {/* Center — Config toggle */}
-          <Show when={ws.state.project}>
-            <button
-              type="button"
-              onClick={() => setConfigOpen((v) => !v)}
-              class={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs transition-colors cursor-pointer ${
-                configOpen()
-                  ? 'text-accent bg-accent/10'
-                  : 'text-fg-muted hover:text-fg hover:bg-surface-raised'
-              }`}
-              aria-label={t('config.title')}
-              aria-expanded={configOpen()}
-            >
-              <IconSliders size={14} />
-              <span class="hidden sm:inline">{t('config.title')}</span>
-              <IconChevronDown
-                size={12}
-                class={`transition-transform duration-200 ${configOpen() ? 'rotate-180' : ''}`}
-              />
-            </button>
-          </Show>
-
-          {/* Right — Summary + Save status */}
-          <div class="flex items-center justify-end gap-2 flex-1">
-            <Show when={!configOpen() && summaryItems().length > 0}>
-              <div class="hidden md:flex items-center gap-1">
-                <For each={summaryItems()}>
-                  {(item, i) => (
-                    <>
-                      <Show when={i() > 0}>
-                        <span class="text-fg-muted/30 text-xs">·</span>
-                      </Show>
-                      <span class="text-xs text-fg-muted truncate max-w-24">{item}</span>
-                    </>
-                  )}
-                </For>
-              </div>
-              <span class="hidden md:inline text-fg-muted/40 text-xs">|</span>
-            </Show>
-            <span class={`text-xs hidden lg:inline ${saveStatusColor()}`}>
+          {/* Right — Save status */}
+          <div class="flex items-center justify-end flex-1">
+            <span class={`text-xs ${saveStatusColor()}`}>
               {saveStatusText()}
             </span>
           </div>
-        </header>
 
-        {/* ── Config panel (inline push-down) ─────────────────── */}
-        <ConfigBar open={configOpen()} />
+          {/* Config edge tab (hangs below header, same pattern as left/bottom) */}
+          <Show when={!configOpen()}>
+            <button
+              type="button"
+              class="edge-tab edge-tab--top"
+              aria-label="Open config panel"
+              aria-expanded={false}
+              onClick={() => setConfigOpen(true)}
+            >
+              <IconChevronDown size={14} />
+            </button>
+          </Show>
+        </header>
 
         {/* ── Workspace panels ───────────────────────────────────── */}
         <div class="flex-1 flex overflow-hidden min-h-0 relative">
@@ -486,6 +432,26 @@ function WorkspaceLayout() {
             </div>
           </Show>
         </div>
+
+        {/* ── Config panel overlay (drops from top, covers header) ── */}
+        <div
+          class="absolute top-0 left-0 right-0 z-40 transition-transform duration-300 ease-out"
+          style={{
+            transform: configOpen() ? 'translateY(0)' : 'translateY(-100%)',
+            'pointer-events': configOpen() ? 'auto' : 'none',
+          }}
+        >
+          <ConfigBar open={true} onClose={() => setConfigOpen(false)} />
+        </div>
+
+        {/* Config backdrop (dismiss on click-outside) */}
+        <Show when={configOpen()}>
+          <div
+            class="absolute inset-0 bg-canvas/40"
+          style={{ 'z-index': '35' }}
+            onClick={() => setConfigOpen(false)}
+          />
+        </Show>
 
         {/* ── Delete confirmation dialog ─────────────────────────── */}
         <Dialog

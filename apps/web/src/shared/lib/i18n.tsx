@@ -114,6 +114,10 @@ const translations: Record<Locale, Record<string, string>> = {
     'editor.regenerateConfirmTitle': '초고를 다시 생성하시겠습니까?',
     'editor.regenerateConfirmDescription': '현재 초고가 새로운 AI 생성 결과로 대체됩니다. 이 작업은 되돌릴 수 없습니다.',
     'editor.regenerateConfirm': '다시 생성',
+    // Quota
+    'quota.warning': '이번 달 AI 생성 {used}/{limit}회 사용',
+    'quota.exceeded': '이번 달 AI 생성 한도에 도달했습니다. {date}에 초기화됩니다.',
+    'quota.remaining': '{remaining}회 남음',
     // Status
     'status.empty': '미작성',
     'status.aiDraft': 'AI 초고',
@@ -173,6 +177,12 @@ const translations: Record<Locale, Record<string, string>> = {
     'settings.deleteConfirmButton': '계정 삭제',
     'settings.deleteError': '계정을 삭제하지 못했습니다. 연결을 확인하고 다시 시도하세요.',
     'settings.back': '돌아가기',
+    'settings.quota': 'AI 사용량',
+    'settings.quota.used': '이번 달 사용량',
+    'settings.quota.remaining': '남은 횟수',
+    'settings.quota.resetsAt': '초기화 일시',
+    'settings.quota.unlimited': '무제한',
+    'settings.quota.loadError': '사용량 정보를 불러올 수 없습니다.',
     'common.retry': '다시 시도',
   },
   en: {
@@ -274,6 +284,10 @@ const translations: Record<Locale, Record<string, string>> = {
     'editor.regenerateConfirmTitle': 'Re-generate draft?',
     'editor.regenerateConfirmDescription': 'The current draft will be replaced with a new AI-generated result. This cannot be undone.',
     'editor.regenerateConfirm': 'Re-generate',
+    // Quota
+    'quota.warning': 'AI generation usage: {used}/{limit} this month',
+    'quota.exceeded': 'Monthly AI generation limit reached. Resets on {date}.',
+    'quota.remaining': '{remaining} remaining',
     'status.empty': 'Empty',
     'status.aiDraft': 'AI Draft',
     'status.edited': 'Edited',
@@ -330,6 +344,12 @@ const translations: Record<Locale, Record<string, string>> = {
     'settings.deleteConfirmButton': 'Delete Account',
     'settings.deleteError': "Couldn't delete your account. Check your connection and try again.",
     'settings.back': 'Go back',
+    'settings.quota': 'AI Usage',
+    'settings.quota.used': 'Used this month',
+    'settings.quota.remaining': 'Remaining',
+    'settings.quota.resetsAt': 'Resets on',
+    'settings.quota.unlimited': 'Unlimited',
+    'settings.quota.loadError': 'Could not load usage info.',
     'common.retry': 'Retry',
   },
 }

@@ -27,6 +27,7 @@ struct SceneRow {
     plot_summary: Option<String>,
     location: Option<String>,
     mood_tags: Vec<String>,
+    content: Option<String>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -47,6 +48,7 @@ impl SceneRow {
             plot_summary: self.plot_summary,
             location: self.location,
             mood_tags: self.mood_tags,
+            content: self.content,
             character_ids,
             created_at: self.created_at,
             updated_at: self.updated_at,
@@ -125,7 +127,7 @@ impl SceneRepository for Postgres {
         let row = sqlx::query_as::<_, SceneRow>(
             "INSERT INTO scene (track_id, project_id, start_position, duration, title, plot_summary, location, mood_tags) \
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8) \
-             RETURNING id, track_id, project_id, start_position, duration, status::text, title, plot_summary, location, mood_tags, created_at, updated_at",
+             RETURNING id, track_id, project_id, start_position, duration, status::text, title, plot_summary, location, mood_tags, content, created_at, updated_at",
         )
         .bind(input.track_id)
         .bind(project_id)
@@ -160,7 +162,7 @@ impl SceneRepository for Postgres {
 
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Scene>, TimelineError> {
         let row = sqlx::query_as::<_, SceneRow>(
-            "SELECT id, track_id, project_id, start_position, duration, status::text, title, plot_summary, location, mood_tags, created_at, updated_at \
+            "SELECT id, track_id, project_id, start_position, duration, status::text, title, plot_summary, location, mood_tags, content, created_at, updated_at \
              FROM scene WHERE id = $1",
         )
         .bind(id)
@@ -217,9 +219,10 @@ impl SceneRepository for Postgres {
                 duration = COALESCE($5, duration), \
                 plot_summary = CASE WHEN $6 THEN $7 ELSE plot_summary END, \
                 location = CASE WHEN $8 THEN $9 ELSE location END, \
-                mood_tags = COALESCE($10, mood_tags) \
+                mood_tags = COALESCE($10, mood_tags), \
+                content = CASE WHEN $11 THEN $12 ELSE content END \
              WHERE id = $1 \
-             RETURNING id, track_id, project_id, start_position, duration, status::text, title, plot_summary, location, mood_tags, created_at, updated_at",
+             RETURNING id, track_id, project_id, start_position, duration, status::text, title, plot_summary, location, mood_tags, content, created_at, updated_at",
         )
         .bind(id)
         .bind(update.track_id)
@@ -234,6 +237,9 @@ impl SceneRepository for Postgres {
         .bind(update.location.as_ref().and_then(|v| v.as_deref()))
         // mood_tags: Option<Vec<String>>
         .bind(update.mood_tags.as_ref())
+        // content: Option<Option<String>>
+        .bind(update.content.is_some())
+        .bind(update.content.as_ref().and_then(|v| v.as_deref()))
         .fetch_one(self.pool())
         .await
         .map_err(|e| TimelineError::Unknown(e.into()))?;

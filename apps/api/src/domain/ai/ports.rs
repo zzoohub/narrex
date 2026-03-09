@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use super::error::AiError;
@@ -52,6 +53,12 @@ pub trait GenerationLogRepository: Clone + Send + Sync + 'static {
         &self,
         project_id: Uuid,
     ) -> Result<CostSummary, AiError>;
+
+    async fn count_by_user_since(
+        &self,
+        user_id: Uuid,
+        since: DateTime<Utc>,
+    ) -> Result<i64, AiError>;
 }
 
 #[async_trait::async_trait]
