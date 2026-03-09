@@ -29,6 +29,7 @@ pub mod draft;
 pub mod generation_log;
 pub mod project;
 pub mod relationship;
+pub mod sample;
 pub mod scene;
 pub mod scene_summary;
 pub mod track;

@@ -299,6 +299,8 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
 
   function showSceneTooltip(e: PointerEvent, scene: Scene) {
     clearTimeout(tooltipTimer)
+    // Skip tooltip when there's nothing meaningful to show
+    if (!scene.title && !scene.plotSummary) return
     tooltipTimer = setTimeout(() => {
       const summary = scene.plotSummary
         ? scene.plotSummary.slice(0, 100) + (scene.plotSummary.length > 100 ? '...' : '')
@@ -697,6 +699,7 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
   // ---- Track context menu items ----
 
   function trackContextItems(trackId: string, trackLabel: string | null): (ContextMenuItem | typeof Separator)[] {
+    const hasScenes = ws.scenesForTrack(trackId).length > 0
     return [
       {
         label: t('config.theme') === 'Theme' ? 'Rename Track' : '\uD2B8\uB799 \uC774\uB984 \uBCC0\uACBD',
@@ -705,9 +708,10 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
       },
       Separator,
       {
-        label: t('config.theme') === 'Theme' ? 'Remove Track' : '\uD2B8\uB799 \uC0AD\uC81C',
+        label: hasScenes ? t('timeline.removeTrackDisabled') : t('timeline.removeTrack'),
         icon: <IconTrash size={14} />,
-        danger: true,
+        danger: !hasScenes,
+        disabled: hasScenes,
         onClick: () => setDeleteTrackId(trackId),
       },
     ]
@@ -1077,8 +1081,8 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
       <Dialog
         open={deleteSceneId() !== null}
         onClose={() => setDeleteSceneId(null)}
-        title={t('common.delete')}
-        description={t('status.empty')}
+        title={t('timeline.deleteSceneTitle')}
+        description={t('timeline.deleteSceneDescription')}
         confirmLabel={t('common.delete')}
         confirmVariant="danger"
         onConfirm={() => {
@@ -1092,7 +1096,8 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
       <Dialog
         open={deleteTrackId() !== null}
         onClose={() => setDeleteTrackId(null)}
-        title={t('common.delete')}
+        title={t('timeline.deleteTrackTitle')}
+        description={t('timeline.deleteTrackDescription')}
         confirmLabel={t('common.delete')}
         confirmVariant="danger"
         onConfirm={() => {

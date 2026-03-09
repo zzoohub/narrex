@@ -55,6 +55,16 @@ The core loop is: idea in -> visual structure out -> arrange story -> generate s
 | P0 | REQ-001 | User can create a new project by entering free-form text describing their story idea | Accept any length of text input. System should handle inputs ranging from a single sentence to multi-page dumps. If input is too vague to structure (fewer than ~2 meaningful story elements), system asks 2-3 clarifying questions before proceeding. | Primary entry point. Most users will start here. |
 | P0 | REQ-002 | User can create a new project by importing a file | Support standalone Markdown (.md) and plain text (.txt) files via drag-and-drop or file picker. Parse and extract narrative content, character references, and plot points. Notion .zip export deferred — users can export individual pages as .md instead. | Secondary entry point. Users with existing notes need this path. |
 | P0 | REQ-004 | System auto-structures any input into initial Config, Timeline, and Character Map | From the user's input, generate: (a) Config bar values (genre, theme, era/location, POV, tone) inferred from content; (b) Timeline with ordered scenes representing key plot points — placing simultaneous events on parallel tracks where applicable; (c) Character Map with character nodes and inferred relationships. All generated elements are editable. System shows a brief summary of what it inferred and invites the user to review and adjust. | The core "magic moment." Without this, the product is just another blank canvas. |
+| P0 | REQ-063 | System auto-creates a sample project on first signup | On first Google OAuth signup, server inserts a pre-crafted sample project (regression-fantasy genre) with: 2 tracks (protagonist + antagonist faction), 8-10 scenes (2 "Edited", 1 "AI Draft", rest "Empty"), 4-5 characters with 5-6 relationship lines (solid/dashed/arrowed), and a fully populated Config. Project appears on dashboard with an "Example" badge (`source_type = 'sample'`). Fully editable and deletable as a normal project. Pre-crafted content — no per-user AI call, no quota impact, no latency. Serves as REQ-005 (onboarding tutorial) substitute: users explore the real workspace with real data before committing to their own story. | Time-to-Value = 0 seconds. Removes the cognitive barrier of "what story should I write?" before the user has even seen the product. Directly contributes to the Phase 1 success metric of 40% core loop completion. |
+
+**Acceptance criteria for REQ-063:**
+- On first signup, the user's dashboard contains the sample project before any user action. The project is ready when the dashboard loads.
+- Sample project card displays an "Example" badge visually distinct from user-created projects.
+- Sample project is fully editable: user can add/delete scenes, edit characters, modify config, and generate new AI drafts (which count against their normal quota).
+- Sample project is deletable. Once deleted, it is not re-created.
+- Pre-crafted scene content (2-3 scenes with drafts) does not count against the user's monthly AI generation quota (REQ-060).
+- Sample project contains at least: 2 tracks, 8 scenes, 4 characters, 5 relationship lines, and a populated config bar.
+- Returning users (not first signup) do not receive a new sample project.
 
 **Acceptance criteria for REQ-004:**
 - Given a 200+ word input with identifiable characters and plot points, the system produces at least 5 timeline scenes (across one or more tracks if parallel storylines are detected), 2 characters with at least 1 relationship, and a populated config bar within 30 seconds.
@@ -223,7 +233,7 @@ The core loop is: idea in -> visual structure out -> arrange story -> generate s
 |--------|-------------|--------------|
 | REQ-055 | Draft history browsing and selective apply | Phase 1 auto-applies AI drafts to scene.content. Browsing and selecting from past drafts requires a comparison UI. Deferred to Phase 2 alongside multiple draft variations (REQ-036). Data model already supports it — drafts table is append-only with versions. |
 | REQ-003 | Genre templates (pre-populated config and starter timeline) | Templates require curated genre-specific content (regression, romance-fantasy, martial arts structures). Auto-structuring from free text is the higher-priority entry point. Templates are a Phase 2 onboarding enhancement once we understand which genres users actually choose. |
-| REQ-005 | First-project onboarding tutorial | A guided tutorial requires a stable UI to build against. Phase 1 UI will iterate rapidly. Instead, rely on clear empty states, inline hints, and a simple first-time flow that pushes users to their first generation. Structured onboarding is a Phase 2 polish item. |
+| REQ-005 | First-project onboarding tutorial | A guided tutorial requires a stable UI to build against. Phase 1 UI will iterate rapidly. REQ-063 (sample project) partially addresses this by letting users explore a populated workspace. Full interactive guided tour (e.g., Shepherd.js overlay on the sample project) is a Phase 2 polish item that pairs well with REQ-063. |
 | REQ-006 | AI chat panel (user-initiated questions and brainstorming) | Chat panel requires a working project context (Config, Timeline, Character Map) to be useful. Phase 1 focuses on getting the core data structures right. AI chat is a Phase 2 feature once the context it draws from is stable. |
 | REQ-016 | Foreshadowing connection lines between scenes | Valuable but not essential for the core loop. Adds visual complexity to the timeline. Deferred to Phase 2 where it pairs with revision tools (REQ-047) that verify foreshadowing payoffs. |
 | REQ-017 | AI gap detection (suggests scenes to fill narrative holes) | Requires enough user data to understand what "good" story structure looks like. Also depends on a stable timeline experience. Phase 2+ feature. |
@@ -251,8 +261,8 @@ The core loop is: idea in -> visual structure out -> arrange story -> generate s
 
 This is the journey that validates the core hypothesis. A user who completes this journey has experienced the full Phase 1 value loop.
 
-1. User opens Narrex and creates a new project.
-2. User chooses an entry point:
+1. User opens Narrex. If this is their first visit, the dashboard already contains a sample project ("회귀 기사의 두 번째 인생") with an "Example" badge. User can either explore the sample project first to understand the workspace, or proceed directly to create their own project.
+2. User creates a new project and chooses an entry point:
    - **Free text:** Types or pastes a story idea — anything from "a regression fantasy where a failed knight returns to his childhood" to a multi-page dump of character notes and plot ideas.
    - **File import:** Drags a .md or .txt file into the project creation area.
 3. System processes the input:

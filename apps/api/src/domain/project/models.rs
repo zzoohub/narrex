@@ -50,6 +50,7 @@ pub enum SourceType {
     FreeText,
     FileImport,
     Template,
+    Sample,
 }
 
 impl fmt::Display for SourceType {
@@ -58,6 +59,7 @@ impl fmt::Display for SourceType {
             Self::FreeText => write!(f, "free_text"),
             Self::FileImport => write!(f, "file_import"),
             Self::Template => write!(f, "template"),
+            Self::Sample => write!(f, "sample"),
         }
     }
 }
@@ -70,6 +72,7 @@ impl FromStr for SourceType {
             "free_text" => Ok(Self::FreeText),
             "file_import" => Ok(Self::FileImport),
             "template" => Ok(Self::Template),
+            "sample" => Ok(Self::Sample),
             other => Err(format!("unknown source type: {other}")),
         }
     }
@@ -104,6 +107,7 @@ pub struct ProjectSummary {
     pub id: Uuid,
     pub title: String,
     pub genre: Option<String>,
+    pub source_type: Option<SourceType>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -206,6 +210,7 @@ mod tests {
         assert_eq!(SourceType::FreeText.to_string(), "free_text");
         assert_eq!(SourceType::FileImport.to_string(), "file_import");
         assert_eq!(SourceType::Template.to_string(), "template");
+        assert_eq!(SourceType::Sample.to_string(), "sample");
     }
 
     #[test]
@@ -213,6 +218,7 @@ mod tests {
         assert_eq!("free_text".parse::<SourceType>().unwrap(), SourceType::FreeText);
         assert_eq!("file_import".parse::<SourceType>().unwrap(), SourceType::FileImport);
         assert_eq!("template".parse::<SourceType>().unwrap(), SourceType::Template);
+        assert_eq!("sample".parse::<SourceType>().unwrap(), SourceType::Sample);
     }
 
     #[test]
@@ -224,7 +230,7 @@ mod tests {
 
     #[test]
     fn source_type_roundtrip() {
-        for st in [SourceType::FreeText, SourceType::FileImport, SourceType::Template] {
+        for st in [SourceType::FreeText, SourceType::FileImport, SourceType::Template, SourceType::Sample] {
             let s = st.to_string();
             let parsed: SourceType = s.parse().unwrap();
             assert_eq!(parsed, st);

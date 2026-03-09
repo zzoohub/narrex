@@ -182,6 +182,7 @@ mod tests {
                     id: p.id,
                     title: p.title.clone(),
                     genre: p.genre.clone(),
+                    source_type: p.source_type.clone(),
                     created_at: p.created_at,
                     updated_at: p.updated_at,
                 })

@@ -2,7 +2,7 @@
 
 **Status:** Draft
 **Author:** zzoo
-**Last Updated:** 2026-03-04
+**Last Updated:** 2026-03-10
 **Stakeholders:** zzoo (founder, product, engineering)
 **Product Brief:** docs/product-brief.md
 
@@ -149,6 +149,17 @@ REQ-006  System provides an AI chat panel where the user can ask questions
          me connect these two plot points"). The chat is context-aware —
          it has access to the current project's Config, Timeline, and
          Character Map.
+
+REQ-063  System auto-creates a sample project when a new user signs up
+         (first-time Google OAuth). The sample project contains pre-crafted
+         seed data (not AI-generated per user): a regression-fantasy story
+         with 2 tracks, 8-10 scenes (2-3 with drafted content, rest empty),
+         4-5 characters with 5-6 relationship lines, and a fully populated
+         Config. The project appears on the dashboard with an "Example"
+         badge, is fully editable and deletable like a normal project, and
+         does not count against the user's AI quota. Purpose: let new users
+         experience the workspace (timeline, character map, editor) before
+         committing to their own story idea.
 ```
 
 ### 5.2 Config (Global Story Settings)
@@ -569,6 +580,7 @@ REQ-051  Product team can monitor: user acquisition funnel, project
 Prove that a user can go from idea to a multi-episode AI-assisted draft using the visual timeline.
 
 **Included:**
+- Sample project auto-created on signup for instant workspace exploration (REQ-063)
 - Free text input and file import with AI auto-structuring (REQ-001, REQ-002, REQ-004)
 - Multi-track timeline with scene editing: add, delete, move via drag-and-drop, parallel tracks, merge/branch points, vertical alignment (REQ-009, REQ-010, REQ-011, REQ-012, REQ-013, REQ-014, REQ-015)
 - Scene detail panel with event details (REQ-014)

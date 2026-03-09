@@ -340,4 +340,26 @@ describe('TimelinePanel', () => {
       expect(zoomToolbar.textContent).toContain('100%')
     })
   })
+
+  describe('track delete context menu', () => {
+    it('disables remove option in context menu when track has scenes', async () => {
+      renderTimeline()
+      const label = screen.getByText('Main Track')
+      await fireEvent.contextMenu(label)
+      // The remove option should be disabled and show "(has scenes)" / "(씬 존재)"
+      const removeOption = screen.getByText(/has scenes|씬 존재/)
+      expect(removeOption.closest('button')).toBeDisabled()
+    })
+
+    it('does not open delete dialog when clicking disabled remove option', async () => {
+      renderTimeline()
+      const label = screen.getByText('Main Track')
+      await fireEvent.contextMenu(label)
+      const removeOption = screen.getByText(/has scenes|씬 존재/)
+      await fireEvent.click(removeOption.closest('button')!)
+      // Dialog should NOT appear
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(mockRemoveTrack).not.toHaveBeenCalled()
+    })
+  })
 })

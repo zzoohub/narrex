@@ -19,6 +19,7 @@ use crate::domain::ai::service::AiServiceImpl;
 use crate::domain::auth::service::AuthServiceImpl;
 use crate::domain::character::service::CharacterServiceImpl;
 use crate::domain::project::service::ProjectServiceImpl;
+use crate::domain::sample::service::SampleProjectService;
 use crate::domain::timeline::service::TimelineServiceImpl;
 use crate::outbound::postgres::Postgres;
 
@@ -38,6 +39,7 @@ pub type ProjectSvc = ProjectServiceImpl<Postgres>;
 pub type TimelineSvc = TimelineServiceImpl<Postgres, Postgres, Postgres, Postgres>;
 pub type CharacterSvc = CharacterServiceImpl<Postgres, Postgres>;
 pub type AiSvc = AiServiceImpl<Postgres, Postgres, Postgres, Postgres, Postgres>;
+pub type SampleSvc = SampleProjectService<Postgres>;
 
 // ---------------------------------------------------------------------------
 // AppState
@@ -53,6 +55,7 @@ pub struct AppState {
     timeline_service: Arc<TimelineSvc>,
     character_service: Arc<CharacterSvc>,
     ai_service: Arc<AiSvc>,
+    sample_service: Arc<SampleSvc>,
     postgres: Postgres,
     pub jwt_secret: String,
     config: Arc<Config>,
@@ -65,6 +68,7 @@ impl AppState {
         timeline_service: TimelineSvc,
         character_service: CharacterSvc,
         ai_service: AiSvc,
+        sample_service: SampleSvc,
         postgres: Postgres,
         config: Config,
     ) -> Self {
@@ -75,6 +79,7 @@ impl AppState {
             timeline_service: Arc::new(timeline_service),
             character_service: Arc::new(character_service),
             ai_service: Arc::new(ai_service),
+            sample_service: Arc::new(sample_service),
             postgres,
             jwt_secret,
             config: Arc::new(config),
@@ -99,6 +104,10 @@ impl AppState {
 
     pub fn ai_service(&self) -> &AiSvc {
         &self.ai_service
+    }
+
+    pub fn sample_service(&self) -> &SampleSvc {
+        &self.sample_service
     }
 
     pub fn db_pool(&self) -> &PgPool {

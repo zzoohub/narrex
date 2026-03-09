@@ -7,6 +7,7 @@ use narrex_api::domain::ai::service::AiServiceImpl;
 use narrex_api::domain::auth::service::AuthServiceImpl;
 use narrex_api::domain::character::service::CharacterServiceImpl;
 use narrex_api::domain::project::service::ProjectServiceImpl;
+use narrex_api::domain::sample::service::SampleProjectService;
 use narrex_api::domain::timeline::service::TimelineServiceImpl;
 use narrex_api::inbound::http::server::{AppState, HttpServer};
 use narrex_api::outbound::jwt::JwtTokenService;
@@ -74,6 +75,7 @@ async fn main() -> anyhow::Result<()> {
         postgres.clone(),
         llm,
     );
+    let sample_service = SampleProjectService::new(postgres.clone());
 
     // 8. Build application state.
     let state = AppState::new(
@@ -82,6 +84,7 @@ async fn main() -> anyhow::Result<()> {
         timeline_service,
         character_service,
         ai_service,
+        sample_service,
         postgres,
         config,
     );

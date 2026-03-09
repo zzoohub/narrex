@@ -12,6 +12,7 @@ export interface DialogProps {
   description?: string
   confirmLabel: string
   confirmVariant?: 'primary' | 'danger'
+  confirmDisabled?: boolean
   onConfirm: () => void
   cancelLabel?: string
 }
@@ -145,6 +146,7 @@ export function Dialog(props: DialogProps) {
             </Button>
             <Button
               variant={props.confirmVariant === 'danger' ? 'danger' : 'primary'}
+              disabled={props.confirmDisabled}
               onClick={() => {
                 props.onConfirm()
                 props.onClose()

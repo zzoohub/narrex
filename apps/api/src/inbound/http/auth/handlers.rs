@@ -115,10 +115,23 @@ pub async fn handle_google_callback(
         .unwrap_or_else(|| "en".into());
 
     // Upsert user and issue tokens.
-    let (_user, _tokens, refresh_token) = state
+    let (user, _tokens, refresh_token) = state
         .auth_service()
         .google_callback(google_user, &preferred_locale)
         .await?;
+
+    // Create sample project for first-time users (REQ-063).
+    // Runs in background — never blocks the auth redirect.
+    let sample_svc = state.sample_service().clone();
+    let sample_user_id = user.id;
+    let handle = tokio::spawn(async move {
+        sample_svc.ensure_sample_project(sample_user_id).await;
+    });
+    tokio::spawn(async move {
+        if let Err(e) = handle.await {
+            tracing::error!(error = %e, "sample project task panicked");
+        }
+    });
 
     // Redirect to web app without tokens in URL (client uses refresh cookie).
     let web_url = &state.config().web_app_url;
@@ -283,10 +296,13 @@ pub async fn test_login(
     State(state): State<AppState>,
     Json(body): Json<TestLoginRequest>,
 ) -> Result<Response, ApiError> {
-    let (_user, tokens, refresh_token) = state
+    let (user, tokens, refresh_token) = state
         .auth_service()
         .test_login(&body.email, body.name.as_deref())
         .await?;
+
+    // Create sample project for first-time users (REQ-063).
+    state.sample_service().ensure_sample_project(user.id).await;
 
     let refresh_cookie = format!(
         "refresh_token={}; HttpOnly; Secure; SameSite=Lax; Path=/v1/auth; Max-Age={}",

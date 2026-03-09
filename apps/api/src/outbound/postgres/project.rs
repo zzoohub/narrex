@@ -63,6 +63,7 @@ struct ProjectSummaryRow {
     id: Uuid,
     title: String,
     genre: Option<String>,
+    source_type: Option<String>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -73,6 +74,9 @@ impl ProjectSummaryRow {
             id: self.id,
             title: self.title,
             genre: self.genre,
+            source_type: self
+                .source_type
+                .and_then(|s| s.parse::<SourceType>().ok()),
             created_at: self.created_at,
             updated_at: self.updated_at,
         }
@@ -324,7 +328,7 @@ impl ProjectRepository for Postgres {
                 })?;
 
             sqlx::query_as::<_, ProjectSummaryRow>(
-                "SELECT id, title, genre, created_at, updated_at \
+                "SELECT id, title, genre, source_type, created_at, updated_at \
                  FROM project \
                  WHERE user_id = $1 AND deleted_at IS NULL \
                    AND (updated_at, id) < ($2, $3) \
@@ -340,7 +344,7 @@ impl ProjectRepository for Postgres {
             .map_err(|e| ProjectError::Unknown(e.into()))?
         } else {
             sqlx::query_as::<_, ProjectSummaryRow>(
-                "SELECT id, title, genre, created_at, updated_at \
+                "SELECT id, title, genre, source_type, created_at, updated_at \
                  FROM project \
                  WHERE user_id = $1 AND deleted_at IS NULL \
                  ORDER BY updated_at DESC, id DESC \

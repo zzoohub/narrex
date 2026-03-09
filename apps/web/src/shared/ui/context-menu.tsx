@@ -54,10 +54,8 @@ export function ContextMenu(props: ContextMenuProps) {
     e.preventDefault()
     e.stopPropagation()
 
-    // Clamp position so menu stays within viewport
     const x = Math.min(e.clientX, window.innerWidth - 200)
-    const y = Math.min(e.clientY, window.innerHeight - 260)
-    setPos({ x, y })
+    setPos({ x, y: e.clientY })
     setOpen(true)
     setFocusIndex(-1)
   }
@@ -142,13 +140,13 @@ export function ContextMenu(props: ContextMenuProps) {
             style={{
               position: 'fixed',
               left: `${pos().x}px`,
-              top: `${pos().y}px`,
+              bottom: `${window.innerHeight - pos().y}px`,
               'z-index': '9999',
             }}
             class={[
               'min-w-[180px] max-w-[260px] py-1.5 rounded-lg',
               'bg-surface-raised border border-border-default shadow-xl shadow-black/30',
-              'origin-top-left animate-scale-in',
+              'origin-bottom-left animate-scale-in',
             ].join(' ')}
           >
             {(() => {

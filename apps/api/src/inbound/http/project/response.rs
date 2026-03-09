@@ -44,6 +44,7 @@ pub struct ProjectSummaryResponse {
     pub id: Uuid,
     pub title: String,
     pub genre: Option<String>,
+    pub source_type: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -54,6 +55,7 @@ impl From<&ProjectSummary> for ProjectSummaryResponse {
             id: p.id,
             title: p.title.clone(),
             genre: p.genre.clone(),
+            source_type: p.source_type.as_ref().map(|v| v.to_string()),
             created_at: p.created_at,
             updated_at: p.updated_at,
         }
