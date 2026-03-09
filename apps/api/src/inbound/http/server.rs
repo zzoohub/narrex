@@ -217,6 +217,10 @@ fn build_router(state: AppState, cors_origin: &str) -> Router {
             post(project_handlers::structure_project),
         )
         .route(
+            "/v1/projects/import",
+            post(project_handlers::import_project),
+        )
+        .route(
             "/v1/projects",
             get(project_handlers::list_projects).post(project_handlers::create_project),
         )
@@ -266,7 +270,7 @@ fn build_router(state: AppState, cors_origin: &str) -> Router {
         // Characters
         .route(
             "/v1/projects/{projectId}/characters",
-            post(char_handlers::create_character),
+            get(char_handlers::list_characters).post(char_handlers::create_character),
         )
         .route(
             "/v1/projects/{projectId}/characters/{characterId}",

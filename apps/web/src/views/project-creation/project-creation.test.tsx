@@ -159,11 +159,11 @@ describe('ProjectCreationView', () => {
   // ── File import ─────────────────────────────────────────────────────
 
   describe('file import', () => {
-    it('renders file input that accepts .md, .txt, .zip', () => {
+    it('renders file input that accepts .md, .txt', () => {
       renderCreation()
       const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
       expect(fileInput).toBeInTheDocument()
-      expect(fileInput.accept).toBe('.md,.txt,.zip')
+      expect(fileInput.accept).toBe('.md,.txt')
     })
 
     it('shows file name when file is attached', async () => {

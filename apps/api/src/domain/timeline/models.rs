@@ -151,6 +151,7 @@ pub struct UpdateScene {
     pub mood_tags: Option<Vec<String>>,
     pub content: Option<Option<String>>,
     pub character_ids: Option<Vec<Uuid>>,
+    pub status: Option<SceneStatus>,
 }
 
 // ---------------------------------------------------------------------------
@@ -265,5 +266,15 @@ mod tests {
         assert!(us.mood_tags.is_none());
         assert!(us.content.is_none());
         assert!(us.character_ids.is_none());
+        assert!(us.status.is_none());
+    }
+
+    #[test]
+    fn update_scene_with_status() {
+        let us = UpdateScene {
+            status: Some(SceneStatus::AiDraft),
+            ..Default::default()
+        };
+        assert_eq!(us.status.unwrap(), SceneStatus::AiDraft);
     }
 }

@@ -2,7 +2,8 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::domain::timeline::models::{
-    ConnectionType, CreateConnection, CreateScene, CreateTrack, UpdateScene, UpdateTrack,
+    ConnectionType, CreateConnection, CreateScene, CreateTrack, SceneStatus, UpdateScene,
+    UpdateTrack,
 };
 
 #[derive(Debug, Deserialize)]
@@ -77,6 +78,7 @@ pub struct UpdateSceneRequest {
     pub mood_tags: Option<Vec<String>>,
     pub content: Option<Option<String>>,
     pub character_ids: Option<Vec<Uuid>>,
+    pub status: Option<String>,
 }
 
 impl From<UpdateSceneRequest> for UpdateScene {
@@ -91,6 +93,7 @@ impl From<UpdateSceneRequest> for UpdateScene {
             mood_tags: r.mood_tags,
             content: r.content,
             character_ids: r.character_ids,
+            status: r.status.and_then(|s| s.parse::<SceneStatus>().ok()),
         }
     }
 }

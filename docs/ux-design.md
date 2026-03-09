@@ -371,7 +371,7 @@ All confirmation dialogs use specific verbs, not "OK"/"Yes".
 
 **Error messages:**
 - Generation failed: "Couldn't generate this scene. Check your connection and try again." [Retry]
-- File import failed: "We couldn't read this file. Supported formats: .md, .txt, Notion .zip export."
+- File import failed: "We couldn't read this file. Supported formats: .md, .txt."
 - Auto-structuring failed: "We couldn't structure this input. Try adding more detail." [Try Again]
 
 ### 7.4 Language

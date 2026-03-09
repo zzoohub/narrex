@@ -226,11 +226,12 @@ fn map_sse_event(event: SseEvent) -> Event {
         SseEvent::Token { text } => Event::default()
             .event("token")
             .data(serde_json::json!({"text": text}).to_string()),
-        SseEvent::Completed { draft } => {
+        SseEvent::Completed { draft, quota } => {
             let draft_resp = DraftResponse::from(&draft);
+            let quota_resp = QuotaInfoResponse::from(&quota);
             Event::default()
                 .event("completed")
-                .data(serde_json::json!({"draft": draft_resp}).to_string())
+                .data(serde_json::json!({"draft": draft_resp, "quota": quota_resp}).to_string())
         }
         SseEvent::Progress { message } => Event::default()
             .event("progress")

@@ -211,6 +211,7 @@ impl SceneRepository for Postgres {
     }
 
     async fn update(&self, id: Uuid, update: &UpdateScene) -> Result<Scene, TimelineError> {
+        let status_str = update.status.as_ref().map(|s| s.to_string());
         let row = sqlx::query_as::<_, SceneRow>(
             "UPDATE scene SET \
                 track_id = COALESCE($2, track_id), \
@@ -220,7 +221,8 @@ impl SceneRepository for Postgres {
                 plot_summary = CASE WHEN $6 THEN $7 ELSE plot_summary END, \
                 location = CASE WHEN $8 THEN $9 ELSE location END, \
                 mood_tags = COALESCE($10, mood_tags), \
-                content = CASE WHEN $11 THEN $12 ELSE content END \
+                content = CASE WHEN $11 THEN $12 ELSE content END, \
+                status = COALESCE($13::scene_status, status) \
              WHERE id = $1 \
              RETURNING id, track_id, project_id, start_position, duration, status::text, title, plot_summary, location, mood_tags, content, created_at, updated_at",
         )
@@ -240,6 +242,8 @@ impl SceneRepository for Postgres {
         // content: Option<Option<String>>
         .bind(update.content.is_some())
         .bind(update.content.as_ref().and_then(|v| v.as_deref()))
+        // status: Option<SceneStatus>
+        .bind(status_str.as_deref())
         .fetch_one(self.pool())
         .await
         .map_err(|e| TimelineError::Unknown(e.into()))?;

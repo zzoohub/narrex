@@ -1,6 +1,6 @@
 use std::convert::Infallible;
 
-use axum::extract::{Path, Query, State};
+use axum::extract::{Multipart, Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::sse::{Event, Sse};
 use axum::Json;
@@ -500,4 +500,142 @@ pub async fn structure_project(
     };
 
     Ok(Sse::new(stream))
+}
+
+/// `POST /v1/projects/import` — import a file and structure it (SSE).
+///
+/// Accepts multipart form data with a single file field.
+/// Supported formats: .txt, .md (Markdown).
+/// Extracts text content and feeds it to the same structuring pipeline.
+pub async fn import_project(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    mut multipart: Multipart,
+) -> Result<Sse<impl futures::Stream<Item = Result<Event, Infallible>>>, ApiError> {
+    // Check quota before starting.
+    state.ai_service().check_quota(auth.user_id).await?;
+
+    // Extract file from multipart.
+    let mut file_data: Option<(String, Vec<u8>)> = None;
+    while let Ok(Some(field)) = multipart.next_field().await {
+        let file_name = field
+            .file_name()
+            .map(|s| s.to_string())
+            .unwrap_or_default();
+        let data = field
+            .bytes()
+            .await
+            .map_err(|e| ApiError::BadRequest(format!("failed to read file: {e}")))?;
+        file_data = Some((file_name, data.to_vec()));
+        break; // Only process the first file.
+    }
+
+    let (file_name, data) = file_data.ok_or_else(|| ApiError::BadRequest("no file provided".into()))?;
+
+    // Parse file content.
+    let source_input = extract_text_from_file(&file_name, &data)
+        .map_err(|e| ApiError::BadRequest(e))?;
+
+    if source_input.trim().is_empty() {
+        return Err(ApiError::BadRequest("file contains no text content".into()));
+    }
+
+    tracing::info!(
+        user_id = %auth.user_id,
+        file_name = %file_name,
+        content_len = source_input.len(),
+        "import_project: file parsed"
+    );
+
+    // Feed to the same structuring pipeline as structure_project.
+    let body = CreateProjectTextRequest {
+        source_input,
+        clarification_answers: None,
+    };
+
+    // Delegate to structure_project logic via JSON body.
+    structure_project(State(state), auth, Json(body)).await
+}
+
+// ---------------------------------------------------------------------------
+// File parsing
+// ---------------------------------------------------------------------------
+
+/// Max file size: 5 MB.
+const MAX_IMPORT_FILE_SIZE: usize = 5 * 1024 * 1024;
+
+/// Extract text content from an uploaded file based on its extension.
+fn extract_text_from_file(file_name: &str, data: &[u8]) -> Result<String, String> {
+    if data.len() > MAX_IMPORT_FILE_SIZE {
+        return Err(format!(
+            "file too large: {} bytes (max {} bytes)",
+            data.len(),
+            MAX_IMPORT_FILE_SIZE
+        ));
+    }
+
+    let ext = file_name
+        .rsplit('.')
+        .next()
+        .unwrap_or("")
+        .to_lowercase();
+
+    match ext.as_str() {
+        "txt" | "md" | "markdown" => {
+            String::from_utf8(data.to_vec())
+                .map_err(|_| "file is not valid UTF-8 text".to_string())
+        }
+        _ => Err(format!(
+            "unsupported file format: .{ext}. Supported: .txt, .md"
+        )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extract_txt_file() {
+        let content = "This is a story about a knight.";
+        let result = extract_text_from_file("story.txt", content.as_bytes());
+        assert_eq!(result.unwrap(), content);
+    }
+
+    #[test]
+    fn extract_md_file() {
+        let content = "# Chapter 1\n\nThe knight rode into battle.";
+        let result = extract_text_from_file("notes.md", content.as_bytes());
+        assert_eq!(result.unwrap(), content);
+    }
+
+    #[test]
+    fn extract_markdown_extension() {
+        let content = "Some text";
+        let result = extract_text_from_file("doc.markdown", content.as_bytes());
+        assert_eq!(result.unwrap(), content);
+    }
+
+    #[test]
+    fn reject_unsupported_format() {
+        let result = extract_text_from_file("image.png", b"binary data");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("unsupported file format"));
+    }
+
+    #[test]
+    fn reject_too_large_file() {
+        let data = vec![0u8; MAX_IMPORT_FILE_SIZE + 1];
+        let result = extract_text_from_file("big.txt", &data);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("file too large"));
+    }
+
+    #[test]
+    fn reject_invalid_utf8() {
+        let data = vec![0xFF, 0xFE, 0xFD];
+        let result = extract_text_from_file("bad.txt", &data);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("UTF-8"));
+    }
 }

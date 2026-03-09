@@ -94,6 +94,7 @@ where
         let _summary_repo = self.summary_repo.clone();
         let log_repo = self.log_repo.clone();
         let _llm = self.llm.clone();
+        let log_repo_for_quota = self.log_repo.clone();
         let start = Instant::now();
 
         let stream = async_stream::stream! {
@@ -154,6 +155,7 @@ where
                                     scene_id,
                                     &crate::domain::timeline::models::UpdateScene {
                                         content: Some(Some(full_text.clone())),
+                                        status: Some(crate::domain::timeline::models::SceneStatus::AiDraft),
                                         ..Default::default()
                                     },
                                 )
@@ -179,7 +181,9 @@ where
                             };
                             let _ = log_repo.create(&log).await;
 
-                            yield Ok(SseEvent::Completed { draft });
+                            // Fetch quota for SSE completed event.
+                            let quota = Self::build_quota_info(&log_repo_for_quota, user_id).await;
+                            yield Ok(SseEvent::Completed { draft, quota });
                         } else {
                             full_text.push_str(&chunk.text);
                             yield Ok(SseEvent::Token { text: chunk.text });
@@ -227,6 +231,7 @@ where
 
         let draft_repo = self.draft_repo.clone();
         let log_repo = self.log_repo.clone();
+        let log_repo_for_quota = self.log_repo.clone();
         let direction = edit_req.direction.clone();
         let start = Instant::now();
 
@@ -300,7 +305,9 @@ where
                             };
                             let _ = log_repo.create(&log).await;
 
-                            yield Ok(SseEvent::Completed { draft });
+                            // Fetch quota for SSE completed event.
+                            let quota = Self::build_quota_info(&log_repo_for_quota, user_id).await;
+                            yield Ok(SseEvent::Completed { draft, quota });
                         } else {
                             full_text.push_str(&chunk.text);
                             yield Ok(SseEvent::Token { text: chunk.text });
@@ -567,6 +574,45 @@ where
     pub async fn log_generation(&self, log: &GenerationLog) -> Result<(), AiError> {
         self.log_repo.create(log).await
     }
+
+    /// Build QuotaInfo from a log repo. Used inside stream closures.
+    async fn build_quota_info(log_repo: &GLR, user_id: Uuid) -> QuotaInfo {
+        use chrono::{Datelike, TimeZone, Utc};
+
+        let now = Utc::now();
+        let month_start = Utc
+            .with_ymd_and_hms(now.year(), now.month(), 1, 0, 0, 0)
+            .single()
+            .expect("valid date");
+
+        let used = log_repo
+            .count_by_user_since(user_id, month_start)
+            .await
+            .unwrap_or(0);
+
+        let remaining = (MONTHLY_GENERATION_LIMIT - used).max(0);
+        let exceeded = used >= MONTHLY_GENERATION_LIMIT;
+        let warning = used >= MONTHLY_GENERATION_WARNING_THRESHOLD;
+
+        let resets_at = if now.month() == 12 {
+            Utc.with_ymd_and_hms(now.year() + 1, 1, 1, 0, 0, 0)
+                .single()
+                .expect("valid date")
+        } else {
+            Utc.with_ymd_and_hms(now.year(), now.month() + 1, 1, 0, 0, 0)
+                .single()
+                .expect("valid date")
+        };
+
+        QuotaInfo {
+            used,
+            limit: MONTHLY_GENERATION_LIMIT,
+            remaining,
+            warning,
+            exceeded,
+            resets_at,
+        }
+    }
 }
 
 /// Parse raw LLM text into WorldOutput (Phase 1).
@@ -688,7 +734,7 @@ fn find_outermost_json_object(text: &str) -> Option<String> {
 #[derive(Debug, Clone)]
 pub enum SseEvent {
     Token { text: String },
-    Completed { draft: Draft },
+    Completed { draft: Draft, quota: QuotaInfo },
     Progress { message: String },
     StructuringCompleted { workspace: crate::domain::project::models::Workspace },
     Error { message: String },
@@ -1191,7 +1237,15 @@ mod tests {
     }
 
     #[derive(Clone)]
-    struct MockSceneRepo;
+    struct MockSceneRepo {
+        updates: std::sync::Arc<std::sync::Mutex<Vec<crate::domain::timeline::models::UpdateScene>>>,
+    }
+
+    impl MockSceneRepo {
+        fn new() -> Self {
+            Self { updates: std::sync::Arc::new(std::sync::Mutex::new(vec![])) }
+        }
+    }
 
     #[async_trait::async_trait]
     impl crate::domain::timeline::ports::SceneRepository for MockSceneRepo {
@@ -1204,8 +1258,24 @@ mod tests {
         async fn find_detail_by_id(&self, _: uuid::Uuid) -> Result<Option<crate::domain::timeline::models::SceneDetail>, crate::domain::timeline::error::TimelineError> {
             Ok(None)
         }
-        async fn update(&self, _: uuid::Uuid, _: &crate::domain::timeline::models::UpdateScene) -> Result<crate::domain::timeline::models::Scene, crate::domain::timeline::error::TimelineError> {
-            unimplemented!()
+        async fn update(&self, _id: uuid::Uuid, update: &crate::domain::timeline::models::UpdateScene) -> Result<crate::domain::timeline::models::Scene, crate::domain::timeline::error::TimelineError> {
+            self.updates.lock().unwrap().push(update.clone());
+            Ok(crate::domain::timeline::models::Scene {
+                id: _id,
+                track_id: uuid::Uuid::new_v4(),
+                project_id: uuid::Uuid::new_v4(),
+                start_position: 0.0,
+                duration: 1.0,
+                status: crate::domain::timeline::models::SceneStatus::AiDraft,
+                title: "test".into(),
+                plot_summary: None,
+                location: None,
+                mood_tags: vec![],
+                content: update.content.as_ref().and_then(|c| c.clone()),
+                character_ids: vec![],
+                created_at: chrono::Utc::now(),
+                updated_at: chrono::Utc::now(),
+            })
         }
         async fn delete(&self, _: uuid::Uuid) -> Result<(), crate::domain::timeline::error::TimelineError> {
             Ok(())
@@ -1226,7 +1296,7 @@ mod tests {
             MockSummaryRepo,
             MockLogRepo::new(),
             MockContextRepo,
-            MockSceneRepo,
+            MockSceneRepo::new(),
             llm,
         )
     }
@@ -1240,7 +1310,7 @@ mod tests {
             MockSummaryRepo,
             log_repo,
             MockContextRepo,
-            MockSceneRepo,
+            MockSceneRepo::new(),
             llm,
         )
     }

@@ -53,7 +53,7 @@ The core loop is: idea in -> visual structure out -> arrange story -> generate s
 | Priority | REQ-ID | Requirement | Phase 1 Detail | Rationale |
 |----------|--------|-------------|-----------------|-----------|
 | P0 | REQ-001 | User can create a new project by entering free-form text describing their story idea | Accept any length of text input. System should handle inputs ranging from a single sentence to multi-page dumps. If input is too vague to structure (fewer than ~2 meaningful story elements), system asks 2-3 clarifying questions before proceeding. | Primary entry point. Most users will start here. |
-| P0 | REQ-002 | User can create a new project by importing a file | Support Notion export (.zip with Markdown), standalone Markdown (.md), and plain text (.txt) files via drag-and-drop or file picker. Parse and extract narrative content, character references, and plot points. | Secondary entry point. Users with existing notes in Notion or docs need this path. |
+| P0 | REQ-002 | User can create a new project by importing a file | Support standalone Markdown (.md) and plain text (.txt) files via drag-and-drop or file picker. Parse and extract narrative content, character references, and plot points. Notion .zip export deferred — users can export individual pages as .md instead. | Secondary entry point. Users with existing notes need this path. |
 | P0 | REQ-004 | System auto-structures any input into initial Config, Timeline, and Character Map | From the user's input, generate: (a) Config bar values (genre, theme, era/location, POV, tone) inferred from content; (b) Timeline with ordered scenes representing key plot points — placing simultaneous events on parallel tracks where applicable; (c) Character Map with character nodes and inferred relationships. All generated elements are editable. System shows a brief summary of what it inferred and invites the user to review and adjust. | The core "magic moment." Without this, the product is just another blank canvas. |
 
 **Acceptance criteria for REQ-004:**
@@ -254,7 +254,7 @@ This is the journey that validates the core hypothesis. A user who completes thi
 1. User opens Narrex and creates a new project.
 2. User chooses an entry point:
    - **Free text:** Types or pastes a story idea — anything from "a regression fantasy where a failed knight returns to his childhood" to a multi-page dump of character notes and plot ideas.
-   - **File import:** Drags a .md or .txt file (or Notion .zip export) into the project creation area.
+   - **File import:** Drags a .md or .txt file into the project creation area.
 3. System processes the input:
    - If input contains identifiable characters and plot points -> system generates a Config bar (genre, tone, etc.), a single-track Timeline with scenes, and a Character Map with relationship lines. A brief summary shows: "I found X characters, Y plot points. Here's your story structure."
    - If input is too vague (e.g., "a love story") -> system asks 2-3 clarifying questions (e.g., "What genre?", "Who is the main character?", "What is the central conflict?") and then generates structure.
@@ -367,7 +367,7 @@ If any of the first three criteria are not met after 8 weeks, the team should di
 | Context window limits cause quality degradation for projects with 15+ scenes | High | Medium | Phase 1 projects are likely 10-20 scenes. Implement summary-based context compression from the start. Monitor generation quality by scene position. If degradation is detected, invest in compression quality before Phase 2. |
 | Users generate one scene and leave — the tool is a novelty, not a workflow | High | Medium | Push toward multi-scene engagement in the UX: after first generation, suggest "Generate the next scene?" Show progress on the timeline. Track generation-to-second-generation conversion as an early warning metric. |
 | Per-user AI costs are higher than modeled due to re-generation and direction-based edits | Medium | Low | Mitigated by monthly 50-generation quota (REQ-060). Monitor per-user token usage from day one. Set internal cost alerts. Quota can be adjusted based on actual usage patterns. |
-| File import (Notion export) parsing fails on edge cases, creating a bad first impression | Low | Medium | Support a limited set of well-tested file formats (.md, .txt, Notion .zip). Show clear error messages for unsupported formats. Auto-structuring gracefully handles partial parse results. |
+| File import parsing fails on edge cases, creating a bad first impression | Low | Low | Support a limited set of well-tested file formats (.md, .txt). Show clear error messages for unsupported formats. Auto-structuring gracefully handles partial parse results. |
 
 ---
 

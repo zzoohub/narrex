@@ -365,7 +365,7 @@ At 15 scenes with 250-token summaries ≈ 3750 tokens — well within limits. Qu
 ### Open Questions
 
 - **Which CF Workers AI model for Korean prose?** Need to benchmark: `@cf/meta/llama-3.1-70b-instruct` vs `@cf/google/gemma-2-27b-it` vs others for Korean quality. Decision: test before implementation, choose based on output quality.
-- **Notion .zip import parsing?** Notion exports contain nested Markdown + metadata. Need a parser that extracts narrative content. Evaluate libraries at implementation time — likely a custom Markdown extractor.
+- **~~Notion .zip import parsing?~~** Deferred. Phase 1 supports .md and .txt only. Users can export individual Notion pages as Markdown.
 - **Should Phase 1 include Kakao OAuth?** PRD targets Korean users who may not have Google accounts. Google-only is simplest. Adding Kakao is a two-way door (just another OAuth provider). Decide after initial user research.
 
 ---

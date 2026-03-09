@@ -18,6 +18,26 @@ use super::response::{CharacterResponse, RelationshipResponse};
 // Characters
 // ---------------------------------------------------------------------------
 
+/// `GET /v1/projects/{projectId}/characters` — list characters.
+pub async fn list_characters(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(project_id): Path<Uuid>,
+) -> Result<ApiSuccess<Vec<CharacterResponse>>, ApiError> {
+    state
+        .project_service()
+        .get_project(project_id, auth.user_id)
+        .await?;
+
+    let characters = state
+        .character_service()
+        .list_characters(project_id)
+        .await?;
+
+    let resp: Vec<CharacterResponse> = characters.iter().map(CharacterResponse::from).collect();
+    Ok(ApiSuccess::new(resp))
+}
+
 /// `POST /v1/projects/{projectId}/characters` — create a character.
 pub async fn create_character(
     State(state): State<AppState>,

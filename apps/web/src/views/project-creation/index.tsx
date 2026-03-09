@@ -19,6 +19,16 @@ type CreationState = 'input' | 'clarify' | 'processing' | 'error'
 const samplePrompts = [
   {
     label: {
+      ko: '현대 로맨스 — 계약 동거',
+      en: 'Modern Romance — contract cohabitation',
+    },
+    text: {
+      ko: '스타트업 대표 한서진은 투자 유치를 위해 "안정적인 사생활"이 필요하다. 수의사 윤재하는 동물병원 보증금 때문에 당장 싼 방이 필요하다. 부동산 실수로 같은 오피스텔에 동시 계약하게 된 두 사람은, 각자의 이유로 6개월간 "가짜 동거"를 하기로 합의한다. 규칙은 세 가지: 사생활 간섭 금지, 이성으로 보지 않기, 6개월 뒤 깨끗하게 끝내기. 그런데 서진의 전 남자친구이자 투자사 대표가 이 동거의 진짜 관계를 캐기 시작한다.',
+      en: 'Startup CEO Han Seojin needs a "stable personal life" to secure investment. Veterinarian Yoon Jaeha needs a cheap room for his clinic deposit. A real estate mix-up puts them on the same lease, and they agree to a six-month fake cohabitation — three rules: no meddling, no romance, clean break at the end. Then Seojin\'s ex-boyfriend, now head of the VC firm, starts digging into whether the arrangement is real.',
+    },
+  },
+  {
+    label: {
       ko: '로판 — 악녀로 빙의했다',
       en: 'Romance Fantasy — reborn as the villainess',
     },
@@ -45,16 +55,6 @@ const samplePrompts = [
     text: {
       ko: '왕의 총애를 받던 중전이 간비의 모함으로 폐위되어 냉궁에 갇힌다. 3년간의 냉궁 생활 끝에 탈출한 그녀는 신분을 숨기고 도성 최고의 기방 "월하루"의 주인이 된다. 기방을 거점으로 조정의 정보를 모으며 자신을 배신한 자들에게 하나씩 복수를 시작한다. 그런데 새로 부임한 한성부 판관이 폐비 시절 유일하게 그녀 편이었던 무관이다. 그는 그녀의 정체를 의심하기 시작한다.',
       en: 'A beloved queen is framed by a rival consort and imprisoned in the cold palace. After three years she escapes, hides her identity, and becomes the owner of the capital\'s most prestigious gisaeng house. Using it as a base to gather intelligence on the court, she begins her revenge — until the newly appointed magistrate turns out to be the one officer who once stood by her side. He starts to suspect her true identity.',
-    },
-  },
-  {
-    label: {
-      ko: '현대 로맨스 — 계약 동거',
-      en: 'Modern Romance — contract cohabitation',
-    },
-    text: {
-      ko: '스타트업 대표 한서진은 투자 유치를 위해 "안정적인 사생활"이 필요하다. 수의사 윤재하는 동물병원 보증금 때문에 당장 싼 방이 필요하다. 부동산 실수로 같은 오피스텔에 동시 계약하게 된 두 사람은, 각자의 이유로 6개월간 "가짜 동거"를 하기로 합의한다. 규칙은 세 가지: 사생활 간섭 금지, 이성으로 보지 않기, 6개월 뒤 깨끗하게 끝내기. 그런데 서진의 전 남자친구이자 투자사 대표가 이 동거의 진짜 관계를 캐기 시작한다.',
-      en: 'Startup CEO Han Seojin needs a "stable personal life" to secure investment. Veterinarian Yoon Jaeha needs a cheap room for his clinic deposit. A real estate mix-up puts them on the same lease, and they agree to a six-month fake cohabitation — three rules: no meddling, no romance, clean break at the end. Then Seojin\'s ex-boyfriend, now head of the VC firm, starts digging into whether the arrangement is real.',
     },
   },
   {
@@ -127,25 +127,6 @@ function formatElapsed(secs: number): string {
   const m = Math.floor(secs / 60)
   const s = secs % 60
   return `${m}:${s.toString().padStart(2, '0')}`
-}
-
-/** Extract text content from a .zip file (Notion export: find .md files inside). */
-async function extractZipText(file: File): Promise<string> {
-  const { BlobReader, ZipReader, TextWriter } = await import('@zip.js/zip.js')
-  const reader = new ZipReader(new BlobReader(file))
-  const entries = await reader.getEntries()
-  const mdFiles = entries.filter(
-    (e) => !e.directory && (e.filename.endsWith('.md') || e.filename.endsWith('.txt')),
-  )
-  const parts: string[] = []
-  for (const entry of mdFiles) {
-    if (entry.getData) {
-      const text = await entry.getData(new TextWriter())
-      parts.push(text)
-    }
-  }
-  await reader.close()
-  return parts.join('\n\n---\n\n')
 }
 
 export function ProjectCreationView() {
@@ -229,23 +210,14 @@ export function ProjectCreationView() {
   }
 
   async function readFileContent(f: File) {
-    if (f.name.endsWith('.zip')) {
-      try {
-        const text = await extractZipText(f)
-        setFileContent(text)
-      } catch {
-        setFileContent(null)
-      }
-    } else {
-      const reader = new FileReader()
-      reader.onload = () => {
-        setFileContent(reader.result as string)
-      }
-      reader.onerror = () => {
-        setFileContent(null)
-      }
-      reader.readAsText(f)
+    const reader = new FileReader()
+    reader.onload = () => {
+      setFileContent(reader.result as string)
     }
+    reader.onerror = () => {
+      setFileContent(null)
+    }
+    reader.readAsText(f)
   }
 
   function removeFile() {
@@ -521,7 +493,7 @@ export function ProjectCreationView() {
                     </span>
                     <input
                       type="file"
-                      accept=".md,.txt,.zip"
+                      accept=".md,.txt"
                       onChange={handleFileInput}
                       class="hidden"
                     />

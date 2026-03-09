@@ -28,7 +28,7 @@
 |                                                               |
 |  Or import a file:                                            |
 |  +- - - - - - - - - - - - - - - - - - - - - - - - - - - +   |
-|  |  Drop a file here (.md, .txt, or Notion .zip export)  |   |
+|  |  Drop a file here (.md, .txt)                         |   |
 |  |  or [Browse Files]                                     |   |
 |  +- - - - - - - - - - - - - - - - - - - - - - - - - - - +   |
 |                                                               |
@@ -39,7 +39,7 @@
 
 **Interaction details:**
 - Text area: auto-growing, no character limit, supports paste of large text blocks.
-- File drop zone: secondary visual weight (dashed border, muted). Accepts .md, .txt, .zip (Notion export). Shows file name after drop with [x] to remove.
+- File drop zone: secondary visual weight (dashed border, muted). Accepts .md, .txt. Shows file name after drop with [x] to remove.
 - [Structure My Story] button: primary CTA. Disabled until text area has content or file is uploaded. (Von Restorff: single primary action)
 - Genre template gallery: [Phase 2] Would appear as a third option between text and file import.
 
