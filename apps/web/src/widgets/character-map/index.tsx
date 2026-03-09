@@ -150,12 +150,12 @@ function GraphView(props: {
         d3
           .forceLink<SimNode, SimLink>(links)
           .id((d) => d.id)
-          .distance(60),
+          .distance(120),
       )
-      .force('charge', d3.forceManyBody().strength(-160))
-      .force('x', d3.forceX(width / 2).strength(0.08))
-      .force('y', d3.forceY(height / 2).strength(0.08))
-      .force('collide', d3.forceCollide(40))
+      .force('charge', d3.forceManyBody().strength(-300))
+      .force('x', d3.forceX(width / 2).strength(0.06))
+      .force('y', d3.forceY(height / 2).strength(0.06))
+      .force('collide', d3.forceCollide(50))
       .on('tick', () => {
         const map = new Map<string, { x: number; y: number }>()
         sim.nodes().forEach((n) => {
@@ -537,8 +537,15 @@ function GraphView(props: {
               </marker>
             </defs>
 
-            {/* Zoom/pan transform group */}
-            <g transform={props.fullscreen ? `translate(${panX()},${panY()}) scale(${zoomScale()})` : undefined}>
+            {/* Zoom/pan transform group — scale from viewport center */}
+            <g transform={props.fullscreen ? (() => {
+              const cx = (svgRef?.clientWidth || 400) / 2
+              const cy = (svgRef?.clientHeight || 300) / 2
+              const s = zoomScale()
+              const tx = cx * (1 - s) + panX()
+              const ty = cy * (1 - s) + panY()
+              return `translate(${tx},${ty}) scale(${s})`
+            })() : undefined}>
 
             {/* Relationship lines */}
             <For each={ws.state.relationships}>
