@@ -70,7 +70,7 @@ CREATE TABLE project (
     era_location    TEXT,
     pov             pov_type,
     tone            TEXT,
-    source_type     TEXT        CHECK (source_type IN ('free_text', 'file_import', 'template')),
+    source_type     TEXT        CONSTRAINT project_source_type_check CHECK (source_type IN ('free_text', 'file_import', 'template')),
     source_input    TEXT,
     source_file_key TEXT,
     CONSTRAINT chk_project_title_length CHECK (char_length(title) <= 200),

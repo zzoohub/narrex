@@ -124,8 +124,9 @@ pub async fn handle_google_callback(
     // Runs in background — never blocks the auth redirect.
     let sample_svc = state.sample_service().clone();
     let sample_user_id = user.id;
+    let sample_locale = preferred_locale.clone();
     let handle = tokio::spawn(async move {
-        sample_svc.ensure_sample_project(sample_user_id).await;
+        sample_svc.ensure_sample_project(sample_user_id, &sample_locale).await;
     });
     tokio::spawn(async move {
         if let Err(e) = handle.await {
@@ -294,15 +295,22 @@ pub async fn upload_avatar(
 /// going through the real OAuth flow.
 pub async fn test_login(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(body): Json<TestLoginRequest>,
 ) -> Result<Response, ApiError> {
+    let locale = headers
+        .get(header::ACCEPT_LANGUAGE)
+        .and_then(|v| v.to_str().ok())
+        .map(resolve_preferred_locale)
+        .unwrap_or_else(|| "en".into());
+
     let (user, tokens, refresh_token) = state
         .auth_service()
         .test_login(&body.email, body.name.as_deref())
         .await?;
 
     // Create sample project for first-time users (REQ-063).
-    state.sample_service().ensure_sample_project(user.id).await;
+    state.sample_service().ensure_sample_project(user.id, &locale).await;
 
     let refresh_cookie = format!(
         "refresh_token={}; HttpOnly; Secure; SameSite=Lax; Path=/v1/auth; Max-Age={}",

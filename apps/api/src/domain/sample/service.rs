@@ -18,14 +18,16 @@ impl<R: SampleProjectRepository> SampleProjectService<R> {
 
     /// Create the sample project if this user has no projects yet.
     ///
+    /// `locale` determines the language of the sample content ("ko" or "en").
     /// Returns `Some(project)` if created, `None` if the user already has projects.
     /// Errors from the repo are logged and swallowed — sample project creation
     /// must never block the auth flow.
     pub async fn ensure_sample_project(
         &self,
         user_id: Uuid,
+        locale: &str,
     ) -> Option<Project> {
-        match self.try_create(user_id).await {
+        match self.try_create(user_id, locale).await {
             Ok(project) => project,
             Err(e) => {
                 tracing::warn!(%user_id, error = %e, "failed to create sample project");
@@ -34,12 +36,12 @@ impl<R: SampleProjectRepository> SampleProjectService<R> {
         }
     }
 
-    async fn try_create(&self, user_id: Uuid) -> Result<Option<Project>, ProjectError> {
+    async fn try_create(&self, user_id: Uuid, locale: &str) -> Result<Option<Project>, ProjectError> {
         if self.repo.has_projects(user_id).await? {
             return Ok(None);
         }
 
-        let data = build_sample_project(user_id);
+        let data = build_sample_project(user_id, locale);
         let project = data.project.clone();
         self.repo.create_sample_project(&data).await?;
         Ok(Some(project))
@@ -106,7 +108,7 @@ mod tests {
         let repo = MockSampleRepo::new(false);
         let svc = SampleProjectService::new(repo.clone());
 
-        let result = svc.ensure_sample_project(Uuid::new_v4()).await;
+        let result = svc.ensure_sample_project(Uuid::new_v4(), "ko").await;
         assert!(result.is_some(), "should return the created project");
         assert!(repo.was_created(), "should have called create_sample_project");
     }
@@ -116,7 +118,7 @@ mod tests {
         let repo = MockSampleRepo::new(true);
         let svc = SampleProjectService::new(repo.clone());
 
-        let result = svc.ensure_sample_project(Uuid::new_v4()).await;
+        let result = svc.ensure_sample_project(Uuid::new_v4(), "en").await;
         assert!(result.is_none(), "should return None when user has projects");
         assert!(!repo.was_created(), "should not create sample project");
     }
@@ -126,7 +128,7 @@ mod tests {
         let repo = MockSampleRepo::failing();
         let svc = SampleProjectService::new(repo.clone());
 
-        let result = svc.ensure_sample_project(Uuid::new_v4()).await;
+        let result = svc.ensure_sample_project(Uuid::new_v4(), "ko").await;
         assert!(result.is_none(), "should return None on error");
         assert!(!repo.was_created(), "should not have created anything");
     }

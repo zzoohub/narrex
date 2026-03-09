@@ -1,4 +1,3 @@
-use sqlx::error::DatabaseError;
 use uuid::Uuid;
 
 use crate::domain::project::error::ProjectError;
