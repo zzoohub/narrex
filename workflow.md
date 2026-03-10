@@ -50,20 +50,34 @@ Exception: manually test payment flows before launch.
 
 Set up CI/CD first so every push goes through the pipeline.
 
-### Infra (Pulumi)
-- Stack init (staging / production)
-- Resources: Cloud Run, IAM, DNS+SSL (Cloudflare), PostgreSQL (Neon)
-- `pulumi up` to provision everything
+### Responsibility split
+
+| Owner | Scope |
+|-------|-------|
+| **`~/apps/infra` (Pulumi)** | Cloud Run, Artifact Registry, IAM/WIF, Neon DB, Cloudflare R2, Sentry, Vercel, PostHog |
+| **Each service repo CI** | Docker image build + `gcloud run deploy` |
+| **Manual** | Cloudflare DNS, EAS (`eas.json` + CLI) |
+
+### Infra — `~/apps/infra` repo (Pulumi)
+
+Provisioning is centralized in a standalone repo, not per-project.
+
+1. Add `services/<name>/` with needed resource files (cloud-run, neon, sentry, etc.)
+2. Import + call in root `index.ts`
+3. Set secrets: `just cfg-secret <name>:<key> <value>`
+4. `pulumi up`
+
+See `~/apps/infra/docs/setup.md` for initial provider setup and secret management.
 
 ### DB
 - Run migrations
 - Seed data (if needed)
 - Backup schedule
 
-### CI/CD
+### CI/CD (per service repo)
 - Dockerfile per service
-- GitHub Actions (build → push → deploy)
-- GitHub Secrets
+- GitHub Actions: build → push to Artifact Registry → `gcloud run deploy`
+- GitHub Secrets: `WIF_PROVIDER`, `WIF_SERVICE_ACCOUNT`
 
 ### Mobile (if applicable)
 - EAS project + build profiles
