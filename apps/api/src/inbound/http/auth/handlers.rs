@@ -138,8 +138,10 @@ pub async fn handle_google_callback(
     let web_url = &state.config().web_app_url;
 
     // Set httpOnly refresh token cookie.
+    // SameSite=None because web app (narrex.zzooapp.com) and API (*.a.run.app)
+    // are on different domains — Lax blocks cross-site fetch credentials.
     let refresh_cookie = format!(
-        "refresh_token={}; HttpOnly; Secure; SameSite=Lax; Path=/v1/auth; Max-Age={}",
+        "refresh_token={}; HttpOnly; Secure; SameSite=None; Path=/v1/auth; Max-Age={}",
         refresh_token,
         30 * 24 * 60 * 60, // 30 days
     );
@@ -184,7 +186,7 @@ pub async fn refresh_token(
 
     // Rotate refresh token: issue new cookie replacing the old one.
     let cookie = format!(
-        "refresh_token={}; HttpOnly; Secure; SameSite=Lax; Path=/v1/auth; Max-Age={}",
+        "refresh_token={}; HttpOnly; Secure; SameSite=None; Path=/v1/auth; Max-Age={}",
         new_refresh,
         30 * 24 * 60 * 60, // 30 days
     );
@@ -200,7 +202,7 @@ pub async fn refresh_token(
 
 /// `POST /v1/auth/logout` — clear refresh token cookie.
 pub async fn logout() -> Response {
-    let cookie = "refresh_token=; HttpOnly; Secure; SameSite=Lax; Path=/v1/auth; Max-Age=0";
+    let cookie = "refresh_token=; HttpOnly; Secure; SameSite=None; Path=/v1/auth; Max-Age=0";
     let mut response = StatusCode::NO_CONTENT.into_response();
     response.headers_mut().insert(
         header::SET_COOKIE,
@@ -315,7 +317,7 @@ pub async fn test_login(
         .await;
 
     let refresh_cookie = format!(
-        "refresh_token={}; HttpOnly; Secure; SameSite=Lax; Path=/v1/auth; Max-Age={}",
+        "refresh_token={}; HttpOnly; Secure; SameSite=None; Path=/v1/auth; Max-Age={}",
         refresh_token,
         30 * 24 * 60 * 60, // 30 days
     );
@@ -337,7 +339,7 @@ pub async fn delete_account(
     state.auth_service().delete_account(auth.user_id).await?;
 
     // Clear refresh token cookie
-    let cookie = "refresh_token=; HttpOnly; Secure; SameSite=Lax; Path=/v1/auth; Max-Age=0";
+    let cookie = "refresh_token=; HttpOnly; Secure; SameSite=None; Path=/v1/auth; Max-Age=0";
     let mut response = StatusCode::NO_CONTENT.into_response();
     response.headers_mut().insert(
         header::SET_COOKIE,
