@@ -29,6 +29,12 @@ export function EditorPanel() {
   const [showAiInput, setShowAiInput] = createSignal(false)
   const [aiDirection, setAiDirection] = createSignal('')
   const [showRegenDialog, setShowRegenDialog] = createSignal(false)
+  const [isEditing, setIsEditing] = createSignal(false)
+  const [editSelection, setEditSelection] = createSignal<{
+    text: string
+    start: number
+    end: number
+  } | null>(null)
   const [quotaWarning, setQuotaWarning] = createSignal<QuotaInfo | null>(null)
   const [quotaError, setQuotaError] = createSignal<string | null>(null)
 
@@ -91,6 +97,27 @@ export function EditorPanel() {
   document.addEventListener('keydown', handleUndoRedoKey)
   onCleanup(() => document.removeEventListener('keydown', handleUndoRedoKey))
 
+  // ---- Helpers ---------------------------------------------------------------
+
+  /** Get character offset from DOM selection endpoint relative to container. */
+  function getTextOffset(container: Node, node: Node, offset: number): number {
+    const range = document.createRange()
+    range.setStart(container, 0)
+    range.setEnd(node, offset)
+    return range.toString().length
+  }
+
+  /** Capture current selection range as character offsets in the editor text. */
+  function captureSelection(): { text: string; start: number; end: number } | null {
+    const sel = window.getSelection()
+    if (!sel || sel.isCollapsed || !sel.rangeCount || !editorEl) return null
+    if (!editorEl.contains(sel.anchorNode)) return null
+    const range = sel.getRangeAt(0)
+    const text = sel.toString()
+    const start = getTextOffset(editorEl, range.startContainer, range.startOffset)
+    return { text, start, end: start + text.length }
+  }
+
   // ---- Derived --------------------------------------------------------------
 
   const scene = () => ws.selectedScene()
@@ -114,16 +141,16 @@ export function EditorPanel() {
       setShowToolbar(false)
       return
     }
+    // Don't dismiss AI input overlay on selection changes
+    if (showAiInput()) return
     const sel = window.getSelection()
     if (!sel || sel.isCollapsed || !sel.rangeCount) {
       setShowToolbar(false)
-      setShowAiInput(false)
       return
     }
     // Only show toolbar if selection is within our editor
     if (editorEl && !editorEl.contains(sel.anchorNode)) {
       setShowToolbar(false)
-      setShowAiInput(false)
       return
     }
     const range = sel.getRangeAt(0)
@@ -188,7 +215,11 @@ export function EditorPanel() {
   function handleStop() {
     abortRef?.()
     abortRef = null
-    ws.cancelGeneration()
+    if (isEditing()) {
+      setIsEditing(false)
+    } else {
+      ws.cancelGeneration()
+    }
   }
 
   function handleRegenerate() {
@@ -207,33 +238,48 @@ export function EditorPanel() {
   async function handleAiEdit() {
     const s = scene()
     if (!s) return
-    const sel = window.getSelection()
-    const selectedText = sel?.toString() ?? ''
     const direction = aiDirection()
     if (!direction.trim()) return
 
+    const selection = editSelection()
     setShowAiInput(false)
     setShowToolbar(false)
     setAiDirection('')
     setQuotaError(null)
 
-    ws.startGeneration(s.id)
+    const originalContent = ws.draftContent(s.id)
+    pushUndo(s.id, originalContent)
+
+    // Compute before/after slices for in-place splicing
+    const before = selection ? originalContent.slice(0, selection.start) : ''
+    const after = selection ? originalContent.slice(selection.end) : ''
+
+    setIsEditing(true)
+    let replacement = ''
     const { stream, abort } = streamEdit(ws.projectId, s.id, {
-      content: ws.draftContent(s.id),
-      selectedText: selectedText || null,
+      content: originalContent,
+      selectedText: selection?.text ?? null,
       direction,
     })
     abortRef = abort
     try {
       for await (const event of stream) {
         if (event.event === 'token') {
-          ws.appendStreamContent((event.data as { text: string }).text)
+          replacement += (event.data as { text: string }).text
+          // Live update: splice replacement into the selected region
+          if (selection && editorEl) {
+            editorEl.textContent = before + replacement + after
+          }
         } else if (event.event === 'completed') {
           const data = event.data as { draft?: unknown; quota?: QuotaInfo }
           if (data.quota?.warning) {
             setQuotaWarning(data.quota)
           }
-          ws.finishGeneration(ws.streamedContent())
+          const finalContent = selection
+            ? before + replacement + after
+            : replacement
+          ws.setDraftContent(s.id, finalContent)
+          if (editorEl) editorEl.textContent = finalContent
           break
         }
       }
@@ -241,8 +287,12 @@ export function EditorPanel() {
       if (err instanceof ApiError && err.status === 429) {
         setQuotaError(t('quota.exceeded', { date: new Date().toLocaleDateString() }))
       }
-      ws.cancelGeneration()
+      // Restore original on error
+      ws.setDraftContent(s.id, originalContent)
+      if (editorEl) editorEl.textContent = originalContent
     } finally {
+      setIsEditing(false)
+      setEditSelection(null)
       abortRef = null
     }
   }
@@ -342,7 +392,7 @@ export function EditorPanel() {
 
               {/* Actions — right side */}
               <div class="ml-auto flex items-center gap-2 z-10">
-                <Show when={ws.isGenerating() && ws.generatingSceneId() === s().id}>
+                <Show when={(ws.isGenerating() && ws.generatingSceneId() === s().id) || isEditing()}>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -352,7 +402,7 @@ export function EditorPanel() {
                     {t('editor.stop')}
                   </Button>
                 </Show>
-                <Show when={hasDraft() && !ws.isGenerating()}>
+                <Show when={hasDraft() && !ws.isGenerating() && !isEditing()}>
                   <Button
                     variant="primary"
                     size="sm"
@@ -439,32 +489,50 @@ export function EditorPanel() {
                     }
                   >
                     {/* Editable content */}
-                    <div
-                      ref={(el) => {
-                        editorEl = el
-                        // Sync content on mount (fixes stale ref after generation completes)
-                        const sc = scene()
-                        if (sc) {
-                          const content = ws.draftContent(sc.id)
-                          if (el.textContent !== content) {
-                            el.textContent = content
+                    <div class="relative">
+                      <div
+                        ref={(el) => {
+                          editorEl = el
+                          // Sync content on mount (fixes stale ref after generation completes)
+                          const sc = scene()
+                          if (sc) {
+                            const content = ws.draftContent(sc.id)
+                            if (el.textContent !== content) {
+                              el.textContent = content
+                            }
+                            if (content && !undoStacks.has(sc.id)) {
+                              undoStacks.set(sc.id, [content])
+                            }
                           }
-                          if (content && !undoStacks.has(sc.id)) {
-                            undoStacks.set(sc.id, [content])
-                          }
-                        }
-                      }}
-                      contentEditable
-                      class="outline-none text-fg text-[15px] leading-[1.85] min-h-[50vh]"
-                      style={{ 'white-space': 'pre-wrap' }}
-                      spellcheck={false}
-                      onInput={handleEditorInput}
-                    />
+                        }}
+                        contentEditable={!isEditing()}
+                        class="outline-none text-fg text-[15px] leading-[1.85] min-h-[50vh]"
+                        classList={{ 'opacity-60': isEditing() }}
+                        style={{ 'white-space': 'pre-wrap' }}
+                        spellcheck={false}
+                        onInput={handleEditorInput}
+                      />
+                      {/* Inline editing indicator */}
+                      <Show when={isEditing()}>
+                        <div class="absolute inset-0 flex items-start justify-center pt-12 pointer-events-none">
+                          <div class="flex items-center gap-2 text-accent text-sm px-4 py-2 bg-surface border border-accent/30 rounded-xl shadow-lg pointer-events-auto">
+                            <span
+                              class="inline-block w-2 h-2 rounded-full bg-accent"
+                              style={{ animation: 'pulse-dot 1.2s ease-in-out infinite' }}
+                            />
+                            {t('editor.editing')}
+                            <Button variant="ghost" size="sm" icon={<IconStop size={14} />} onClick={handleStop}>
+                              {t('editor.stop')}
+                            </Button>
+                          </div>
+                        </div>
+                      </Show>
+                    </div>
                   </Show>
                 </div>
 
                 {/* -- Floating toolbar (shown when text selected) --------- */}
-                <Show when={showToolbar() && !ws.isGenerating()}>
+                <Show when={showToolbar() && !showAiInput() && !ws.isGenerating()}>
                   <div
                     class="fixed flex items-center gap-1 px-2 py-1.5 bg-surface border border-border-default rounded-xl shadow-xl shadow-canvas/50 z-30 animate-scale-in"
                     style={{
@@ -491,7 +559,12 @@ export function EditorPanel() {
                     <button
                       type="button"
                       class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-accent text-sm font-medium hover:bg-accent-muted transition-colors cursor-pointer"
-                      onClick={() => setShowAiInput((v) => !v)}
+                      onClick={() => {
+                        // Capture selection before it's lost when AI input opens
+                        const sel = captureSelection()
+                        if (sel) setEditSelection(sel)
+                        setShowAiInput((v) => !v)
+                      }}
                     >
                       <IconSparkles size={14} />
                       {t('editor.editWithAi')}
@@ -530,14 +603,6 @@ export function EditorPanel() {
                   </div>
                 </Show>
               </Show>
-            </div>
-
-            {/* -- Footer -------------------------------------------------- */}
-            <div class="flex items-center justify-between px-4 h-8 border-t border-border-subtle text-xs text-fg-muted flex-shrink-0">
-              <span>
-                {charCount().toLocaleString()} {t('editor.characters')}
-              </span>
-              <span>{t('common.saved')}</span>
             </div>
 
             {/* -- Regenerate confirmation dialog -------------------------- */}

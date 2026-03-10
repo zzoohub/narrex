@@ -426,10 +426,26 @@ pub async fn structure_project(
         let timeline_output = match parse_timeline_output(&timeline_buffer) {
             Ok(o) => o,
             Err(e) => {
-                tracing::error!(error = %e, "structure_project: timeline parse failed");
-                yield Ok(Event::default().event("error")
-                    .data(serde_json::json!({"message": e.to_string()}).to_string()));
-                return;
+                tracing::warn!(error = %e, "structure_project: timeline parse failed, retrying with JSON-only prompt");
+                yield Ok(Event::default()
+                    .event("progress")
+                    .data(serde_json::json!({"message": "타임라인 구조를 재정리하는 중"}).to_string()));
+
+                match state.ai_service().retry_timeline(&source_input, &world_json_for_context, &char_json_for_context, &timeline_buffer, &locale).await {
+                    Ok((output, model, provider, tokens_in, tokens_out)) => {
+                        total_model = model;
+                        total_provider = provider;
+                        total_tokens_in += tokens_in;
+                        total_tokens_out += tokens_out;
+                        output
+                    }
+                    Err(retry_err) => {
+                        tracing::error!(error = %retry_err, "structure_project: timeline retry also failed");
+                        yield Ok(Event::default().event("error")
+                            .data(serde_json::json!({"message": retry_err.to_string()}).to_string()));
+                        return;
+                    }
+                }
             }
         };
 

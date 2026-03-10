@@ -271,9 +271,12 @@ impl PromptBuilder {
     }
 
     /// Build prompts for direction-based editing.
-    pub fn edit_system_prompt(locale: &str) -> String {
-        match locale {
-            "ko" => "당신은 한국 웹소설 편집 전문가입니다. \
+    ///
+    /// When `has_selection` is true, the LLM outputs only the replacement text
+    /// for the selected portion so the client can splice it in-place.
+    pub fn edit_system_prompt(locale: &str, has_selection: bool) -> String {
+        match (locale, has_selection) {
+            ("ko", false) => "당신은 한국 웹소설 편집 전문가입니다. \
                 사용자의 편집 지시에 따라 기존 본문을 수정합니다.\n\n\
                 ## 규칙\n\
                 - 지시된 부분만 수정하고, 나머지는 최대한 유지\n\
@@ -281,12 +284,30 @@ impl PromptBuilder {
                 - 수정된 전체 본문을 출력 (변경된 부분만이 아닌 전체)\n\
                 - 마크다운 없이 순수 텍스트"
                 .to_string(),
-            _ => "You are a professional web novel editing expert. \
+            ("ko", true) => "당신은 한국 웹소설 편집 전문가입니다. \
+                사용자가 선택한 텍스트를 편집 지시에 따라 수정합니다.\n\n\
+                ## 규칙\n\
+                - 선택된 텍스트를 대체할 텍스트만 출력\n\
+                - 전체 본문이 아닌, 선택 영역의 대체할 텍스트만 출력\n\
+                - 전후 문맥과 자연스럽게 이어지도록 작성\n\
+                - 문체와 톤의 일관성 유지\n\
+                - 마크다운 없이 순수 텍스트"
+                .to_string(),
+            (_, false) => "You are a professional web novel editing expert. \
                 Revise the existing text according to the user's edit direction.\n\n\
                 ## Rules\n\
                 - Only modify the directed parts; preserve the rest as much as possible\n\
                 - Maintain consistency in style and tone\n\
                 - Output the entire revised text (not just the changed parts)\n\
+                - Plain text without markdown"
+                .to_string(),
+            (_, true) => "You are a professional web novel editing expert. \
+                Revise the selected text according to the user's edit direction.\n\n\
+                ## Rules\n\
+                - Output ONLY the replacement text for the selected portion\n\
+                - Do NOT output the full text, only the text that replaces the selection\n\
+                - Ensure it flows naturally with the surrounding context\n\
+                - Maintain consistency in style and tone\n\
                 - Plain text without markdown"
                 .to_string(),
         }
@@ -307,9 +328,12 @@ impl PromptBuilder {
                 ];
                 if let Some(selected) = selected_text {
                     parts.push(format!("\n## 선택된 텍스트\n{selected}"));
+                    parts.push(format!("\n## 편집 지시\n{direction}"));
+                    parts.push("\n위 지시에 따라 선택된 텍스트의 대체할 텍스트만 작성해주세요. 전체 본문이 아닌, 선택 영역을 대체할 텍스트만 출력합니다.".to_string());
+                } else {
+                    parts.push(format!("\n## 편집 지시\n{direction}"));
+                    parts.push("\n위 지시에 따라 수정된 전체 본문을 작성해주세요.".to_string());
                 }
-                parts.push(format!("\n## 편집 지시\n{direction}"));
-                parts.push("\n위 지시에 따라 수정된 전체 본문을 작성해주세요.".to_string());
                 parts.join("\n")
             }
             _ => {
@@ -319,9 +343,12 @@ impl PromptBuilder {
                 ];
                 if let Some(selected) = selected_text {
                     parts.push(format!("\n## Selected Text\n{selected}"));
+                    parts.push(format!("\n## Edit Direction\n{direction}"));
+                    parts.push("\nPlease write the replacement text only for the selected portion based on the direction above. Do not output the full text.".to_string());
+                } else {
+                    parts.push(format!("\n## Edit Direction\n{direction}"));
+                    parts.push("\nPlease write the entire revised text based on the direction above.".to_string());
                 }
-                parts.push(format!("\n## Edit Direction\n{direction}"));
-                parts.push("\nPlease write the entire revised text based on the direction above.".to_string());
                 parts.join("\n")
             }
         }
@@ -494,7 +521,7 @@ impl PromptBuilder {
              - 앞서 제공된 등장인물 이름과 일치하는 이름 사용\n\n\
              ## 출력 형식\n\
              1. 먼저 구성한 타임라인을 자연스러운 문장으로 설명 (트랙 구성, 주요 장면 흐름)\n\
-             2. 마지막에 ```json 블록으로 구조화된 JSON 출력\n\n\
+             2. 마지막에 반드시 ```json 블록으로 구조화된 JSON 출력\n\n\
              JSON 스키마: {{ \"tracks\": [{{\"label\": string|null, \
                \"scenes\": [{{\"title\": string, \"plot_summary\": string|null, \
                \"location\": string|null, \"mood_tags\": [string]|null, \
@@ -516,6 +543,48 @@ impl PromptBuilder {
             "\n## 등장인물 (Phase 2 결과)".to_string(),
             characters_context.to_string(),
             "\n위 세계관과 등장인물을 바탕으로 타임라인 구조를 출력해주세요.".to_string(),
+        ].join("\n")
+    }
+
+    /// Phase 3 retry: JSON-only system prompt for when initial streaming attempt fails to produce valid JSON.
+    pub fn timeline_retry_system_prompt(locale: &str) -> String {
+        let lang_instruction = match locale {
+            "ko" => "모든 텍스트는 반드시 한국어로 작성",
+            _ => "All text MUST be written in English",
+        };
+
+        format!(
+            "이전 타임라인 생성에서 유효한 JSON이 생성되지 않았습니다.\n\
+             아래 지시에 따라 오직 JSON만 출력하세요. 설명, 마크다운 제목, 기타 텍스트는 절대 포함하지 마세요.\n\n\
+             ## 규칙\n\
+             - {lang_instruction}\n\
+             - 1-3개의 트랙, 트랙당 3-10개의 장면\n\
+             - 출력은 반드시 {{ 로 시작하고 }} 로 끝나는 순수 JSON\n\n\
+             JSON 스키마:\n\
+             {{ \"tracks\": [{{\"label\": string|null, \
+               \"scenes\": [{{\"title\": string, \"plot_summary\": string|null, \
+               \"location\": string|null, \"mood_tags\": [string]|null, \
+               \"characters\": [string]|null}}]}}] }}"
+        )
+    }
+
+    /// Phase 3 retry user prompt: includes previous failed output for context.
+    pub fn timeline_retry_user_prompt(
+        source_input: &str,
+        world_context: &str,
+        characters_context: &str,
+        failed_output: &str,
+    ) -> String {
+        vec![
+            "## 원본 텍스트".to_string(),
+            source_input.to_string(),
+            "\n## 세계관".to_string(),
+            world_context.to_string(),
+            "\n## 등장인물".to_string(),
+            characters_context.to_string(),
+            "\n## 이전 출력 (JSON 파싱 실패)".to_string(),
+            failed_output.chars().take(2000).collect::<String>(),
+            "\n위 내용을 바탕으로 올바른 JSON만 출력하세요.".to_string(),
         ].join("\n")
     }
 
@@ -844,9 +913,18 @@ mod tests {
     // ---- edit prompts (Korean) ----
 
     #[test]
-    fn edit_system_prompt_ko_contains_editor_role() {
-        let prompt = PromptBuilder::edit_system_prompt("ko");
+    fn edit_system_prompt_ko_without_selection_outputs_full() {
+        let prompt = PromptBuilder::edit_system_prompt("ko", false);
         assert!(prompt.contains("편집 전문가"));
+        assert!(prompt.contains("전체 본문을 출력"));
+    }
+
+    #[test]
+    fn edit_system_prompt_ko_with_selection_outputs_replacement_only() {
+        let prompt = PromptBuilder::edit_system_prompt("ko", true);
+        assert!(prompt.contains("편집 전문가"));
+        assert!(prompt.contains("대체할 텍스트만 출력"));
+        assert!(!prompt.contains("전체 본문을 출력"));
     }
 
     #[test]
@@ -855,6 +933,7 @@ mod tests {
         assert!(prompt.contains("본문 내용"));
         assert!(prompt.contains("더 긴장감 있게"));
         assert!(!prompt.contains("선택된 텍스트"));
+        assert!(prompt.contains("전체 본문을 작성"));
     }
 
     #[test]
@@ -862,14 +941,24 @@ mod tests {
         let prompt = PromptBuilder::edit_user_prompt("본문", Some("선택 부분"), "수정해줘", "ko");
         assert!(prompt.contains("선택 부분"));
         assert!(prompt.contains("수정해줘"));
+        assert!(prompt.contains("대체할 텍스트만"));
     }
 
     // ---- edit prompts (English) ----
 
     #[test]
-    fn edit_system_prompt_en_contains_editor_role() {
-        let prompt = PromptBuilder::edit_system_prompt("en");
+    fn edit_system_prompt_en_without_selection_outputs_full() {
+        let prompt = PromptBuilder::edit_system_prompt("en", false);
         assert!(prompt.contains("editing expert"));
+        assert!(prompt.contains("entire revised text"));
+    }
+
+    #[test]
+    fn edit_system_prompt_en_with_selection_outputs_replacement_only() {
+        let prompt = PromptBuilder::edit_system_prompt("en", true);
+        assert!(prompt.contains("editing expert"));
+        assert!(prompt.contains("replacement text for the selected portion"));
+        assert!(!prompt.contains("entire revised text"));
     }
 
     #[test]
@@ -877,6 +966,7 @@ mod tests {
         let prompt = PromptBuilder::edit_user_prompt("content here", None, "make it tenser", "en");
         assert!(prompt.contains("## Current Text"));
         assert!(prompt.contains("## Edit Direction"));
+        assert!(prompt.contains("entire revised text"));
     }
 
     #[test]
@@ -884,6 +974,7 @@ mod tests {
         let prompt = PromptBuilder::edit_user_prompt("body", Some("selected"), "fix this", "en");
         assert!(prompt.contains("## Selected Text"));
         assert!(prompt.contains("selected"));
+        assert!(prompt.contains("replacement text only"));
     }
 
     // ---- summary prompts (Korean) ----
@@ -1009,6 +1100,36 @@ mod tests {
         assert!(prompt.contains("스토리"));
         assert!(prompt.contains("세계관"));
         assert!(prompt.contains("등장인물"));
+    }
+
+    // ---- timeline retry prompts ----
+
+    #[test]
+    fn timeline_retry_system_prompt_demands_json_only() {
+        let prompt = PromptBuilder::timeline_retry_system_prompt("ko");
+        assert!(prompt.contains("JSON만"));
+        assert!(prompt.contains("tracks"));
+    }
+
+    #[test]
+    fn timeline_retry_system_prompt_en() {
+        let prompt = PromptBuilder::timeline_retry_system_prompt("en");
+        assert!(prompt.contains("English"));
+    }
+
+    #[test]
+    fn timeline_retry_user_prompt_includes_failed_output() {
+        let prompt = PromptBuilder::timeline_retry_user_prompt("스토리", "{}", "{}", "이전 실패 출력");
+        assert!(prompt.contains("이전 실패 출력"));
+        assert!(prompt.contains("JSON 파싱 실패"));
+    }
+
+    #[test]
+    fn timeline_retry_user_prompt_truncates_long_failed_output() {
+        let long_output = "a".repeat(3000);
+        let prompt = PromptBuilder::timeline_retry_user_prompt("스토리", "{}", "{}", &long_output);
+        // Should be truncated to 2000 chars
+        assert!(prompt.len() < long_output.len() + 500);
     }
 
     // ---- structure prompts (legacy, kept for backward compat) ----

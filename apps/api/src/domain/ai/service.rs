@@ -211,7 +211,8 @@ where
         locale: &str,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<SseEvent, Infallible>> + Send>>, AiError> {
         self.check_quota(user_id).await?;
-        let system = PromptBuilder::edit_system_prompt(locale);
+        let has_selection = edit_req.selected_text.is_some();
+        let system = PromptBuilder::edit_system_prompt(locale, has_selection);
         let user = PromptBuilder::edit_user_prompt(
             &edit_req.content,
             edit_req.selected_text.as_deref(),
@@ -519,6 +520,33 @@ where
             .generate_stream(req)
             .await
             .map_err(|e| AiError::GenerationFailed(e.to_string()))
+    }
+
+    /// Retry Phase 3 with a JSON-only prompt (non-streaming).
+    /// Called when `parse_timeline_output` fails on the streaming result.
+    pub async fn retry_timeline(
+        &self,
+        source_input: &str,
+        world_context: &str,
+        characters_context: &str,
+        failed_output: &str,
+        locale: &str,
+    ) -> Result<(TimelineOutput, String, String, u32, u32), AiError> {
+        let system = PromptBuilder::timeline_retry_system_prompt(locale);
+        let user = PromptBuilder::timeline_retry_user_prompt(source_input, world_context, characters_context, failed_output);
+        let req = GenerateRequest {
+            system_prompt: system,
+            user_prompt: user,
+            max_tokens: Some(16384),
+            temperature: Some(0.4),
+        };
+        let resp = self.llm
+            .generate(req)
+            .await
+            .map_err(|e| AiError::GenerationFailed(e.to_string()))?;
+
+        let output = parse_timeline_output(&resp.text)?;
+        Ok((output, resp.model, resp.provider, resp.token_count_input, resp.token_count_output))
     }
 
     /// Check quota and return error if exceeded. Used before generation calls.
@@ -986,6 +1014,25 @@ mod tests {
         }
     }
 
+    #[test]
+    fn parse_timeline_output_narrative_without_json() {
+        // Simulates LLM ending with "### JSON 데이터\n타임라인" without actual JSON
+        let raw = "등장인물 설명...\n\n### JSON 데이터\n타임라인";
+        let err = parse_timeline_output(raw).unwrap_err();
+        match err {
+            AiError::GenerationFailed(msg) => assert!(msg.contains("valid JSON")),
+            other => panic!("expected GenerationFailed, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_timeline_output_truncated_json_in_fence() {
+        // Simulates LLM output where JSON block is truncated (no closing ```)
+        let raw = "설명...\n```json\n{\"tracks\": [{\"label\": \"메인\", \"scenes\": [{\"title\": \"시작\"}]}]}";
+        let output = parse_timeline_output(raw).unwrap();
+        assert_eq!(output.tracks.len(), 1);
+    }
+
     // ---- stream_world / stream_characters / stream_timeline tests ----
 
     #[tokio::test]
@@ -1043,6 +1090,57 @@ mod tests {
             Box::pin(stream).collect::<Vec<_>>().await
         };
         assert_eq!(chunks.len(), 2);
+    }
+
+    // ---- retry_timeline tests ----
+
+    #[tokio::test]
+    async fn retry_timeline_succeeds_with_valid_json() {
+        let json = r#"{"tracks": [{"label": "메인", "scenes": [{"title": "시작"}]}]}"#;
+        let mock_llm = MockLlmProvider::new(json.to_string());
+        let svc = build_test_ai_service(mock_llm);
+
+        let (output, model, provider, _, _) = svc
+            .retry_timeline("input", "{}", "{}", "previous failed output", "ko")
+            .await
+            .unwrap();
+
+        assert_eq!(output.tracks.len(), 1);
+        assert_eq!(output.tracks[0].scenes[0].title, "시작");
+        assert_eq!(model, "test-model");
+        assert_eq!(provider, "test-provider");
+    }
+
+    #[tokio::test]
+    async fn retry_timeline_fails_when_llm_returns_no_json() {
+        let mock_llm = MockLlmProvider::new("still no json".to_string());
+        let svc = build_test_ai_service(mock_llm);
+
+        let err = svc
+            .retry_timeline("input", "{}", "{}", "failed", "ko")
+            .await
+            .unwrap_err();
+
+        match err {
+            AiError::GenerationFailed(msg) => assert!(msg.contains("valid JSON")),
+            other => panic!("expected GenerationFailed, got: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn retry_timeline_fails_when_llm_unavailable() {
+        let mock_llm = MockLlmProvider::failing();
+        let svc = build_test_ai_service(mock_llm);
+
+        let err = svc
+            .retry_timeline("input", "{}", "{}", "failed", "ko")
+            .await
+            .unwrap_err();
+
+        match err {
+            AiError::GenerationFailed(msg) => assert!(msg.contains("provider unavailable")),
+            other => panic!("expected GenerationFailed, got: {other:?}"),
+        }
     }
 
     // ---- log_generation tests ----

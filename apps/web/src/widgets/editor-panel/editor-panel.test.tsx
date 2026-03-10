@@ -288,6 +288,27 @@ describe('EditorPanel', () => {
     expect(prevBtn).not.toBeDisabled()
   })
 
+  it('keeps editor content visible during AI edit (no full-screen streaming)', async () => {
+    // When AI edit is in progress, the existing content should stay visible
+    // (not replaced by the streaming view used for full generation)
+    selectedSceneFn.mockReturnValue({
+      id: 's1', trackId: 't1', projectId: 'p1', title: 'My Scene',
+      status: 'ai_draft', characterIds: [], moodTags: [], content: null,
+      location: null, plotSummary: 'A summary',
+      startPosition: 0, duration: 1, createdAt: '', updatedAt: '',
+    })
+    draftContentFn.mockReturnValue('Original draft content here')
+    // isGenerating stays false — AI edit does NOT use ws.startGeneration
+    isGeneratingFn.mockReturnValue(false)
+    renderEditor()
+    const editable = document.querySelector('[contenteditable]')
+    expect(editable).not.toBeNull()
+    expect(editable!.textContent).toBe('Original draft content here')
+    // The streaming UI ("Thinking..." / "Generating...") should NOT appear
+    expect(screen.queryByText('Thinking...')).not.toBeInTheDocument()
+    expect(screen.queryByText('Generating...')).not.toBeInTheDocument()
+  })
+
   it('shows plot summary hint when no plot summary and no draft', () => {
     selectedSceneFn.mockReturnValue({
       id: 's1', trackId: 't1', projectId: 'p1', title: 'My Scene',
