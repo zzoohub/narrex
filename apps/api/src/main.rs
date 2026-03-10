@@ -42,10 +42,10 @@ async fn main() -> anyhow::Result<()> {
     let postgres = Postgres::connect(&config.database_url).await?;
     tracing::info!("database connected");
 
-    // 4. Create LLM gateway.
-    let primary =
+    // 4. Create LLM gateway (Gemini 2.5 Flash-Lite primary, CF Workers AI fallback).
+    let primary = GeminiFlashProvider::new(config.gemini_api_key.clone());
+    let fallback =
         CfWorkersAiProvider::new(config.cf_account_id.clone(), config.cf_api_token.clone());
-    let fallback = GeminiFlashProvider::new(config.gemini_api_key.clone());
     let llm = Arc::new(LlmGateway::new(Box::new(primary), Box::new(fallback)));
 
     // 5. Create JwtTokenService.

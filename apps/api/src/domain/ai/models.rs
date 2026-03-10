@@ -248,8 +248,8 @@ pub struct CostSummary {
 // Quota
 // ---------------------------------------------------------------------------
 
-pub const MONTHLY_GENERATION_LIMIT: i64 = 50;
-pub const MONTHLY_GENERATION_WARNING_THRESHOLD: i64 = 40;
+pub const MONTHLY_GENERATION_LIMIT: i64 = 10;
+pub const MONTHLY_GENERATION_WARNING_THRESHOLD: i64 = 7;
 
 #[derive(Debug, Clone)]
 pub struct QuotaInfo {
@@ -491,16 +491,16 @@ mod tests {
     #[test]
     fn quota_info_below_warning() {
         let info = QuotaInfo {
-            used: 10,
+            used: 3,
             limit: MONTHLY_GENERATION_LIMIT,
-            remaining: 40,
+            remaining: 7,
             warning: false,
             exceeded: false,
             resets_at: Utc::now(),
         };
         assert!(!info.warning);
         assert!(!info.exceeded);
-        assert_eq!(info.remaining, 40);
+        assert_eq!(info.remaining, 7);
     }
 
     #[test]
@@ -508,7 +508,7 @@ mod tests {
         let info = QuotaInfo {
             used: MONTHLY_GENERATION_WARNING_THRESHOLD,
             limit: MONTHLY_GENERATION_LIMIT,
-            remaining: 10,
+            remaining: 3,
             warning: true,
             exceeded: false,
             resets_at: Utc::now(),
@@ -534,8 +534,8 @@ mod tests {
 
     #[test]
     fn quota_constants() {
-        assert_eq!(MONTHLY_GENERATION_LIMIT, 50);
-        assert_eq!(MONTHLY_GENERATION_WARNING_THRESHOLD, 40);
+        assert_eq!(MONTHLY_GENERATION_LIMIT, 10);
+        assert_eq!(MONTHLY_GENERATION_WARNING_THRESHOLD, 7);
         assert!(MONTHLY_GENERATION_WARNING_THRESHOLD < MONTHLY_GENERATION_LIMIT);
     }
 

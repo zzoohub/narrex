@@ -1733,44 +1733,44 @@ mod tests {
 
     #[tokio::test]
     async fn get_quota_below_warning() {
-        let log_repo = MockLogRepo::with_count(10);
+        let log_repo = MockLogRepo::with_count(3);
         let svc = build_test_ai_service_with_log_repo(MockLlmProvider::new("{}".into()), log_repo);
         let quota = svc.get_quota(Uuid::new_v4()).await.unwrap();
-        assert_eq!(quota.used, 10);
-        assert_eq!(quota.limit, 50);
-        assert_eq!(quota.remaining, 40);
+        assert_eq!(quota.used, 3);
+        assert_eq!(quota.limit, 10);
+        assert_eq!(quota.remaining, 7);
         assert!(!quota.warning);
         assert!(!quota.exceeded);
     }
 
     #[tokio::test]
     async fn get_quota_at_warning_threshold() {
-        let log_repo = MockLogRepo::with_count(40);
+        let log_repo = MockLogRepo::with_count(7);
         let svc = build_test_ai_service_with_log_repo(MockLlmProvider::new("{}".into()), log_repo);
         let quota = svc.get_quota(Uuid::new_v4()).await.unwrap();
-        assert_eq!(quota.used, 40);
-        assert_eq!(quota.remaining, 10);
+        assert_eq!(quota.used, 7);
+        assert_eq!(quota.remaining, 3);
         assert!(quota.warning);
         assert!(!quota.exceeded);
     }
 
     #[tokio::test]
     async fn get_quota_between_warning_and_limit() {
-        let log_repo = MockLogRepo::with_count(45);
+        let log_repo = MockLogRepo::with_count(9);
         let svc = build_test_ai_service_with_log_repo(MockLlmProvider::new("{}".into()), log_repo);
         let quota = svc.get_quota(Uuid::new_v4()).await.unwrap();
-        assert_eq!(quota.used, 45);
-        assert_eq!(quota.remaining, 5);
+        assert_eq!(quota.used, 9);
+        assert_eq!(quota.remaining, 1);
         assert!(quota.warning);
         assert!(!quota.exceeded);
     }
 
     #[tokio::test]
     async fn get_quota_at_limit_shows_exceeded() {
-        let log_repo = MockLogRepo::with_count(50);
+        let log_repo = MockLogRepo::with_count(10);
         let svc = build_test_ai_service_with_log_repo(MockLlmProvider::new("{}".into()), log_repo);
         let quota = svc.get_quota(Uuid::new_v4()).await.unwrap();
-        assert_eq!(quota.used, 50);
+        assert_eq!(quota.used, 10);
         assert_eq!(quota.remaining, 0);
         assert!(quota.warning);
         assert!(quota.exceeded);
@@ -1778,7 +1778,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_quota_over_limit_remaining_is_zero() {
-        let log_repo = MockLogRepo::with_count(55);
+        let log_repo = MockLogRepo::with_count(15);
         let svc = build_test_ai_service_with_log_repo(MockLlmProvider::new("{}".into()), log_repo);
         let quota = svc.get_quota(Uuid::new_v4()).await.unwrap();
         assert_eq!(quota.remaining, 0);
@@ -1787,7 +1787,7 @@ mod tests {
 
     #[tokio::test]
     async fn check_quota_ok_below_limit() {
-        let log_repo = MockLogRepo::with_count(30);
+        let log_repo = MockLogRepo::with_count(5);
         let svc = build_test_ai_service_with_log_repo(MockLlmProvider::new("{}".into()), log_repo);
         let result = svc.check_quota(Uuid::new_v4()).await;
         assert!(result.is_ok());
@@ -1795,13 +1795,13 @@ mod tests {
 
     #[tokio::test]
     async fn check_quota_errors_at_limit() {
-        let log_repo = MockLogRepo::with_count(50);
+        let log_repo = MockLogRepo::with_count(10);
         let svc = build_test_ai_service_with_log_repo(MockLlmProvider::new("{}".into()), log_repo);
         let err = svc.check_quota(Uuid::new_v4()).await.unwrap_err();
         match err {
             AiError::QuotaExceeded { used, limit, .. } => {
-                assert_eq!(used, 50);
-                assert_eq!(limit, 50);
+                assert_eq!(used, 10);
+                assert_eq!(limit, 10);
             }
             other => panic!("expected QuotaExceeded, got: {other:?}"),
         }
@@ -1809,7 +1809,7 @@ mod tests {
 
     #[tokio::test]
     async fn check_quota_errors_over_limit() {
-        let log_repo = MockLogRepo::with_count(60);
+        let log_repo = MockLogRepo::with_count(15);
         let svc = build_test_ai_service_with_log_repo(MockLlmProvider::new("{}".into()), log_repo);
         let err = svc.check_quota(Uuid::new_v4()).await.unwrap_err();
         assert!(matches!(err, AiError::QuotaExceeded { .. }));
