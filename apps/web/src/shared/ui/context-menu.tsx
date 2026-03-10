@@ -50,7 +50,7 @@ export function ContextMenu(props: ContextMenuProps) {
 
   /* ── open handler ───────────────────────────────────────────────── */
 
-  const handleContextMenu: JSX.EventHandler<HTMLDivElement, MouseEvent> = (e) => {
+  const handleContextMenu: JSX.EventHandler<HTMLDivElement | SVGGElement, MouseEvent> = (e) => {
     e.preventDefault()
     e.stopPropagation()
 

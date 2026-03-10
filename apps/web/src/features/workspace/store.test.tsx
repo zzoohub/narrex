@@ -296,11 +296,6 @@ describe('WorkspaceStore', () => {
 
         ctx.updateScene('s1', { title: 'Updated Title' })
 
-        // Optimistic update
-        const scene = ctx.state.scenes.find(s => s.id === 's1')
-        // Note: state is not loaded yet since onMount hasn't resolved
-        // But updateScene still modifies the store
-
         expect(sceneApi.updateScene).toHaveBeenCalledWith('p1', 's1', { title: 'Updated Title' })
         expect(ctx.saveStatus()).toBe('saving')
         dispose()

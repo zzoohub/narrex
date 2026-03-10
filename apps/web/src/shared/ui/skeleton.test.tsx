@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { render, screen } from '@solidjs/testing-library'
+import { render } from '@solidjs/testing-library'
 import { Skeleton, SkeletonCard } from './skeleton'
 
 describe('Skeleton', () => {

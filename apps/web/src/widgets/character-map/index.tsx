@@ -103,9 +103,9 @@ function GraphView(props: {
   t: (k: string, params?: Record<string, string | number>) => string
   onSelect: (id: string) => void
   onCollapse?: () => void
-  fullscreen?: boolean
-  onEnterFullscreen?: () => void
-  onExitFullscreen?: () => void
+  fullscreen?: boolean | undefined
+  onEnterFullscreen?: (() => void) | undefined
+  onExitFullscreen?: (() => void) | undefined
 }) {
   const ws = useWorkspace()
 
@@ -117,8 +117,8 @@ function GraphView(props: {
 
   /* ── Zoom state (fullscreen only) ──────────────────────────────────── */
   const [zoomScale, setZoomScale] = createSignal(1)
-  const [panX, setPanX] = createSignal(0)
-  const [panY, setPanY] = createSignal(0)
+  const [panX] = createSignal(0)
+  const [panY] = createSignal(0)
 
   function handleZoomIn() {
     setZoomScale((s) => Math.min(4, s * 1.3))

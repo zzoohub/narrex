@@ -154,20 +154,6 @@ describe('EditorPanel', () => {
     expect(generateBtns.length).toBe(1)
   })
 
-  it('shows character count in footer', () => {
-    selectedSceneFn.mockReturnValue({
-      id: 's1', trackId: 't1', projectId: 'p1', title: 'My Scene',
-      status: 'ai_draft', characterIds: [], moodTags: [], content: null,
-      location: null, plotSummary: 'A summary',
-      startPosition: 0, duration: 1,
-      createdAt: '', updatedAt: '',
-    })
-    draftContentFn.mockReturnValue('Hello world')
-    renderEditor()
-    // Should show "11 characters" (or localized equivalent)
-    expect(screen.getByText(/11/)).toBeInTheDocument()
-  })
-
   it('shows "Thinking..." when generation starts but no content yet', () => {
     selectedSceneFn.mockReturnValue({
       id: 's1', trackId: 't1', projectId: 'p1', title: 'My Scene',
@@ -258,20 +244,6 @@ describe('EditorPanel', () => {
     await fireEvent.click(generateBtn)
     // Dialog should appear
     expect(screen.getByText('Re-generate draft?')).toBeInTheDocument()
-  })
-
-  it('shows streamed content character count during generation', () => {
-    selectedSceneFn.mockReturnValue({
-      id: 's1', trackId: 't1', projectId: 'p1', title: 'My Scene',
-      status: 'empty', characterIds: [], moodTags: [], content: null,
-      location: null, plotSummary: 'A summary',
-      startPosition: 0, duration: 1, createdAt: '', updatedAt: '',
-    })
-    isGeneratingFn.mockReturnValue(true)
-    generatingSceneIdFn.mockReturnValue('s1')
-    streamedContentFn.mockReturnValue('Hello world!!')
-    renderEditor()
-    expect(screen.getByText(/13/)).toBeInTheDocument() // 13 chars
   })
 
   it('enables prev button when previous scene exists', () => {

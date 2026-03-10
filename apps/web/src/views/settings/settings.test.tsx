@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@solidjs/testing-library'
+import { render, screen } from '@solidjs/testing-library'
 import { I18nProvider } from '@/shared/lib/i18n'
 
 // ---------------------------------------------------------------------------

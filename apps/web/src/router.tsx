@@ -1,4 +1,4 @@
-import { createRouter as createTanStackRouter, ErrorComponent } from '@tanstack/solid-router'
+import { createRouter as createTanStackRouter } from '@tanstack/solid-router'
 import { routeTree } from './routeTree.gen'
 
 export function getRouter() {

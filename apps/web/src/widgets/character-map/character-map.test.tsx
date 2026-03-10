@@ -211,7 +211,7 @@ describe('CharacterMap', () => {
     })
 
     it('does not show collapse button in fullscreen mode', () => {
-      renderCharacterMap({ fullscreen: true, onCollapse: vi.fn() as any, onExitFullscreen: vi.fn() })
+      renderCharacterMap({ fullscreen: true, onExitFullscreen: vi.fn() })
       expect(screen.queryByLabelText('Collapse character panel')).not.toBeInTheDocument()
     })
   })

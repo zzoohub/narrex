@@ -1,4 +1,4 @@
-import { createSignal, Show, For, onCleanup, onMount, type Accessor } from 'solid-js'
+import { createSignal, Show, For, onCleanup, onMount } from 'solid-js'
 import { Link, useNavigate } from '@tanstack/solid-router'
 import { useI18n } from '@/shared/lib/i18n'
 import {
@@ -157,7 +157,7 @@ export function ProjectCreationView() {
   // ── Live preview signals ──
   const [activePhase, setActivePhase] = createSignal(-1)
   const [phaseTexts, setPhaseTexts] = createSignal<Record<number, string>>({})
-  const [phaseTokenCount, setPhaseTokenCount] = createSignal(0)
+  const [_phaseTokenCount, setPhaseTokenCount] = createSignal(0)
   const [lastRawTokens, setLastRawTokens] = createSignal('')
   const [elapsedSecs, setElapsedSecs] = createSignal(0)
   const [completionData, setCompletionData] = createSignal<{
@@ -307,12 +307,11 @@ export function ProjectCreationView() {
             // Show completion card after brief pause
             completionPauseTimer = setTimeout(() => {
               completionPauseTimer = null
-              setCompletionData({
-                projectId,
-                characterCount: workspace?.characterCount,
-                sceneCount: workspace?.sceneCount,
-                trackCount: workspace?.trackCount,
-              })
+              const data: { projectId: string; characterCount?: number; sceneCount?: number; trackCount?: number } = { projectId }
+              if (workspace?.characterCount != null) data.characterCount = workspace.characterCount
+              if (workspace?.sceneCount != null) data.sceneCount = workspace.sceneCount
+              if (workspace?.trackCount != null) data.trackCount = workspace.trackCount
+              setCompletionData(data)
 
               // Auto-navigate after 2s
               if (projectId) {
@@ -615,7 +614,7 @@ export function ProjectCreationView() {
                     <Show when={activePhase() >= phaseIdx || completedSteps() > phaseIdx}>
                       <div class={phaseIdx > 0 ? 'mt-8' : ''}>
                         <h3 class="text-sm font-semibold text-accent tracking-wider mb-3">
-                          {t(phaseHeadingKeys[phaseIdx])}
+                          {t(phaseHeadingKeys[phaseIdx]!)}
                         </h3>
                         <div class="text-sm text-fg leading-relaxed whitespace-pre-wrap">
                           {(() => {

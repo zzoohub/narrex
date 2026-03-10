@@ -51,14 +51,12 @@ describe('useTheme', () => {
 
   it('toggle changes the resolved theme', () => {
     // Use separate createRoot calls to allow effects to flush between them
-    let setPreferenceFn: ((p: ThemePreference) => void) | undefined
     let toggleFn: (() => void) | undefined
     let themeFn: (() => 'light' | 'dark') | undefined
 
     createRoot((dispose) => {
       cleanup = dispose
       const { theme, setPreference, toggle } = useTheme()
-      setPreferenceFn = setPreference
       toggleFn = toggle
       themeFn = theme
       setPreference('dark')

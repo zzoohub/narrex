@@ -11,7 +11,7 @@ import type { Locale } from '@/shared/types'
 
 export function SettingsView() {
   const { t, locale, setLocale } = useI18n()
-  const { theme, preference, setPreference } = useTheme()
+  const { preference, setPreference } = useTheme()
   const { user, logout } = useAuth()
 
   // Profile form state

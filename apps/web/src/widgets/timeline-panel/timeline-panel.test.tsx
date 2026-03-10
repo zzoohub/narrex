@@ -98,7 +98,7 @@ vi.mock('@/features/workspace', () => ({
 function renderTimeline(props: { onCollapse?: () => void } = {}) {
   return render(() => (
     <I18nProvider initial="en">
-      <TimelinePanel onCollapse={props.onCollapse} />
+      <TimelinePanel {...(props.onCollapse ? { onCollapse: props.onCollapse } : {})} />
     </I18nProvider>
   ))
 }
@@ -398,7 +398,7 @@ describe('TimelinePanel', () => {
       renderTimeline()
       const buttons = screen.getAllByLabelText('Add scene')
       // First track (t1): scenes end at max(0+1, 2+1) = 3
-      await fireEvent.click(buttons[0])
+      await fireEvent.click(buttons[0]!)
       expect(mockAddScene).toHaveBeenCalledWith('t1', 3)
     })
 

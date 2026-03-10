@@ -14,7 +14,6 @@ import {
   IconSettings,
   IconLogOut,
   ContextMenu,
-  Separator,
   Dialog,
 } from '@/shared/ui'
 import { listProjects, deleteProject } from '@/entities/project'

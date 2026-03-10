@@ -125,14 +125,6 @@ export function EditorPanel() {
     const s = scene()
     return s ? ws.draftContent(s.id).length > 0 : false
   }
-  const charCount = () => {
-    const s = scene()
-    if (!s) return 0
-    if (ws.isGenerating() && ws.generatingSceneId() === s.id) {
-      return ws.streamedContent().length
-    }
-    return ws.draftContent(s.id).length
-  }
 
   // ---- Selection-change listener for floating toolbar -----------------------
 
