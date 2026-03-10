@@ -22,7 +22,7 @@ impl GeminiFlashProvider {
         Self {
             client: Client::new(),
             api_key,
-            model: "gemini-2.5-flash-lite-lite".to_string(),
+            model: "gemini-2.5-flash-lite".to_string(),
         }
     }
 
