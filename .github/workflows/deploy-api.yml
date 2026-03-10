@@ -1,0 +1,99 @@
+name: Deploy API
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/api/**"
+      - "db/migrations/**"
+      - ".github/workflows/deploy-api.yml"
+
+concurrency:
+  group: deploy-api
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build & Deploy to Cloud Run
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      REGION: us-east4
+      SERVICE: narrex-api
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SA_EMAIL }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        env:
+          GAR_REGION: ${{ vars.GCP_REGION }}
+        run: gcloud auth configure-docker "$GAR_REGION-docker.pkg.dev" --quiet
+
+      - name: Set image tag
+        id: meta
+        env:
+          GAR_REGION: ${{ vars.GCP_REGION }}
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          REGISTRY="$GAR_REGION-docker.pkg.dev/$PROJECT_ID/narrex"
+          echo "image=$REGISTRY/api:$COMMIT_SHA" >> "$GITHUB_OUTPUT"
+          echo "latest=$REGISTRY/api:latest" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/api
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}
+            ${{ steps.meta.outputs.latest }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run migrations
+        env:
+          DB_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          cargo install sqlx-cli --no-default-features --features postgres
+          sqlx migrate run --source db/migrations --database-url "$DB_URL"
+
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE }}
+          image: ${{ steps.meta.outputs.image }}
+          region: ${{ env.REGION }}
+          flags: "--cpu-boost --execution-environment=gen2 --cpu=1 --memory=512Mi --min-instances=0 --max-instances=3"
+          env_vars: |
+            PORT=8080
+            RUN_MODE=production
+          secrets: |
+            DATABASE_URL=DATABASE_URL:latest
+            JWT_SECRET=JWT_SECRET:latest
+            GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest
+            GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest
+            GOOGLE_REDIRECT_URI=GOOGLE_REDIRECT_URI:latest
+            CF_ACCOUNT_ID=CF_ACCOUNT_ID:latest
+            CF_API_TOKEN=CF_API_TOKEN:latest
+            GEMINI_API_KEY=GEMINI_API_KEY:latest
+            WEB_APP_URL=WEB_APP_URL:latest
+            CORS_ORIGIN=CORS_ORIGIN:latest
+            R2_ACCOUNT_ID=R2_ACCOUNT_ID:latest
+            R2_ACCESS_KEY_ID=R2_ACCESS_KEY_ID:latest
+            R2_SECRET_ACCESS_KEY=R2_SECRET_ACCESS_KEY:latest
+            R2_BUCKET_NAME=R2_BUCKET_NAME:latest
+            R2_PUBLIC_URL=R2_PUBLIC_URL:latest

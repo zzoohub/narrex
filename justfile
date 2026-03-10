@@ -176,15 +176,29 @@ test: api-test worker-test web-test mobile-test
 
 check: lint test
 
-# ─── Build ───────────────────────────────────────────────────────────────────
 
-build service:
-    docker build -t {{ service }} -f apps/{{ service }}/Dockerfile .
+# ─── Build ───────────────────────────────────────────────────────────────
 
-# ─── Deploy ──────────────────────────────────────────────────────────────────
+api-build:
+    cd {{ api_dir }} && docker buildx build --platform linux/arm64 -t narrex-api .
 
-deploy-api:
-    gcloud run deploy api --source {{ api_dir }}
+web-preview:
+    cd {{ web_dir }} && bun run preview
 
-deploy-worker:
-    gcloud run deploy worker --source {{ worker_dir }}
+# ─── Deploy ──────────────────────────────────────────────────────────────
+
+region := "us-east4"
+gcr := "gcr.io/narrex"
+
+deploy-api: api-build
+    docker tag narrex-api {{ gcr }}/api:latest
+    docker push {{ gcr }}/api:latest
+    gcloud run deploy narrex-api \
+        --image {{ gcr }}/api:latest \
+        --region {{ region }} \
+        --platform managed \
+        --port 8080 \
+        --allow-unauthenticated
+
+deploy-web:
+    cd {{ web_dir }} && bun run deploy
