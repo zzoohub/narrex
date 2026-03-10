@@ -66,19 +66,17 @@ impl<U: UserRepository, T: TokenService, S: AvatarStorage> AuthServiceImpl<U, T,
         update: &UpdateProfile,
     ) -> Result<User, AuthError> {
         // Validate display_name if provided.
-        if let Some(ref name_opt) = update.display_name {
-            if let Some(ref name) = name_opt {
-                let trimmed = name.trim();
-                if trimmed.is_empty() {
-                    return Err(AuthError::InvalidInput(
-                        "display name cannot be empty".into(),
-                    ));
-                }
-                if trimmed.len() > 50 {
-                    return Err(AuthError::InvalidInput(
-                        "display name must be 50 characters or fewer".into(),
-                    ));
-                }
+        if let Some(Some(ref name)) = update.display_name {
+            let trimmed = name.trim();
+            if trimmed.is_empty() {
+                return Err(AuthError::InvalidInput(
+                    "display name cannot be empty".into(),
+                ));
+            }
+            if trimmed.len() > 50 {
+                return Err(AuthError::InvalidInput(
+                    "display name must be 50 characters or fewer".into(),
+                ));
             }
         }
 

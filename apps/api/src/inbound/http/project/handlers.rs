@@ -536,14 +536,13 @@ pub async fn import_project(
 
     // Extract file from multipart.
     let mut file_data: Option<(String, Vec<u8>)> = None;
-    while let Ok(Some(field)) = multipart.next_field().await {
+    if let Ok(Some(field)) = multipart.next_field().await {
         let file_name = field.file_name().map(|s| s.to_string()).unwrap_or_default();
         let data = field
             .bytes()
             .await
             .map_err(|e| ApiError::BadRequest(format!("failed to read file: {e}")))?;
         file_data = Some((file_name, data.to_vec()));
-        break; // Only process the first file.
     }
 
     let (file_name, data) =
@@ -551,7 +550,7 @@ pub async fn import_project(
 
     // Parse file content.
     let source_input =
-        extract_text_from_file(&file_name, &data).map_err(|e| ApiError::BadRequest(e))?;
+        extract_text_from_file(&file_name, &data).map_err(ApiError::BadRequest)?;
 
     if source_input.trim().is_empty() {
         return Err(ApiError::BadRequest("file contains no text content".into()));

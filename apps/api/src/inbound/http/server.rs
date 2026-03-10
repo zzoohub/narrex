@@ -50,6 +50,7 @@ pub struct AppState {
 }
 
 impl AppState {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         auth_service: impl AuthService + 'static,
         project_service: impl ProjectService + 'static,

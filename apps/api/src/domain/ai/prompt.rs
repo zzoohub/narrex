@@ -478,12 +478,12 @@ impl PromptBuilder {
 
     /// Phase 2 user prompt: source text + world context from Phase 1.
     pub fn characters_user_prompt(source_input: &str, world_context: &str) -> String {
-        vec![
-            "## 원본 텍스트".to_string(),
-            source_input.to_string(),
-            "\n## 세계관 (Phase 1 결과)".to_string(),
-            world_context.to_string(),
-            "\n위 세계관과 스토리에서 등장인물과 관계를 분석하여 출력해주세요.".to_string(),
+        [
+            "## 원본 텍스트",
+            source_input,
+            "\n## 세계관 (Phase 1 결과)",
+            world_context,
+            "\n위 세계관과 스토리에서 등장인물과 관계를 분석하여 출력해주세요.",
         ]
         .join("\n")
     }
@@ -520,14 +520,14 @@ impl PromptBuilder {
         world_context: &str,
         characters_context: &str,
     ) -> String {
-        vec![
-            "## 원본 텍스트".to_string(),
-            source_input.to_string(),
-            "\n## 세계관 (Phase 1 결과)".to_string(),
-            world_context.to_string(),
-            "\n## 등장인물 (Phase 2 결과)".to_string(),
-            characters_context.to_string(),
-            "\n위 세계관과 등장인물을 바탕으로 타임라인 구조를 출력해주세요.".to_string(),
+        [
+            "## 원본 텍스트",
+            source_input,
+            "\n## 세계관 (Phase 1 결과)",
+            world_context,
+            "\n## 등장인물 (Phase 2 결과)",
+            characters_context,
+            "\n위 세계관과 등장인물을 바탕으로 타임라인 구조를 출력해주세요.",
         ]
         .join("\n")
     }
@@ -561,16 +561,17 @@ impl PromptBuilder {
         characters_context: &str,
         failed_output: &str,
     ) -> String {
-        vec![
-            "## 원본 텍스트".to_string(),
-            source_input.to_string(),
-            "\n## 세계관".to_string(),
-            world_context.to_string(),
-            "\n## 등장인물".to_string(),
-            characters_context.to_string(),
-            "\n## 이전 출력 (JSON 파싱 실패)".to_string(),
-            failed_output.chars().take(2000).collect::<String>(),
-            "\n위 내용을 바탕으로 올바른 JSON만 출력하세요.".to_string(),
+        let truncated_output: String = failed_output.chars().take(2000).collect();
+        [
+            "## 원본 텍스트",
+            source_input,
+            "\n## 세계관",
+            world_context,
+            "\n## 등장인물",
+            characters_context,
+            "\n## 이전 출력 (JSON 파싱 실패)",
+            &truncated_output,
+            "\n위 내용을 바탕으로 올바른 JSON만 출력하세요.",
         ]
         .join("\n")
     }
