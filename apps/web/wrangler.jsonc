@@ -3,5 +3,8 @@
   "name": "narrex-web",
   "compatibility_date": "2025-09-02",
   "compatibility_flags": ["nodejs_compat"],
-  "main": "@tanstack/solid-start/server-entry"
+  "main": "@tanstack/solid-start/server-entry",
+  "routes": [
+    { "pattern": "narrex.zzooapp.com", "custom_domain": true }
+  ]
 }

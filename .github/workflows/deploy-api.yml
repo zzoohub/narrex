@@ -56,8 +56,9 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: apps/api
-          platforms: linux/arm64
+          platforms: linux/amd64
           push: true
+          provenance: false
           tags: |
             ${{ steps.meta.outputs.image }}
             ${{ steps.meta.outputs.latest }}
@@ -65,35 +66,16 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Run migrations
+        uses: dtolnay/rust-toolchain@stable
+      - run: cargo install sqlx-cli --no-default-features --features postgres
+      - run: sqlx migrate run --source db/migrations
         env:
-          DB_URL: ${{ secrets.DATABASE_URL }}
-        run: |
-          cargo install sqlx-cli --no-default-features --features postgres
-          sqlx migrate run --source db/migrations --database-url "$DB_URL"
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
-      - name: Deploy to Cloud Run
-        uses: google-github-actions/deploy-cloudrun@v2
-        with:
-          service: ${{ env.SERVICE }}
-          image: ${{ steps.meta.outputs.image }}
-          region: ${{ env.REGION }}
-          flags: "--cpu-boost --execution-environment=gen2 --cpu=1 --memory=512Mi --min-instances=0 --max-instances=3"
-          env_vars: |
-            PORT=8080
-            RUN_MODE=production
-          secrets: |
-            DATABASE_URL=DATABASE_URL:latest
-            JWT_SECRET=JWT_SECRET:latest
-            GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest
-            GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest
-            GOOGLE_REDIRECT_URI=GOOGLE_REDIRECT_URI:latest
-            CF_ACCOUNT_ID=CF_ACCOUNT_ID:latest
-            CF_API_TOKEN=CF_API_TOKEN:latest
-            GEMINI_API_KEY=GEMINI_API_KEY:latest
-            WEB_APP_URL=WEB_APP_URL:latest
-            CORS_ORIGIN=CORS_ORIGIN:latest
-            R2_ACCOUNT_ID=R2_ACCOUNT_ID:latest
-            R2_ACCESS_KEY_ID=R2_ACCESS_KEY_ID:latest
-            R2_SECRET_ACCESS_KEY=R2_SECRET_ACCESS_KEY:latest
-            R2_BUCKET_NAME=R2_BUCKET_NAME:latest
-            R2_PUBLIC_URL=R2_PUBLIC_URL:latest
+      - name: Deploy to Cloud Run (image only)
+        run: |
+          gcloud run services update "$SERVICE" \
+            --image "$IMAGE" \
+            --region "$REGION"
+        env:
+          IMAGE: ${{ steps.meta.outputs.image }}

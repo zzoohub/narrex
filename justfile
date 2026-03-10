@@ -180,7 +180,7 @@ check: lint test
 # ─── Build ───────────────────────────────────────────────────────────────
 
 api-build:
-    cd {{ api_dir }} && docker buildx build --platform linux/arm64 -t narrex-api .
+    cd {{ api_dir }} && docker buildx build --platform linux/amd64 --provenance=false -t narrex-api .
 
 web-preview:
     cd {{ web_dir }} && bun run preview
