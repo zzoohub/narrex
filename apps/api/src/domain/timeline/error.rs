@@ -52,7 +52,10 @@ mod tests {
 
     #[test]
     fn display_connection_not_found() {
-        assert_eq!(TimelineError::ConnectionNotFound.to_string(), "connection not found");
+        assert_eq!(
+            TimelineError::ConnectionNotFound.to_string(),
+            "connection not found"
+        );
     }
 
     #[test]
@@ -65,7 +68,10 @@ mod tests {
 
     #[test]
     fn display_connection_exists() {
-        assert_eq!(TimelineError::ConnectionExists.to_string(), "connection already exists");
+        assert_eq!(
+            TimelineError::ConnectionExists.to_string(),
+            "connection already exists"
+        );
     }
 
     #[test]

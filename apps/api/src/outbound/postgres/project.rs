@@ -11,9 +11,7 @@ use crate::domain::project::models::{
     Workspace,
 };
 use crate::domain::project::ports::ProjectRepository;
-use crate::domain::timeline::models::{
-    ConnectionType, Scene, SceneConnection, SceneStatus, Track,
-};
+use crate::domain::timeline::models::{ConnectionType, Scene, SceneConnection, SceneStatus, Track};
 
 use super::Postgres;
 
@@ -48,9 +46,7 @@ impl ProjectRow {
             era_location: self.era_location,
             pov: self.pov.and_then(|s| s.parse::<PovType>().ok()),
             tone: self.tone,
-            source_type: self
-                .source_type
-                .and_then(|s| s.parse::<SourceType>().ok()),
+            source_type: self.source_type.and_then(|s| s.parse::<SourceType>().ok()),
             source_input: self.source_input,
             created_at: self.created_at,
             updated_at: self.updated_at,
@@ -74,9 +70,7 @@ impl ProjectSummaryRow {
             id: self.id,
             title: self.title,
             genre: self.genre,
-            source_type: self
-                .source_type
-                .and_then(|s| s.parse::<SourceType>().ok()),
+            source_type: self.source_type.and_then(|s| s.parse::<SourceType>().ok()),
             created_at: self.created_at,
             updated_at: self.updated_at,
         }
@@ -323,10 +317,8 @@ impl ProjectRepository for Postgres {
         let fetch_limit = limit + 1; // fetch one extra to determine has_more
 
         let rows = if let Some(ref cursor) = params.cursor {
-            let (cursor_updated_at, cursor_id) =
-                decode_cursor(cursor).ok_or_else(|| {
-                    ProjectError::Unknown(anyhow::anyhow!("invalid cursor"))
-                })?;
+            let (cursor_updated_at, cursor_id) = decode_cursor(cursor)
+                .ok_or_else(|| ProjectError::Unknown(anyhow::anyhow!("invalid cursor")))?;
 
             sqlx::query_as::<_, ProjectSummaryRow>(
                 "SELECT id, title, genre, source_type, created_at, updated_at \
@@ -488,8 +480,8 @@ impl ProjectRepository for Postgres {
             .map(TrackRow::into_domain)
             .collect();
 
-        let scene_rows: Vec<SceneRow> = scenes_result
-            .map_err(|e| ProjectError::Unknown(e.into()))?;
+        let scene_rows: Vec<SceneRow> =
+            scenes_result.map_err(|e| ProjectError::Unknown(e.into()))?;
 
         // Load scene_character assignments for all scenes.
         let scene_ids: Vec<Uuid> = scene_rows.iter().map(|s| s.id).collect();

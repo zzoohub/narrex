@@ -49,21 +49,17 @@ impl Config {
                 .map_err(|_| anyhow::anyhow!("GOOGLE_CLIENT_ID is required"))?,
             google_client_secret: env::var("GOOGLE_CLIENT_SECRET")
                 .map_err(|_| anyhow::anyhow!("GOOGLE_CLIENT_SECRET is required"))?,
-            google_redirect_uri: env::var("GOOGLE_REDIRECT_URI").unwrap_or_else(|_| {
-                "http://localhost:8080/v1/auth/google/callback".into()
-            }),
+            google_redirect_uri: env::var("GOOGLE_REDIRECT_URI")
+                .unwrap_or_else(|_| "http://localhost:8080/v1/auth/google/callback".into()),
             cf_account_id: env::var("CF_ACCOUNT_ID").unwrap_or_default(),
             cf_api_token: env::var("CF_API_TOKEN").unwrap_or_default(),
             gemini_api_key: env::var("GEMINI_API_KEY").unwrap_or_default(),
-            web_app_url: env::var("WEB_APP_URL")
-                .unwrap_or_else(|_| "http://localhost:3000".into()),
-            cors_origin: env::var("CORS_ORIGIN")
-                .unwrap_or_else(|_| "http://localhost:3000".into()),
+            web_app_url: env::var("WEB_APP_URL").unwrap_or_else(|_| "http://localhost:3000".into()),
+            cors_origin: env::var("CORS_ORIGIN").unwrap_or_else(|_| "http://localhost:3000".into()),
             r2_account_id: env::var("R2_ACCOUNT_ID").unwrap_or_default(),
             r2_access_key_id: env::var("R2_ACCESS_KEY_ID").unwrap_or_default(),
             r2_secret_access_key: env::var("R2_SECRET_ACCESS_KEY").unwrap_or_default(),
-            r2_bucket_name: env::var("R2_BUCKET_NAME")
-                .unwrap_or_else(|_| "narrex-assets".into()),
+            r2_bucket_name: env::var("R2_BUCKET_NAME").unwrap_or_else(|_| "narrex-assets".into()),
             r2_public_url: env::var("R2_PUBLIC_URL")
                 .unwrap_or_else(|_| "http://localhost:9000".into()),
         })

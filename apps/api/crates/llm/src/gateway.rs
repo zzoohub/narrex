@@ -82,7 +82,10 @@ impl LlmProvider for LlmGateway {
             }
         }
 
-        info!(provider = self.fallback.name(), "using fallback provider for stream");
+        info!(
+            provider = self.fallback.name(),
+            "using fallback provider for stream"
+        );
         self.fallback.generate_stream(req).await
     }
 
@@ -153,9 +156,7 @@ mod tests {
                 }
                 Err(MockError::RateLimited) => Err(LlmError::RateLimited),
                 Err(MockError::Timeout) => Err(LlmError::Timeout),
-                Err(MockError::RequestFailed) => {
-                    Err(LlmError::RequestFailed("mock failed".into()))
-                }
+                Err(MockError::RequestFailed) => Err(LlmError::RequestFailed("mock failed".into())),
                 Err(MockError::InvalidResponse) => {
                     Err(LlmError::InvalidResponse("mock invalid".into()))
                 }
@@ -185,9 +186,7 @@ mod tests {
                 }
                 Err(MockError::RateLimited) => Err(LlmError::RateLimited),
                 Err(MockError::Timeout) => Err(LlmError::Timeout),
-                Err(MockError::RequestFailed) => {
-                    Err(LlmError::RequestFailed("mock failed".into()))
-                }
+                Err(MockError::RequestFailed) => Err(LlmError::RequestFailed("mock failed".into())),
                 Err(MockError::InvalidResponse) => {
                     Err(LlmError::InvalidResponse("mock invalid".into()))
                 }

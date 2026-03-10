@@ -30,9 +30,7 @@ pub struct GoogleCallbackQuery {
 // ---------------------------------------------------------------------------
 
 /// `GET /v1/auth/google` — redirect to Google OAuth consent screen.
-pub async fn initiate_google_auth(
-    State(state): State<AppState>,
-) -> Result<Response, ApiError> {
+pub async fn initiate_google_auth(State(state): State<AppState>) -> Result<Response, ApiError> {
     let redirect_uri = &state.config().google_redirect_uri;
     let state_nonce = Uuid::new_v4().to_string();
 
@@ -126,7 +124,9 @@ pub async fn handle_google_callback(
     let sample_user_id = user.id;
     let sample_locale = preferred_locale.clone();
     let handle = tokio::spawn(async move {
-        sample_svc.ensure_sample_project(sample_user_id, &sample_locale).await;
+        sample_svc
+            .ensure_sample_project(sample_user_id, &sample_locale)
+            .await;
     });
     tokio::spawn(async move {
         if let Err(e) = handle.await {
@@ -200,8 +200,7 @@ pub async fn refresh_token(
 
 /// `POST /v1/auth/logout` — clear refresh token cookie.
 pub async fn logout() -> Response {
-    let cookie =
-        "refresh_token=; HttpOnly; Secure; SameSite=Lax; Path=/v1/auth; Max-Age=0";
+    let cookie = "refresh_token=; HttpOnly; Secure; SameSite=Lax; Path=/v1/auth; Max-Age=0";
     let mut response = StatusCode::NO_CONTENT.into_response();
     response.headers_mut().insert(
         header::SET_COOKIE,
@@ -240,9 +239,7 @@ fn detect_image_type(data: &[u8]) -> Option<&'static str> {
         return Some("image/jpeg");
     }
     // PNG: 89 50 4E 47 0D 0A 1A 0A
-    if data.len() >= 8
-        && data[..8] == [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
-    {
+    if data.len() >= 8 && data[..8] == [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A] {
         return Some("image/png");
     }
     // WebP: RIFF....WEBP
@@ -260,20 +257,22 @@ pub async fn upload_avatar(
 ) -> Result<ApiSuccess<UserResponse>, ApiError> {
     let mut file_data: Option<Vec<u8>> = None;
 
-    while let Some(field) = multipart.next_field().await.map_err(|e| {
-        ApiError::BadRequest(format!("invalid multipart: {e}"))
-    })? {
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|e| ApiError::BadRequest(format!("invalid multipart: {e}")))?
+    {
         if field.name() == Some("avatar") {
-            let data = field.bytes().await.map_err(|e| {
-                ApiError::BadRequest(format!("failed to read file: {e}"))
-            })?;
+            let data = field
+                .bytes()
+                .await
+                .map_err(|e| ApiError::BadRequest(format!("failed to read file: {e}")))?;
 
             file_data = Some(data.to_vec());
         }
     }
 
-    let data = file_data
-        .ok_or_else(|| ApiError::BadRequest("missing 'avatar' field".into()))?;
+    let data = file_data.ok_or_else(|| ApiError::BadRequest("missing 'avatar' field".into()))?;
 
     // Validate actual file content via magic bytes (not client-provided Content-Type).
     let content_type = detect_image_type(&data).ok_or_else(|| {
@@ -310,7 +309,10 @@ pub async fn test_login(
         .await?;
 
     // Create sample project for first-time users (REQ-063).
-    state.sample_service().ensure_sample_project(user.id, &locale).await;
+    state
+        .sample_service()
+        .ensure_sample_project(user.id, &locale)
+        .await;
 
     let refresh_cookie = format!(
         "refresh_token={}; HttpOnly; Secure; SameSite=Lax; Path=/v1/auth; Max-Age={}",
@@ -495,10 +497,7 @@ mod tests {
 
     #[test]
     fn resolve_korean_by_quality() {
-        assert_eq!(
-            resolve_preferred_locale("en;q=0.7,ko;q=0.9"),
-            "ko"
-        );
+        assert_eq!(resolve_preferred_locale("en;q=0.7,ko;q=0.9"), "ko");
     }
 
     #[test]

@@ -2,12 +2,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::extract::DefaultBodyLimit;
+use axum::http::{header, HeaderName, HeaderValue, Method};
 use axum::routing::{delete, get, patch, post};
 use axum::Router;
 use sqlx::PgPool;
 use tokio::net::TcpListener;
 use tokio::signal;
-use axum::http::{header, HeaderName, HeaderValue, Method};
 use tower_http::cors::CorsLayer;
 use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::timeout::TimeoutLayer;
@@ -164,11 +164,7 @@ pub fn build_router(state: AppState, cors_origin: &str) -> Router {
             Method::DELETE,
             Method::OPTIONS,
         ])
-        .allow_headers([
-            header::AUTHORIZATION,
-            header::CONTENT_TYPE,
-            header::ACCEPT,
-        ])
+        .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE, header::ACCEPT])
         .allow_credentials(true);
 
     // ---- Public routes (no auth) ----
@@ -184,10 +180,7 @@ pub fn build_router(state: AppState, cors_origin: &str) -> Router {
     // Test-only route: bypass OAuth for E2E tests.
     // Only available when RUN_MODE=test — does not exist in production.
     if state.config().run_mode == "test" {
-        public = public.route(
-            "/v1/auth/test-login",
-            post(auth_handlers::test_login),
-        );
+        public = public.route("/v1/auth/test-login", post(auth_handlers::test_login));
     }
 
     // ---- Authenticated routes ----
@@ -202,8 +195,7 @@ pub fn build_router(state: AppState, cors_origin: &str) -> Router {
         )
         .route(
             "/v1/auth/me/avatar",
-            post(auth_handlers::upload_avatar)
-                .layer(DefaultBodyLimit::max(2 * 1024 * 1024 + 512)), // 2MB + multipart overhead
+            post(auth_handlers::upload_avatar).layer(DefaultBodyLimit::max(2 * 1024 * 1024 + 512)), // 2MB + multipart overhead
         )
         // Cost analytics & quota
         .route("/v1/me/costs", get(ai_handlers::get_user_costs))
@@ -282,8 +274,7 @@ pub fn build_router(state: AppState, cors_origin: &str) -> Router {
         )
         .route(
             "/v1/projects/{projectId}/relationships/{relationshipId}",
-            patch(char_handlers::update_relationship)
-                .delete(char_handlers::delete_relationship),
+            patch(char_handlers::update_relationship).delete(char_handlers::delete_relationship),
         )
         // Generation (SSE)
         .route(

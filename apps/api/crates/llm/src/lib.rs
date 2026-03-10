@@ -6,4 +6,6 @@ mod provider;
 pub use cf_workers::CfWorkersAiProvider;
 pub use gateway::LlmGateway;
 pub use gemini::GeminiFlashProvider;
-pub use provider::{GenerateRequest, GenerateResponse, LlmError, LlmProvider, StreamChunk, StreamUsage};
+pub use provider::{
+    GenerateRequest, GenerateResponse, LlmError, LlmProvider, StreamChunk, StreamUsage,
+};

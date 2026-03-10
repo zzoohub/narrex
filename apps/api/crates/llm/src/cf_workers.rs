@@ -7,7 +7,9 @@ use serde::{Deserialize, Serialize};
 use tokio_stream::StreamExt;
 use tracing::{debug, warn};
 
-use crate::provider::{GenerateRequest, GenerateResponse, LlmError, LlmProvider, StreamChunk, StreamUsage};
+use crate::provider::{
+    GenerateRequest, GenerateResponse, LlmError, LlmProvider, StreamChunk, StreamUsage,
+};
 
 pub struct CfWorkersAiProvider {
     client: Client,
@@ -226,7 +228,12 @@ impl LlmProvider for CfWorkersAiProvider {
 
         let (input_tokens, output_tokens) = result
             .usage
-            .map(|u| (u.prompt_tokens.unwrap_or(0), u.completion_tokens.unwrap_or(0)))
+            .map(|u| {
+                (
+                    u.prompt_tokens.unwrap_or(0),
+                    u.completion_tokens.unwrap_or(0),
+                )
+            })
             .unwrap_or((0, 0));
 
         Ok(GenerateResponse {
@@ -577,7 +584,8 @@ mod tests {
 
     #[test]
     fn stream_data_openai_format_reasoning_only() {
-        let json = r#"{"choices":[{"index":0,"delta":{"reasoning":"thinking..."},"finish_reason":null}]}"#;
+        let json =
+            r#"{"choices":[{"index":0,"delta":{"reasoning":"thinking..."},"finish_reason":null}]}"#;
         let data: CfStreamData = serde_json::from_str(json).unwrap();
         assert!(data.extract_text().is_none());
         assert!(!data.is_finished());

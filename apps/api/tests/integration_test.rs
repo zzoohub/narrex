@@ -29,7 +29,10 @@ async fn body_json(resp: axum::response::Response) -> serde_json::Value {
 
 fn assert_problem_detail(json: &serde_json::Value, status: u16) {
     assert_eq!(json["status"], status);
-    assert!(json["type"].as_str().unwrap().starts_with("https://api.narrex.app/errors/"));
+    assert!(json["type"]
+        .as_str()
+        .unwrap()
+        .starts_with("https://api.narrex.app/errors/"));
     assert!(json["title"].is_string());
 }
 
@@ -68,7 +71,12 @@ async fn auth_missing_token_returns_401() {
     let resp = app.router().oneshot(req).await.unwrap();
 
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
-    let ct = resp.headers().get("content-type").unwrap().to_str().unwrap();
+    let ct = resp
+        .headers()
+        .get("content-type")
+        .unwrap()
+        .to_str()
+        .unwrap();
     assert_eq!(ct, "application/problem+json");
     let json = body_json(resp).await;
     assert_problem_detail(&json, 401);
@@ -134,7 +142,10 @@ async fn auth_refresh_token_rejected_as_access() {
 
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     let json = body_json(resp).await;
-    assert!(json["detail"].as_str().unwrap().contains("not an access token"));
+    assert!(json["detail"]
+        .as_str()
+        .unwrap()
+        .contains("not an access token"));
 }
 
 // ===========================================================================
@@ -220,7 +231,12 @@ async fn get_project_not_found_returns_404() {
     let resp = app.router().oneshot(req).await.unwrap();
 
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
-    let ct = resp.headers().get("content-type").unwrap().to_str().unwrap();
+    let ct = resp
+        .headers()
+        .get("content-type")
+        .unwrap()
+        .to_str()
+        .unwrap();
     assert_eq!(ct, "application/problem+json");
     let json = body_json(resp).await;
     assert_problem_detail(&json, 404);
@@ -284,11 +300,19 @@ async fn security_headers_present() {
     let headers = resp.headers();
 
     assert_eq!(
-        headers.get("strict-transport-security").unwrap().to_str().unwrap(),
+        headers
+            .get("strict-transport-security")
+            .unwrap()
+            .to_str()
+            .unwrap(),
         "max-age=31536000; includeSubDomains"
     );
     assert_eq!(
-        headers.get("x-content-type-options").unwrap().to_str().unwrap(),
+        headers
+            .get("x-content-type-options")
+            .unwrap()
+            .to_str()
+            .unwrap(),
         "nosniff"
     );
     assert_eq!(
@@ -300,7 +324,11 @@ async fn security_headers_present() {
         "strict-origin-when-cross-origin"
     );
     assert_eq!(
-        headers.get("content-security-policy").unwrap().to_str().unwrap(),
+        headers
+            .get("content-security-policy")
+            .unwrap()
+            .to_str()
+            .unwrap(),
         "default-src 'none'; frame-ancestors 'none'"
     );
 }
@@ -364,7 +392,12 @@ async fn project_forbidden_returns_403() {
     let resp = app.router().oneshot(req).await.unwrap();
 
     assert_eq!(resp.status(), StatusCode::FORBIDDEN);
-    let ct = resp.headers().get("content-type").unwrap().to_str().unwrap();
+    let ct = resp
+        .headers()
+        .get("content-type")
+        .unwrap()
+        .to_str()
+        .unwrap();
     assert_eq!(ct, "application/problem+json");
     let json = body_json(resp).await;
     assert_problem_detail(&json, 403);
@@ -391,10 +424,16 @@ async fn test_login_available_in_test_mode() {
 
     assert_eq!(resp.status(), StatusCode::OK);
     // Check cookie header before consuming the body
-    let cookie = resp.headers().get("set-cookie").map(|v| v.to_str().unwrap().to_owned());
+    let cookie = resp
+        .headers()
+        .get("set-cookie")
+        .map(|v| v.to_str().unwrap().to_owned());
     assert!(cookie.is_some(), "refresh_token cookie should be set");
     let cookie = cookie.unwrap();
-    assert!(cookie.contains("refresh_token="), "cookie should contain refresh_token");
+    assert!(
+        cookie.contains("refresh_token="),
+        "cookie should contain refresh_token"
+    );
     assert!(cookie.contains("HttpOnly"), "cookie should be HttpOnly");
 
     let json = body_json(resp).await;
@@ -420,7 +459,10 @@ async fn problem_detail_has_required_fields() {
     // RFC 9457 required members
     assert!(json["type"].is_string(), "ProblemDetail must have 'type'");
     assert!(json["title"].is_string(), "ProblemDetail must have 'title'");
-    assert!(json["status"].is_number(), "ProblemDetail must have 'status'");
+    assert!(
+        json["status"].is_number(),
+        "ProblemDetail must have 'status'"
+    );
     // 'detail' is optional per RFC but present for 401
     assert!(json["detail"].is_string());
 }

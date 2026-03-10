@@ -67,7 +67,10 @@ mod tests {
     #[test]
     fn llm_error_display_unavailable() {
         let err = LlmError::Unavailable("down for maintenance".into());
-        assert_eq!(err.to_string(), "provider unavailable: down for maintenance");
+        assert_eq!(
+            err.to_string(),
+            "provider unavailable: down for maintenance"
+        );
     }
 
     #[test]

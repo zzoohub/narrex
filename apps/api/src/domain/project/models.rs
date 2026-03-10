@@ -182,9 +182,18 @@ mod tests {
 
     #[test]
     fn pov_type_from_str_valid() {
-        assert_eq!("first_person".parse::<PovType>().unwrap(), PovType::FirstPerson);
-        assert_eq!("third_limited".parse::<PovType>().unwrap(), PovType::ThirdLimited);
-        assert_eq!("third_omniscient".parse::<PovType>().unwrap(), PovType::ThirdOmniscient);
+        assert_eq!(
+            "first_person".parse::<PovType>().unwrap(),
+            PovType::FirstPerson
+        );
+        assert_eq!(
+            "third_limited".parse::<PovType>().unwrap(),
+            PovType::ThirdLimited
+        );
+        assert_eq!(
+            "third_omniscient".parse::<PovType>().unwrap(),
+            PovType::ThirdOmniscient
+        );
     }
 
     #[test]
@@ -196,7 +205,11 @@ mod tests {
 
     #[test]
     fn pov_type_roundtrip() {
-        for pov in [PovType::FirstPerson, PovType::ThirdLimited, PovType::ThirdOmniscient] {
+        for pov in [
+            PovType::FirstPerson,
+            PovType::ThirdLimited,
+            PovType::ThirdOmniscient,
+        ] {
             let s = pov.to_string();
             let parsed: PovType = s.parse().unwrap();
             assert_eq!(parsed, pov);
@@ -215,9 +228,18 @@ mod tests {
 
     #[test]
     fn source_type_from_str_valid() {
-        assert_eq!("free_text".parse::<SourceType>().unwrap(), SourceType::FreeText);
-        assert_eq!("file_import".parse::<SourceType>().unwrap(), SourceType::FileImport);
-        assert_eq!("template".parse::<SourceType>().unwrap(), SourceType::Template);
+        assert_eq!(
+            "free_text".parse::<SourceType>().unwrap(),
+            SourceType::FreeText
+        );
+        assert_eq!(
+            "file_import".parse::<SourceType>().unwrap(),
+            SourceType::FileImport
+        );
+        assert_eq!(
+            "template".parse::<SourceType>().unwrap(),
+            SourceType::Template
+        );
         assert_eq!("sample".parse::<SourceType>().unwrap(), SourceType::Sample);
     }
 
@@ -230,7 +252,12 @@ mod tests {
 
     #[test]
     fn source_type_roundtrip() {
-        for st in [SourceType::FreeText, SourceType::FileImport, SourceType::Template, SourceType::Sample] {
+        for st in [
+            SourceType::FreeText,
+            SourceType::FileImport,
+            SourceType::Template,
+            SourceType::Sample,
+        ] {
             let s = st.to_string();
             let parsed: SourceType = s.parse().unwrap();
             assert_eq!(parsed, st);

@@ -44,9 +44,11 @@ pub async fn generate_scene_draft(
         .await?;
     verify_scene_ownership(&state, project_id, scene_id).await?;
 
-    let user = state.auth_service().get_user(auth.user_id).await.map_err(|_| {
-        ApiError::Unauthorized("user not found".into())
-    })?;
+    let user = state
+        .auth_service()
+        .get_user(auth.user_id)
+        .await
+        .map_err(|_| ApiError::Unauthorized("user not found".into()))?;
     let locale = user.language_preference;
 
     let stream = state
@@ -75,9 +77,11 @@ pub async fn edit_scene_draft(
         .await?;
     verify_scene_ownership(&state, project_id, scene_id).await?;
 
-    let user = state.auth_service().get_user(auth.user_id).await.map_err(|_| {
-        ApiError::Unauthorized("user not found".into())
-    })?;
+    let user = state
+        .auth_service()
+        .get_user(auth.user_id)
+        .await
+        .map_err(|_| ApiError::Unauthorized("user not found".into()))?;
     let locale = user.language_preference;
 
     let edit_req = body.into();
@@ -172,10 +176,7 @@ pub async fn get_user_costs(
     State(state): State<AppState>,
     auth: AuthUser,
 ) -> Result<ApiSuccess<CostSummaryResponse>, ApiError> {
-    let summary = state
-        .ai_service()
-        .user_cost_summary(auth.user_id)
-        .await?;
+    let summary = state.ai_service().user_cost_summary(auth.user_id).await?;
     Ok(ApiSuccess::new(CostSummaryResponse::from(&summary)))
 }
 
@@ -190,10 +191,7 @@ pub async fn get_project_costs(
         .get_project(project_id, auth.user_id)
         .await?;
 
-    let summary = state
-        .ai_service()
-        .project_cost_summary(project_id)
-        .await?;
+    let summary = state.ai_service().project_cost_summary(project_id).await?;
     Ok(ApiSuccess::new(CostSummaryResponse::from(&summary)))
 }
 
@@ -247,7 +245,8 @@ fn map_sse_event(event: SseEvent) -> Event {
             .event("progress")
             .data(serde_json::json!({"message": message}).to_string()),
         SseEvent::StructuringCompleted { workspace } => {
-            let ws_resp = crate::inbound::http::project::response::WorkspaceResponse::from(&workspace);
+            let ws_resp =
+                crate::inbound::http::project::response::WorkspaceResponse::from(&workspace);
             Event::default()
                 .event("completed")
                 .data(serde_json::json!({"workspace": ws_resp}).to_string())

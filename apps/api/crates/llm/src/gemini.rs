@@ -7,7 +7,9 @@ use serde::{Deserialize, Serialize};
 use tokio_stream::StreamExt;
 use tracing::debug;
 
-use crate::provider::{GenerateRequest, GenerateResponse, LlmError, LlmProvider, StreamChunk, StreamUsage};
+use crate::provider::{
+    GenerateRequest, GenerateResponse, LlmError, LlmProvider, StreamChunk, StreamUsage,
+};
 
 pub struct GeminiFlashProvider {
     client: Client,
@@ -456,11 +458,7 @@ mod tests {
         assert!(resp.candidates.is_some());
         let candidates = resp.candidates.unwrap();
         assert_eq!(candidates.len(), 1);
-        let text = candidates[0]
-            .content
-            .as_ref()
-            .unwrap()
-            .parts[0]
+        let text = candidates[0].content.as_ref().unwrap().parts[0]
             .text
             .clone();
         assert_eq!(text, "response text");

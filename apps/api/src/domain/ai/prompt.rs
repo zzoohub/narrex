@@ -322,10 +322,7 @@ impl PromptBuilder {
     ) -> String {
         match locale {
             "ko" => {
-                let mut parts = vec![
-                    "## 현재 본문".to_string(),
-                    content.to_string(),
-                ];
+                let mut parts = vec!["## 현재 본문".to_string(), content.to_string()];
                 if let Some(selected) = selected_text {
                     parts.push(format!("\n## 선택된 텍스트\n{selected}"));
                     parts.push(format!("\n## 편집 지시\n{direction}"));
@@ -337,17 +334,17 @@ impl PromptBuilder {
                 parts.join("\n")
             }
             _ => {
-                let mut parts = vec![
-                    "## Current Text".to_string(),
-                    content.to_string(),
-                ];
+                let mut parts = vec!["## Current Text".to_string(), content.to_string()];
                 if let Some(selected) = selected_text {
                     parts.push(format!("\n## Selected Text\n{selected}"));
                     parts.push(format!("\n## Edit Direction\n{direction}"));
                     parts.push("\nPlease write the replacement text only for the selected portion based on the direction above. Do not output the full text.".to_string());
                 } else {
                     parts.push(format!("\n## Edit Direction\n{direction}"));
-                    parts.push("\nPlease write the entire revised text based on the direction above.".to_string());
+                    parts.push(
+                        "\nPlease write the entire revised text based on the direction above."
+                            .to_string(),
+                    );
                 }
                 parts.join("\n")
             }
@@ -392,10 +389,7 @@ impl PromptBuilder {
         source_input: &str,
         clarification_answers: Option<&[String]>,
     ) -> String {
-        let mut parts = vec![
-            "## 원본 텍스트".to_string(),
-            source_input.to_string(),
-        ];
+        let mut parts = vec!["## 원본 텍스트".to_string(), source_input.to_string()];
 
         if let Some(answers) = clarification_answers {
             if !answers.is_empty() {
@@ -406,9 +400,7 @@ impl PromptBuilder {
             }
         }
 
-        parts.push(
-            "\n위 텍스트를 분석하여 구조화된 JSON을 출력해주세요.".to_string(),
-        );
+        parts.push("\n위 텍스트를 분석하여 구조화된 JSON을 출력해주세요.".to_string());
 
         parts.join("\n")
     }
@@ -442,10 +434,7 @@ impl PromptBuilder {
         source_input: &str,
         clarification_answers: Option<&[String]>,
     ) -> String {
-        let mut parts = vec![
-            "## 원본 텍스트".to_string(),
-            source_input.to_string(),
-        ];
+        let mut parts = vec!["## 원본 텍스트".to_string(), source_input.to_string()];
 
         if let Some(answers) = clarification_answers {
             if !answers.is_empty() {
@@ -456,9 +445,7 @@ impl PromptBuilder {
             }
         }
 
-        parts.push(
-            "\n위 텍스트의 세계관과 설정을 분석하여 출력해주세요.".to_string(),
-        );
+        parts.push("\n위 텍스트의 세계관과 설정을 분석하여 출력해주세요.".to_string());
 
         parts.join("\n")
     }
@@ -490,17 +477,15 @@ impl PromptBuilder {
     }
 
     /// Phase 2 user prompt: source text + world context from Phase 1.
-    pub fn characters_user_prompt(
-        source_input: &str,
-        world_context: &str,
-    ) -> String {
+    pub fn characters_user_prompt(source_input: &str, world_context: &str) -> String {
         vec![
             "## 원본 텍스트".to_string(),
             source_input.to_string(),
             "\n## 세계관 (Phase 1 결과)".to_string(),
             world_context.to_string(),
             "\n위 세계관과 스토리에서 등장인물과 관계를 분석하여 출력해주세요.".to_string(),
-        ].join("\n")
+        ]
+        .join("\n")
     }
 
     /// Phase 3 system prompt: create timeline tracks + scenes.
@@ -543,7 +528,8 @@ impl PromptBuilder {
             "\n## 등장인물 (Phase 2 결과)".to_string(),
             characters_context.to_string(),
             "\n위 세계관과 등장인물을 바탕으로 타임라인 구조를 출력해주세요.".to_string(),
-        ].join("\n")
+        ]
+        .join("\n")
     }
 
     /// Phase 3 retry: JSON-only system prompt for when initial streaming attempt fails to produce valid JSON.
@@ -585,7 +571,8 @@ impl PromptBuilder {
             "\n## 이전 출력 (JSON 파싱 실패)".to_string(),
             failed_output.chars().take(2000).collect::<String>(),
             "\n위 내용을 바탕으로 올바른 JSON만 출력하세요.".to_string(),
-        ].join("\n")
+        ]
+        .join("\n")
     }
 
     /// Build prompts for scene summary generation.
@@ -795,15 +782,20 @@ mod tests {
     fn user_prompt_ko_with_characters() {
         let id_a = Uuid::new_v4();
         let mut ctx = make_ctx(None);
-        ctx.characters = vec![
-            Character {
-                id: id_a, project_id: Uuid::new_v4(), name: "이수현".into(),
-                personality: Some("용감한".into()), appearance: Some("키가 큰".into()),
-                secrets: Some("과거의 죄".into()), motivation: Some("복수".into()),
-                profile_image_url: None, graph_x: None, graph_y: None,
-                created_at: Utc::now(), updated_at: Utc::now(),
-            },
-        ];
+        ctx.characters = vec![Character {
+            id: id_a,
+            project_id: Uuid::new_v4(),
+            name: "이수현".into(),
+            personality: Some("용감한".into()),
+            appearance: Some("키가 큰".into()),
+            secrets: Some("과거의 죄".into()),
+            motivation: Some("복수".into()),
+            profile_image_url: None,
+            graph_x: None,
+            graph_y: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }];
         let prompt = PromptBuilder::user_prompt(&ctx, "ko");
         assert!(prompt.contains("이수현"));
         assert!(prompt.contains("용감한"));
@@ -818,12 +810,46 @@ mod tests {
         let id_b = Uuid::new_v4();
         let mut ctx = make_ctx(None);
         ctx.characters = vec![
-            Character { id: id_a, project_id: Uuid::new_v4(), name: "A".into(), personality: None, appearance: None, secrets: None, motivation: None, profile_image_url: None, graph_x: None, graph_y: None, created_at: Utc::now(), updated_at: Utc::now() },
-            Character { id: id_b, project_id: Uuid::new_v4(), name: "B".into(), personality: None, appearance: None, secrets: None, motivation: None, profile_image_url: None, graph_x: None, graph_y: None, created_at: Utc::now(), updated_at: Utc::now() },
+            Character {
+                id: id_a,
+                project_id: Uuid::new_v4(),
+                name: "A".into(),
+                personality: None,
+                appearance: None,
+                secrets: None,
+                motivation: None,
+                profile_image_url: None,
+                graph_x: None,
+                graph_y: None,
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+            },
+            Character {
+                id: id_b,
+                project_id: Uuid::new_v4(),
+                name: "B".into(),
+                personality: None,
+                appearance: None,
+                secrets: None,
+                motivation: None,
+                profile_image_url: None,
+                graph_x: None,
+                graph_y: None,
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+            },
         ];
-        ctx.relationships = vec![
-            CharacterRelationship { id: Uuid::new_v4(), project_id: Uuid::new_v4(), character_a_id: id_a, character_b_id: id_b, label: "라이벌".into(), visual_type: RelationshipVisual::Dashed, direction: RelationshipDirection::Bidirectional, created_at: Utc::now(), updated_at: Utc::now() },
-        ];
+        ctx.relationships = vec![CharacterRelationship {
+            id: Uuid::new_v4(),
+            project_id: Uuid::new_v4(),
+            character_a_id: id_a,
+            character_b_id: id_b,
+            label: "라이벌".into(),
+            visual_type: RelationshipVisual::Dashed,
+            direction: RelationshipDirection::Bidirectional,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }];
         let prompt = PromptBuilder::user_prompt(&ctx, "ko");
         assert!(prompt.contains("A <-> B: 라이벌"));
     }
@@ -832,8 +858,22 @@ mod tests {
     fn user_prompt_ko_with_preceding_summaries() {
         let mut ctx = make_ctx(None);
         ctx.preceding_summaries = vec![
-            SceneSummary { scene_id: Uuid::new_v4(), draft_version: 1, summary_text: "첫 번째 요약".into(), model: None, created_at: Utc::now(), updated_at: Utc::now() },
-            SceneSummary { scene_id: Uuid::new_v4(), draft_version: 1, summary_text: "두 번째 요약".into(), model: None, created_at: Utc::now(), updated_at: Utc::now() },
+            SceneSummary {
+                scene_id: Uuid::new_v4(),
+                draft_version: 1,
+                summary_text: "첫 번째 요약".into(),
+                model: None,
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+            },
+            SceneSummary {
+                scene_id: Uuid::new_v4(),
+                draft_version: 1,
+                summary_text: "두 번째 요약".into(),
+                model: None,
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+            },
         ];
         let prompt = PromptBuilder::user_prompt(&ctx, "ko");
         assert!(prompt.contains("1. 첫 번째 요약"));
@@ -843,15 +883,22 @@ mod tests {
     #[test]
     fn user_prompt_ko_with_simultaneous_scenes() {
         let mut ctx = make_ctx(None);
-        ctx.simultaneous_scenes = vec![
-            Scene {
-                id: Uuid::new_v4(), track_id: Uuid::new_v4(), project_id: Uuid::new_v4(),
-                start_position: 0.0, duration: 1.0, status: SceneStatus::Empty,
-                title: "병렬 장면".into(), plot_summary: Some("다른 곳에서 벌어지는 일".into()),
-                location: None, mood_tags: vec![], content: None, character_ids: vec![],
-                created_at: Utc::now(), updated_at: Utc::now(),
-            },
-        ];
+        ctx.simultaneous_scenes = vec![Scene {
+            id: Uuid::new_v4(),
+            track_id: Uuid::new_v4(),
+            project_id: Uuid::new_v4(),
+            start_position: 0.0,
+            duration: 1.0,
+            status: SceneStatus::Empty,
+            title: "병렬 장면".into(),
+            plot_summary: Some("다른 곳에서 벌어지는 일".into()),
+            location: None,
+            mood_tags: vec![],
+            content: None,
+            character_ids: vec![],
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }];
         let prompt = PromptBuilder::user_prompt(&ctx, "ko");
         assert!(prompt.contains("병렬 장면: 다른 곳에서 벌어지는 일"));
     }
@@ -860,11 +907,20 @@ mod tests {
     fn user_prompt_ko_with_next_scene() {
         let mut ctx = make_ctx(None);
         ctx.next_scene = Some(Scene {
-            id: Uuid::new_v4(), track_id: Uuid::new_v4(), project_id: Uuid::new_v4(),
-            start_position: 0.0, duration: 1.0, status: SceneStatus::Empty,
-            title: "다음".into(), plot_summary: None,
-            location: None, mood_tags: vec![], content: None, character_ids: vec![],
-            created_at: Utc::now(), updated_at: Utc::now(),
+            id: Uuid::new_v4(),
+            track_id: Uuid::new_v4(),
+            project_id: Uuid::new_v4(),
+            start_position: 0.0,
+            duration: 1.0,
+            status: SceneStatus::Empty,
+            title: "다음".into(),
+            plot_summary: None,
+            location: None,
+            mood_tags: vec![],
+            content: None,
+            character_ids: vec![],
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
         });
         let prompt = PromptBuilder::user_prompt(&ctx, "ko");
         assert!(prompt.contains("다음: (줄거리 없음)"));
@@ -900,11 +956,20 @@ mod tests {
     fn user_prompt_en_with_next_scene() {
         let mut ctx = make_ctx(None);
         ctx.next_scene = Some(Scene {
-            id: Uuid::new_v4(), track_id: Uuid::new_v4(), project_id: Uuid::new_v4(),
-            start_position: 0.0, duration: 1.0, status: SceneStatus::Empty,
-            title: "Next".into(), plot_summary: None,
-            location: None, mood_tags: vec![], content: None, character_ids: vec![],
-            created_at: Utc::now(), updated_at: Utc::now(),
+            id: Uuid::new_v4(),
+            track_id: Uuid::new_v4(),
+            project_id: Uuid::new_v4(),
+            start_position: 0.0,
+            duration: 1.0,
+            status: SceneStatus::Empty,
+            title: "Next".into(),
+            plot_summary: None,
+            location: None,
+            mood_tags: vec![],
+            content: None,
+            character_ids: vec![],
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
         });
         let prompt = PromptBuilder::user_prompt(&ctx, "en");
         assert!(prompt.contains("(no summary)"));
@@ -1096,7 +1161,11 @@ mod tests {
 
     #[test]
     fn timeline_user_prompt_contains_both_contexts() {
-        let prompt = PromptBuilder::timeline_user_prompt("스토리", "{\"title\":\"W\"}", "{\"characters\":[]}");
+        let prompt = PromptBuilder::timeline_user_prompt(
+            "스토리",
+            "{\"title\":\"W\"}",
+            "{\"characters\":[]}",
+        );
         assert!(prompt.contains("스토리"));
         assert!(prompt.contains("세계관"));
         assert!(prompt.contains("등장인물"));
@@ -1119,7 +1188,8 @@ mod tests {
 
     #[test]
     fn timeline_retry_user_prompt_includes_failed_output() {
-        let prompt = PromptBuilder::timeline_retry_user_prompt("스토리", "{}", "{}", "이전 실패 출력");
+        let prompt =
+            PromptBuilder::timeline_retry_user_prompt("스토리", "{}", "{}", "이전 실패 출력");
         assert!(prompt.contains("이전 실패 출력"));
         assert!(prompt.contains("JSON 파싱 실패"));
     }

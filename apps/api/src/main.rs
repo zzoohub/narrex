@@ -43,10 +43,8 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("database connected");
 
     // 4. Create LLM gateway.
-    let primary = CfWorkersAiProvider::new(
-        config.cf_account_id.clone(),
-        config.cf_api_token.clone(),
-    );
+    let primary =
+        CfWorkersAiProvider::new(config.cf_account_id.clone(), config.cf_api_token.clone());
     let fallback = GeminiFlashProvider::new(config.gemini_api_key.clone());
     let llm = Arc::new(LlmGateway::new(Box::new(primary), Box::new(fallback)));
 

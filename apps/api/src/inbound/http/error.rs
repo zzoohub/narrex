@@ -70,12 +70,7 @@ impl ApiError {
                 "Unauthorized",
                 Some(msg.clone()),
             ),
-            Self::Forbidden => (
-                StatusCode::FORBIDDEN,
-                "forbidden",
-                "Forbidden",
-                None,
-            ),
+            Self::Forbidden => (StatusCode::FORBIDDEN, "forbidden", "Forbidden", None),
             Self::NotFound(msg) => (
                 StatusCode::NOT_FOUND,
                 "not-found",
@@ -172,9 +167,7 @@ impl From<TimelineError> for ApiError {
             TimelineError::TrackHasScenes => {
                 Self::Conflict("track has scenes; delete or move them first".into())
             }
-            TimelineError::ConnectionExists => {
-                Self::Conflict("connection already exists".into())
-            }
+            TimelineError::ConnectionExists => Self::Conflict("connection already exists".into()),
             TimelineError::InvalidPosition(msg) => Self::UnprocessableEntity(msg),
             TimelineError::Forbidden => Self::Forbidden,
             TimelineError::Unknown(err) => Self::Internal(err.to_string()),
@@ -186,9 +179,7 @@ impl From<CharacterError> for ApiError {
     fn from(err: CharacterError) -> Self {
         match err {
             CharacterError::NotFound => Self::NotFound("character not found".into()),
-            CharacterError::RelationshipNotFound => {
-                Self::NotFound("relationship not found".into())
-            }
+            CharacterError::RelationshipNotFound => Self::NotFound("relationship not found".into()),
             CharacterError::RelationshipExists => {
                 Self::Conflict("relationship already exists".into())
             }
@@ -223,7 +214,10 @@ mod tests {
         let (status, pd) = err.to_problem_detail();
         assert_eq!(status.as_u16(), expected_status);
         assert_eq!(pd.status, expected_status);
-        assert_eq!(pd.type_uri, format!("https://api.narrex.app/errors/{expected_slug}"));
+        assert_eq!(
+            pd.type_uri,
+            format!("https://api.narrex.app/errors/{expected_slug}")
+        );
     }
 
     #[test]
@@ -253,7 +247,11 @@ mod tests {
 
     #[test]
     fn problem_detail_unprocessable() {
-        assert_problem(ApiError::UnprocessableEntity("x".into()), 422, "validation-failed");
+        assert_problem(
+            ApiError::UnprocessableEntity("x".into()),
+            422,
+            "validation-failed",
+        );
     }
 
     #[test]
@@ -290,7 +288,12 @@ mod tests {
     async fn into_response_sets_problem_json_content_type() {
         let resp = ApiError::NotFound("x".into()).into_response();
         assert_eq!(resp.status(), StatusCode::NOT_FOUND);
-        let ct = resp.headers().get("content-type").unwrap().to_str().unwrap();
+        let ct = resp
+            .headers()
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap();
         assert_eq!(ct, "application/problem+json");
     }
 
@@ -426,13 +429,25 @@ mod tests {
 
     #[test]
     fn display_all_variants() {
-        assert_eq!(ApiError::BadRequest("x".into()).to_string(), "bad request: x");
-        assert_eq!(ApiError::Unauthorized("x".into()).to_string(), "unauthorized: x");
+        assert_eq!(
+            ApiError::BadRequest("x".into()).to_string(),
+            "bad request: x"
+        );
+        assert_eq!(
+            ApiError::Unauthorized("x".into()).to_string(),
+            "unauthorized: x"
+        );
         assert_eq!(ApiError::Forbidden.to_string(), "forbidden");
         assert_eq!(ApiError::NotFound("x".into()).to_string(), "not found: x");
         assert_eq!(ApiError::Conflict("x".into()).to_string(), "conflict: x");
-        assert_eq!(ApiError::UnprocessableEntity("x".into()).to_string(), "unprocessable entity: x");
+        assert_eq!(
+            ApiError::UnprocessableEntity("x".into()).to_string(),
+            "unprocessable entity: x"
+        );
         assert_eq!(ApiError::TooManyRequests.to_string(), "too many requests");
-        assert_eq!(ApiError::Internal("x".into()).to_string(), "internal server error: x");
+        assert_eq!(
+            ApiError::Internal("x".into()).to_string(),
+            "internal server error: x"
+        );
     }
 }

@@ -101,9 +101,21 @@ mod tests {
     }
 
     fn assert_seed_statuses(data: &SampleProjectData) {
-        let edited = data.scenes.iter().filter(|s| s.status == SceneStatus::Edited).count();
-        let ai_draft = data.scenes.iter().filter(|s| s.status == SceneStatus::AiDraft).count();
-        let empty = data.scenes.iter().filter(|s| s.status == SceneStatus::Empty).count();
+        let edited = data
+            .scenes
+            .iter()
+            .filter(|s| s.status == SceneStatus::Edited)
+            .count();
+        let ai_draft = data
+            .scenes
+            .iter()
+            .filter(|s| s.status == SceneStatus::AiDraft)
+            .count();
+        let empty = data
+            .scenes
+            .iter()
+            .filter(|s| s.status == SceneStatus::Empty)
+            .count();
         assert_eq!(edited, 1, "1 edited scene");
         assert_eq!(ai_draft, 1, "1 ai_draft scene");
         assert_eq!(empty, 7, "7 empty scenes");
@@ -113,11 +125,19 @@ mod tests {
         for scene in &data.scenes {
             match scene.status {
                 SceneStatus::Edited | SceneStatus::AiDraft => {
-                    assert!(scene.content.is_some(), "scene '{}' should have content", scene.title);
+                    assert!(
+                        scene.content.is_some(),
+                        "scene '{}' should have content",
+                        scene.title
+                    );
                     assert!(!scene.content.as_ref().unwrap().is_empty());
                 }
                 _ => {
-                    assert!(scene.content.is_none(), "scene '{}' should have no content", scene.title);
+                    assert!(
+                        scene.content.is_none(),
+                        "scene '{}' should have no content",
+                        scene.title
+                    );
                 }
             }
         }
@@ -134,22 +154,42 @@ mod tests {
         }
         // Every scene has at least one character
         for scene in &data.scenes {
-            assert!(!scene.character_ids.is_empty(), "scene '{}' needs characters", scene.title);
+            assert!(
+                !scene.character_ids.is_empty(),
+                "scene '{}' needs characters",
+                scene.title
+            );
         }
         // All character refs are valid
-        let char_ids: std::collections::HashSet<Uuid> = data.characters.iter().map(|c| c.id).collect();
+        let char_ids: std::collections::HashSet<Uuid> =
+            data.characters.iter().map(|c| c.id).collect();
         for scene in &data.scenes {
             for cid in &scene.character_ids {
-                assert!(char_ids.contains(cid), "scene '{}' refs unknown char {}", scene.title, cid);
+                assert!(
+                    char_ids.contains(cid),
+                    "scene '{}' refs unknown char {}",
+                    scene.title,
+                    cid
+                );
             }
         }
         // UUID ordering on relationships
         for rel in &data.relationships {
-            assert!(rel.character_a_id < rel.character_b_id, "rel '{}': a < b", rel.label);
+            assert!(
+                rel.character_a_id < rel.character_b_id,
+                "rel '{}': a < b",
+                rel.label
+            );
         }
         // Both connection types present
-        assert!(data.connections.iter().any(|c| c.connection_type == ConnectionType::Branch));
-        assert!(data.connections.iter().any(|c| c.connection_type == ConnectionType::Merge));
+        assert!(data
+            .connections
+            .iter()
+            .any(|c| c.connection_type == ConnectionType::Branch));
+        assert!(data
+            .connections
+            .iter()
+            .any(|c| c.connection_type == ConnectionType::Merge));
     }
 
     // ── Korean locale ────────────────────────────────────────────────
@@ -177,8 +217,13 @@ mod tests {
     #[test]
     fn ko_seed_is_korean() {
         let data = build_sample_project(Uuid::new_v4(), "ko");
-        assert!(data.project.title.chars().any(|c| ('\u{AC00}'..='\u{D7AF}').contains(&c)),
-            "Korean title should contain Hangul");
+        assert!(
+            data.project
+                .title
+                .chars()
+                .any(|c| ('\u{AC00}'..='\u{D7AF}').contains(&c)),
+            "Korean title should contain Hangul"
+        );
     }
 
     // ── English locale ───────────────────────────────────────────────
@@ -206,7 +251,10 @@ mod tests {
     #[test]
     fn en_seed_is_english() {
         let data = build_sample_project(Uuid::new_v4(), "en");
-        assert!(data.project.title.is_ascii(), "English title should be ASCII");
+        assert!(
+            data.project.title.is_ascii(),
+            "English title should be ASCII"
+        );
     }
 
     // ── Shared ───────────────────────────────────────────────────────

@@ -1,15 +1,11 @@
 use chrono::Utc;
 use uuid::Uuid;
 
-use crate::domain::character::models::{
-    Character, RelationshipDirection, RelationshipVisual,
-};
+use crate::domain::character::models::{Character, RelationshipDirection, RelationshipVisual};
 use crate::domain::project::models::{PovType, Project, SourceType};
-use crate::domain::timeline::models::{
-    ConnectionType, SceneConnection, SceneStatus, Track,
-};
+use crate::domain::timeline::models::{ConnectionType, SceneConnection, SceneStatus, Track};
 
-use super::{SampleProjectData, SampleScene, build_relationships};
+use super::{build_relationships, SampleProjectData, SampleScene};
 
 pub(super) fn build(user_id: Uuid) -> SampleProjectData {
     let now = Utc::now();
@@ -506,12 +502,48 @@ pub(super) fn build(user_id: Uuid) -> SampleProjectData {
         project_id,
         now,
         vec![
-            (char_clara, char_theo, "Allies / growing trust", RelationshipVisual::Solid, RelationshipDirection::Bidirectional),
-            (char_agnes, char_clara, "Great-aunt → Heir (via letters)", RelationshipVisual::Arrowed, RelationshipDirection::AToB),
-            (char_clara, char_lena, "Uneasy cooperation", RelationshipVisual::Dashed, RelationshipDirection::Bidirectional),
-            (char_theo, char_hollow, "Guardian vs. Storied One", RelationshipVisual::Arrowed, RelationshipDirection::AToB),
-            (char_agnes, char_hollow, "Keeper vs. the one who escaped", RelationshipVisual::Dashed, RelationshipDirection::Bidirectional),
-            (char_lena, char_agnes, "Connected by Elena's disappearance", RelationshipVisual::Dashed, RelationshipDirection::Bidirectional),
+            (
+                char_clara,
+                char_theo,
+                "Allies / growing trust",
+                RelationshipVisual::Solid,
+                RelationshipDirection::Bidirectional,
+            ),
+            (
+                char_agnes,
+                char_clara,
+                "Great-aunt → Heir (via letters)",
+                RelationshipVisual::Arrowed,
+                RelationshipDirection::AToB,
+            ),
+            (
+                char_clara,
+                char_lena,
+                "Uneasy cooperation",
+                RelationshipVisual::Dashed,
+                RelationshipDirection::Bidirectional,
+            ),
+            (
+                char_theo,
+                char_hollow,
+                "Guardian vs. Storied One",
+                RelationshipVisual::Arrowed,
+                RelationshipDirection::AToB,
+            ),
+            (
+                char_agnes,
+                char_hollow,
+                "Keeper vs. the one who escaped",
+                RelationshipVisual::Dashed,
+                RelationshipDirection::Bidirectional,
+            ),
+            (
+                char_lena,
+                char_agnes,
+                "Connected by Elena's disappearance",
+                RelationshipVisual::Dashed,
+                RelationshipDirection::Bidirectional,
+            ),
         ],
     );
 

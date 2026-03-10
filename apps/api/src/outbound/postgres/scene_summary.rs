@@ -91,9 +91,6 @@ impl SceneSummaryRepository for Postgres {
         .await
         .map_err(|e| AiError::Unknown(e.into()))?;
 
-        Ok(rows
-            .into_iter()
-            .map(SceneSummaryRow::into_domain)
-            .collect())
+        Ok(rows.into_iter().map(SceneSummaryRow::into_domain).collect())
     }
 }

@@ -26,7 +26,10 @@ impl<U: UserRepository, T: TokenService, S: AvatarStorage> AuthServiceImpl<U, T,
         google_info: GoogleUserInfo,
         preferred_locale: &str,
     ) -> Result<(User, AuthTokens, String), AuthError> {
-        let user = self.user_repo.upsert_from_google(&google_info, preferred_locale).await?;
+        let user = self
+            .user_repo
+            .upsert_from_google(&google_info, preferred_locale)
+            .await?;
         let tokens = self.token_svc.create_tokens(user.id).await?;
         let refresh_token = self.token_svc.create_refresh_token(user.id).await?;
         Ok((user, tokens, refresh_token))
@@ -67,10 +70,14 @@ impl<U: UserRepository, T: TokenService, S: AvatarStorage> AuthServiceImpl<U, T,
             if let Some(ref name) = name_opt {
                 let trimmed = name.trim();
                 if trimmed.is_empty() {
-                    return Err(AuthError::InvalidInput("display name cannot be empty".into()));
+                    return Err(AuthError::InvalidInput(
+                        "display name cannot be empty".into(),
+                    ));
                 }
                 if trimmed.len() > 50 {
-                    return Err(AuthError::InvalidInput("display name must be 50 characters or fewer".into()));
+                    return Err(AuthError::InvalidInput(
+                        "display name must be 50 characters or fewer".into(),
+                    ));
                 }
             }
         }
@@ -172,8 +179,14 @@ impl<U: UserRepository, T: TokenService, S: AvatarStorage> AuthServiceImpl<U, T,
 // ---------------------------------------------------------------------------
 
 #[async_trait::async_trait]
-impl<U: UserRepository, T: TokenService, S: AvatarStorage> AuthService for AuthServiceImpl<U, T, S> {
-    async fn google_callback(&self, google_info: GoogleUserInfo, preferred_locale: &str) -> Result<(User, AuthTokens, String), AuthError> {
+impl<U: UserRepository, T: TokenService, S: AvatarStorage> AuthService
+    for AuthServiceImpl<U, T, S>
+{
+    async fn google_callback(
+        &self,
+        google_info: GoogleUserInfo,
+        preferred_locale: &str,
+    ) -> Result<(User, AuthTokens, String), AuthError> {
         Self::google_callback(self, google_info, preferred_locale).await
     }
     async fn refresh_tokens(&self, refresh_token: &str) -> Result<(AuthTokens, String), AuthError> {
@@ -185,24 +198,37 @@ impl<U: UserRepository, T: TokenService, S: AvatarStorage> AuthService for AuthS
     async fn get_user(&self, user_id: Uuid) -> Result<User, AuthError> {
         Self::get_user(self, user_id).await
     }
-    async fn update_profile(&self, user_id: Uuid, update: &UpdateProfile) -> Result<User, AuthError> {
+    async fn update_profile(
+        &self,
+        user_id: Uuid,
+        update: &UpdateProfile,
+    ) -> Result<User, AuthError> {
         Self::update_profile(self, user_id, update).await
     }
     async fn delete_account(&self, user_id: Uuid) -> Result<(), AuthError> {
         Self::delete_account(self, user_id).await
     }
-    async fn upload_avatar(&self, user_id: Uuid, content_type: &str, data: Vec<u8>) -> Result<User, AuthError> {
+    async fn upload_avatar(
+        &self,
+        user_id: Uuid,
+        content_type: &str,
+        data: Vec<u8>,
+    ) -> Result<User, AuthError> {
         Self::upload_avatar(self, user_id, content_type, data).await
     }
-    async fn test_login(&self, email: &str, name: Option<&str>) -> Result<(User, AuthTokens, String), AuthError> {
+    async fn test_login(
+        &self,
+        email: &str,
+        name: Option<&str>,
+    ) -> Result<(User, AuthTokens, String), AuthError> {
         Self::test_login(self, email, name).await
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::ports::AvatarStorage;
+    use super::*;
     use chrono::Utc;
     use std::sync::Mutex;
 
@@ -301,7 +327,11 @@ mod tests {
             Ok(None)
         }
 
-        async fn upsert_from_google(&self, _info: &GoogleUserInfo, _preferred_locale: &str) -> Result<User, AuthError> {
+        async fn upsert_from_google(
+            &self,
+            _info: &GoogleUserInfo,
+            _preferred_locale: &str,
+        ) -> Result<User, AuthError> {
             let result = self.upsert_result.lock().unwrap().take();
             match result {
                 Some(r) => r,
@@ -467,8 +497,7 @@ mod tests {
     async fn verify_token_expired() {
         let user_id = Uuid::new_v4();
         let repo = MockUserRepo::with_user(make_user(user_id));
-        let token_svc = MockTokenSvc::new(user_id)
-            .with_verify_access_err(AuthError::TokenExpired);
+        let token_svc = MockTokenSvc::new(user_id).with_verify_access_err(AuthError::TokenExpired);
         let svc = AuthServiceImpl::new(repo, token_svc, MockAvatarStorage::new());
 
         let result = svc.verify_token("expired-token").await;
@@ -719,10 +748,8 @@ mod tests {
         let token_svc = MockTokenSvc::new(user_id);
         let svc = AuthServiceImpl::new(repo, token_svc, MockAvatarStorage::new());
 
-        let (returned_user, tokens, _refresh) = svc
-            .test_login("noname@example.com", None)
-            .await
-            .unwrap();
+        let (returned_user, tokens, _refresh) =
+            svc.test_login("noname@example.com", None).await.unwrap();
         assert_eq!(returned_user.id, user_id);
         assert!(!tokens.access_token.is_empty());
     }

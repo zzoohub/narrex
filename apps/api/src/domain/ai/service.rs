@@ -11,9 +11,9 @@ use tracing::warn;
 use super::error::AiError;
 use super::models::{
     CharactersOutput, CostSummary, CreateDraftParams, CreateManualDraft, Draft, DraftSource,
-    DraftSummary, EditDraftRequest, GenerationLog, GenerationStatus, GenerationType,
-    QuotaInfo, SceneSummary, StructuredOutput, TimelineOutput, WorldOutput,
-    MONTHLY_GENERATION_LIMIT, MONTHLY_GENERATION_WARNING_THRESHOLD,
+    DraftSummary, EditDraftRequest, GenerationLog, GenerationStatus, GenerationType, QuotaInfo,
+    SceneSummary, StructuredOutput, TimelineOutput, WorldOutput, MONTHLY_GENERATION_LIMIT,
+    MONTHLY_GENERATION_WARNING_THRESHOLD,
 };
 use super::ports::{
     AiService, ContextAssemblyRepository, DraftRepository, GenerationLogRepository,
@@ -74,7 +74,10 @@ where
         locale: &str,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<SseEvent, Infallible>> + Send>>, AiError> {
         self.check_quota(user_id).await?;
-        let ctx = self.context_repo.assemble_context(project_id, scene_id).await?;
+        let ctx = self
+            .context_repo
+            .assemble_context(project_id, scene_id)
+            .await?;
 
         let system = PromptBuilder::system_prompt(&ctx, locale);
         let user = PromptBuilder::user_prompt(&ctx, locale);
@@ -358,11 +361,7 @@ where
     }
 
     /// Get a specific draft version.
-    pub async fn get_draft(
-        &self,
-        scene_id: Uuid,
-        version: i32,
-    ) -> Result<Draft, AiError> {
+    pub async fn get_draft(&self, scene_id: Uuid, version: i32) -> Result<Draft, AiError> {
         self.draft_repo
             .find_by_version(scene_id, version)
             .await?
@@ -370,10 +369,7 @@ where
     }
 
     /// Get the scene summary for a given scene.
-    pub async fn get_scene_summary(
-        &self,
-        scene_id: Uuid,
-    ) -> Result<SceneSummary, AiError> {
+    pub async fn get_scene_summary(&self, scene_id: Uuid) -> Result<SceneSummary, AiError> {
         self.summary_repo
             .find_by_scene(scene_id)
             .await?
@@ -394,18 +390,12 @@ where
     }
 
     /// Get generation cost summary for a user.
-    pub async fn user_cost_summary(
-        &self,
-        user_id: Uuid,
-    ) -> Result<CostSummary, AiError> {
+    pub async fn user_cost_summary(&self, user_id: Uuid) -> Result<CostSummary, AiError> {
         self.log_repo.cost_summary_by_user(user_id).await
     }
 
     /// Get generation cost summary for a project.
-    pub async fn project_cost_summary(
-        &self,
-        project_id: Uuid,
-    ) -> Result<CostSummary, AiError> {
+    pub async fn project_cost_summary(&self, project_id: Uuid) -> Result<CostSummary, AiError> {
         self.log_repo.cost_summary_by_project(project_id).await
     }
 
@@ -463,7 +453,10 @@ where
         source_input: &str,
         clarification_answers: Option<&[String]>,
         locale: &str,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>, AiError> {
+    ) -> Result<
+        Pin<Box<dyn Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>,
+        AiError,
+    > {
         let system = PromptBuilder::world_system_prompt(locale);
         let user = PromptBuilder::world_user_prompt(source_input, clarification_answers);
         let req = GenerateRequest {
@@ -485,7 +478,10 @@ where
         source_input: &str,
         world_context: &str,
         locale: &str,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>, AiError> {
+    ) -> Result<
+        Pin<Box<dyn Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>,
+        AiError,
+    > {
         let system = PromptBuilder::characters_system_prompt(locale);
         let user = PromptBuilder::characters_user_prompt(source_input, world_context);
         let req = GenerateRequest {
@@ -508,9 +504,13 @@ where
         world_context: &str,
         characters_context: &str,
         locale: &str,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>, AiError> {
+    ) -> Result<
+        Pin<Box<dyn Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>,
+        AiError,
+    > {
         let system = PromptBuilder::timeline_system_prompt(locale);
-        let user = PromptBuilder::timeline_user_prompt(source_input, world_context, characters_context);
+        let user =
+            PromptBuilder::timeline_user_prompt(source_input, world_context, characters_context);
         let req = GenerateRequest {
             system_prompt: system,
             user_prompt: user,
@@ -534,20 +534,32 @@ where
         locale: &str,
     ) -> Result<(TimelineOutput, String, String, u32, u32), AiError> {
         let system = PromptBuilder::timeline_retry_system_prompt(locale);
-        let user = PromptBuilder::timeline_retry_user_prompt(source_input, world_context, characters_context, failed_output);
+        let user = PromptBuilder::timeline_retry_user_prompt(
+            source_input,
+            world_context,
+            characters_context,
+            failed_output,
+        );
         let req = GenerateRequest {
             system_prompt: system,
             user_prompt: user,
             max_tokens: Some(16384),
             temperature: Some(0.4),
         };
-        let resp = self.llm
+        let resp = self
+            .llm
             .generate(req)
             .await
             .map_err(|e| AiError::GenerationFailed(e.to_string()))?;
 
         let output = parse_timeline_output(&resp.text)?;
-        Ok((output, resp.model, resp.provider, resp.token_count_input, resp.token_count_output))
+        Ok((
+            output,
+            resp.model,
+            resp.provider,
+            resp.token_count_input,
+            resp.token_count_output,
+        ))
     }
 
     /// Check quota and return error if exceeded. Used before generation calls.
@@ -765,11 +777,22 @@ fn find_outermost_json_object(text: &str) -> Option<String> {
 /// SSE event types emitted by generation/edit streams.
 #[derive(Debug, Clone)]
 pub enum SseEvent {
-    Token { text: String },
-    Completed { draft: Draft, quota: QuotaInfo },
-    Progress { message: String },
-    StructuringCompleted { workspace: crate::domain::project::models::Workspace },
-    Error { message: String },
+    Token {
+        text: String,
+    },
+    Completed {
+        draft: Draft,
+        quota: QuotaInfo,
+    },
+    Progress {
+        message: String,
+    },
+    StructuringCompleted {
+        workspace: crate::domain::project::models::Workspace,
+    },
+    Error {
+        message: String,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -804,7 +827,11 @@ where
     ) -> Result<Pin<Box<dyn Stream<Item = Result<SseEvent, Infallible>> + Send>>, AiError> {
         Self::edit_scene_draft(self, user_id, project_id, scene_id, edit_req, locale).await
     }
-    async fn save_manual_draft(&self, scene_id: Uuid, input: &CreateManualDraft) -> Result<Draft, AiError> {
+    async fn save_manual_draft(
+        &self,
+        scene_id: Uuid,
+        input: &CreateManualDraft,
+    ) -> Result<Draft, AiError> {
         Self::save_manual_draft(self, scene_id, input).await
     }
     async fn list_drafts(&self, scene_id: Uuid) -> Result<Vec<DraftSummary>, AiError> {
@@ -816,7 +843,13 @@ where
     async fn get_scene_summary(&self, scene_id: Uuid) -> Result<SceneSummary, AiError> {
         Self::get_scene_summary(self, scene_id).await
     }
-    async fn upsert_scene_summary(&self, scene_id: Uuid, draft_version: i32, summary_text: &str, model: Option<&str>) -> Result<SceneSummary, AiError> {
+    async fn upsert_scene_summary(
+        &self,
+        scene_id: Uuid,
+        draft_version: i32,
+        summary_text: &str,
+        model: Option<&str>,
+    ) -> Result<SceneSummary, AiError> {
         Self::upsert_scene_summary(self, scene_id, draft_version, summary_text, model).await
     }
     async fn user_cost_summary(&self, user_id: Uuid) -> Result<CostSummary, AiError> {
@@ -836,7 +869,10 @@ where
         source_input: &str,
         clarification_answers: Option<&[String]>,
         locale: &str,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>, AiError> {
+    ) -> Result<
+        Pin<Box<dyn Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>,
+        AiError,
+    > {
         Self::stream_world(self, source_input, clarification_answers, locale).await
     }
     async fn stream_characters(
@@ -844,7 +880,10 @@ where
         source_input: &str,
         world_context: &str,
         locale: &str,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>, AiError> {
+    ) -> Result<
+        Pin<Box<dyn Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>,
+        AiError,
+    > {
         Self::stream_characters(self, source_input, world_context, locale).await
     }
     async fn stream_timeline(
@@ -853,8 +892,18 @@ where
         world_context: &str,
         characters_context: &str,
         locale: &str,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>, AiError> {
-        Self::stream_timeline(self, source_input, world_context, characters_context, locale).await
+    ) -> Result<
+        Pin<Box<dyn Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>,
+        AiError,
+    > {
+        Self::stream_timeline(
+            self,
+            source_input,
+            world_context,
+            characters_context,
+            locale,
+        )
+        .await
     }
     async fn retry_timeline(
         &self,
@@ -864,7 +913,15 @@ where
         failed_output: &str,
         locale: &str,
     ) -> Result<(TimelineOutput, String, String, u32, u32), AiError> {
-        Self::retry_timeline(self, source_input, world_context, characters_context, failed_output, locale).await
+        Self::retry_timeline(
+            self,
+            source_input,
+            world_context,
+            characters_context,
+            failed_output,
+            locale,
+        )
+        .await
     }
     async fn generate_structure(
         &self,
@@ -1006,10 +1063,7 @@ mod tests {
         let mock_llm = MockLlmProvider::new(llm_response_text.to_string());
         let svc = build_test_ai_service(mock_llm);
 
-        let (output, _, _, _, _) = svc
-            .generate_structure("텍스트", None, "ko")
-            .await
-            .unwrap();
+        let (output, _, _, _, _) = svc.generate_structure("텍스트", None, "ko").await.unwrap();
 
         assert_eq!(output.title, "Fenced");
     }
@@ -1020,10 +1074,7 @@ mod tests {
         let mock_llm = MockLlmProvider::new(llm_response_text.to_string());
         let svc = build_test_ai_service(mock_llm);
 
-        let (output, _, _, _, _) = svc
-            .generate_structure("텍스트", None, "ko")
-            .await
-            .unwrap();
+        let (output, _, _, _, _) = svc.generate_structure("텍스트", None, "ko").await.unwrap();
 
         assert_eq!(output.title, "Wrapped");
     }
@@ -1033,7 +1084,10 @@ mod tests {
         let mock_llm = MockLlmProvider::new("not json at all".to_string());
         let svc = build_test_ai_service(mock_llm);
 
-        let err = svc.generate_structure("텍스트", None, "ko").await.unwrap_err();
+        let err = svc
+            .generate_structure("텍스트", None, "ko")
+            .await
+            .unwrap_err();
         match err {
             AiError::GenerationFailed(msg) => assert!(msg.contains("valid JSON")),
             other => panic!("expected GenerationFailed, got: {other:?}"),
@@ -1045,7 +1099,10 @@ mod tests {
         let mock_llm = MockLlmProvider::failing();
         let svc = build_test_ai_service(mock_llm);
 
-        let err = svc.generate_structure("텍스트", None, "ko").await.unwrap_err();
+        let err = svc
+            .generate_structure("텍스트", None, "ko")
+            .await
+            .unwrap_err();
         match err {
             AiError::GenerationFailed(msg) => assert!(msg.contains("provider unavailable")),
             other => panic!("expected GenerationFailed, got: {other:?}"),
@@ -1146,11 +1203,26 @@ mod tests {
     #[tokio::test]
     async fn stream_world_calls_generate_stream() {
         let mock_llm = MockStreamingLlmProvider::new(vec![
-            narrex_llm::StreamChunk { text: "{\"title\":\"T\",".into(), done: false, usage: None },
-            narrex_llm::StreamChunk { text: "\"genre\":\"SF\"}".into(), done: false, usage: None },
-            narrex_llm::StreamChunk { text: String::new(), done: true, usage: Some(narrex_llm::StreamUsage {
-                model: "m".into(), provider: "p".into(), token_count_input: 10, token_count_output: 20,
-            })},
+            narrex_llm::StreamChunk {
+                text: "{\"title\":\"T\",".into(),
+                done: false,
+                usage: None,
+            },
+            narrex_llm::StreamChunk {
+                text: "\"genre\":\"SF\"}".into(),
+                done: false,
+                usage: None,
+            },
+            narrex_llm::StreamChunk {
+                text: String::new(),
+                done: true,
+                usage: Some(narrex_llm::StreamUsage {
+                    model: "m".into(),
+                    provider: "p".into(),
+                    token_count_input: 10,
+                    token_count_output: 20,
+                }),
+            },
         ]);
         let svc = build_test_ai_service(mock_llm);
 
@@ -1167,14 +1239,28 @@ mod tests {
     #[tokio::test]
     async fn stream_characters_uses_world_context() {
         let mock_llm = MockStreamingLlmProvider::new(vec![
-            narrex_llm::StreamChunk { text: "{\"characters\":[],\"relationships\":[]}".into(), done: false, usage: None },
-            narrex_llm::StreamChunk { text: String::new(), done: true, usage: Some(narrex_llm::StreamUsage {
-                model: "m".into(), provider: "p".into(), token_count_input: 10, token_count_output: 20,
-            })},
+            narrex_llm::StreamChunk {
+                text: "{\"characters\":[],\"relationships\":[]}".into(),
+                done: false,
+                usage: None,
+            },
+            narrex_llm::StreamChunk {
+                text: String::new(),
+                done: true,
+                usage: Some(narrex_llm::StreamUsage {
+                    model: "m".into(),
+                    provider: "p".into(),
+                    token_count_input: 10,
+                    token_count_output: 20,
+                }),
+            },
         ]);
         let svc = build_test_ai_service(mock_llm);
 
-        let stream = svc.stream_characters("test input", "{\"title\":\"T\"}", "ko").await.unwrap();
+        let stream = svc
+            .stream_characters("test input", "{\"title\":\"T\"}", "ko")
+            .await
+            .unwrap();
         let chunks: Vec<_> = {
             use futures::StreamExt;
             Box::pin(stream).collect::<Vec<_>>().await
@@ -1185,14 +1271,28 @@ mod tests {
     #[tokio::test]
     async fn stream_timeline_includes_world_and_character_context() {
         let mock_llm = MockStreamingLlmProvider::new(vec![
-            narrex_llm::StreamChunk { text: "{\"tracks\":[]}".into(), done: false, usage: None },
-            narrex_llm::StreamChunk { text: String::new(), done: true, usage: Some(narrex_llm::StreamUsage {
-                model: "m".into(), provider: "p".into(), token_count_input: 10, token_count_output: 20,
-            })},
+            narrex_llm::StreamChunk {
+                text: "{\"tracks\":[]}".into(),
+                done: false,
+                usage: None,
+            },
+            narrex_llm::StreamChunk {
+                text: String::new(),
+                done: true,
+                usage: Some(narrex_llm::StreamUsage {
+                    model: "m".into(),
+                    provider: "p".into(),
+                    token_count_input: 10,
+                    token_count_output: 20,
+                }),
+            },
         ]);
         let svc = build_test_ai_service(mock_llm);
 
-        let stream = svc.stream_timeline("input", "{\"title\":\"T\"}", "{\"characters\":[]}", "ko").await.unwrap();
+        let stream = svc
+            .stream_timeline("input", "{\"title\":\"T\"}", "{\"characters\":[]}", "ko")
+            .await
+            .unwrap();
         let chunks: Vec<_> = {
             use futures::StreamExt;
             Box::pin(stream).collect::<Vec<_>>().await
@@ -1291,7 +1391,9 @@ mod tests {
 
     impl MockLlmProvider {
         fn new(text: String) -> Arc<Self> {
-            Arc::new(Self { response: Some(text) })
+            Arc::new(Self {
+                response: Some(text),
+            })
         }
         fn failing() -> Arc<Self> {
             Arc::new(Self { response: None })
@@ -1300,7 +1402,10 @@ mod tests {
 
     #[async_trait::async_trait]
     impl narrex_llm::LlmProvider for MockLlmProvider {
-        async fn generate(&self, _req: narrex_llm::GenerateRequest) -> Result<narrex_llm::GenerateResponse, narrex_llm::LlmError> {
+        async fn generate(
+            &self,
+            _req: narrex_llm::GenerateRequest,
+        ) -> Result<narrex_llm::GenerateResponse, narrex_llm::LlmError> {
             match &self.response {
                 Some(text) => Ok(narrex_llm::GenerateResponse {
                     text: text.clone(),
@@ -1309,14 +1414,25 @@ mod tests {
                     token_count_input: 100,
                     token_count_output: 200,
                 }),
-                None => Err(narrex_llm::LlmError::Unavailable("provider unavailable".into())),
+                None => Err(narrex_llm::LlmError::Unavailable(
+                    "provider unavailable".into(),
+                )),
             }
         }
 
         async fn generate_stream(
             &self,
             _req: narrex_llm::GenerateRequest,
-        ) -> Result<Pin<Box<dyn futures::Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>, narrex_llm::LlmError> {
+        ) -> Result<
+            Pin<
+                Box<
+                    dyn futures::Stream<
+                            Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>,
+                        > + Send,
+                >,
+            >,
+            narrex_llm::LlmError,
+        > {
             Err(narrex_llm::LlmError::Unavailable("not used in test".into()))
         }
 
@@ -1339,14 +1455,28 @@ mod tests {
 
     #[async_trait::async_trait]
     impl narrex_llm::LlmProvider for MockStreamingLlmProvider {
-        async fn generate(&self, _req: narrex_llm::GenerateRequest) -> Result<narrex_llm::GenerateResponse, narrex_llm::LlmError> {
-            Err(narrex_llm::LlmError::Unavailable("use generate_stream".into()))
+        async fn generate(
+            &self,
+            _req: narrex_llm::GenerateRequest,
+        ) -> Result<narrex_llm::GenerateResponse, narrex_llm::LlmError> {
+            Err(narrex_llm::LlmError::Unavailable(
+                "use generate_stream".into(),
+            ))
         }
 
         async fn generate_stream(
             &self,
             _req: narrex_llm::GenerateRequest,
-        ) -> Result<Pin<Box<dyn futures::Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>, narrex_llm::LlmError> {
+        ) -> Result<
+            Pin<
+                Box<
+                    dyn futures::Stream<
+                            Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>,
+                        > + Send,
+                >,
+            >,
+            narrex_llm::LlmError,
+        > {
             let chunks = self.chunks.clone();
             let stream = futures::stream::iter(chunks.into_iter().map(Ok));
             Ok(Box::pin(stream))
@@ -1367,10 +1497,17 @@ mod tests {
         async fn create(&self, _params: &CreateDraftParams) -> Result<Draft, AiError> {
             unimplemented!()
         }
-        async fn find_latest_by_scene(&self, _scene_id: uuid::Uuid) -> Result<Option<Draft>, AiError> {
+        async fn find_latest_by_scene(
+            &self,
+            _scene_id: uuid::Uuid,
+        ) -> Result<Option<Draft>, AiError> {
             Ok(None)
         }
-        async fn find_by_version(&self, _scene_id: uuid::Uuid, _version: i32) -> Result<Option<Draft>, AiError> {
+        async fn find_by_version(
+            &self,
+            _scene_id: uuid::Uuid,
+            _version: i32,
+        ) -> Result<Option<Draft>, AiError> {
             Ok(None)
         }
         async fn list_by_scene(&self, _scene_id: uuid::Uuid) -> Result<Vec<DraftSummary>, AiError> {
@@ -1386,13 +1523,23 @@ mod tests {
 
     #[async_trait::async_trait]
     impl crate::domain::ai::ports::SceneSummaryRepository for MockSummaryRepo {
-        async fn upsert(&self, _: uuid::Uuid, _: i32, _: &str, _: Option<&str>) -> Result<SceneSummary, AiError> {
+        async fn upsert(
+            &self,
+            _: uuid::Uuid,
+            _: i32,
+            _: &str,
+            _: Option<&str>,
+        ) -> Result<SceneSummary, AiError> {
             unimplemented!()
         }
         async fn find_by_scene(&self, _: uuid::Uuid) -> Result<Option<SceneSummary>, AiError> {
             Ok(None)
         }
-        async fn find_preceding(&self, _: uuid::Uuid, _: f64) -> Result<Vec<SceneSummary>, AiError> {
+        async fn find_preceding(
+            &self,
+            _: uuid::Uuid,
+            _: f64,
+        ) -> Result<Vec<SceneSummary>, AiError> {
             Ok(vec![])
         }
     }
@@ -1425,12 +1572,26 @@ mod tests {
             Ok(())
         }
         async fn cost_summary_by_user(&self, _: uuid::Uuid) -> Result<CostSummary, AiError> {
-            Ok(CostSummary { total_generations: 0, total_tokens_input: 0, total_tokens_output: 0, total_cost_usd: 0.0 })
+            Ok(CostSummary {
+                total_generations: 0,
+                total_tokens_input: 0,
+                total_tokens_output: 0,
+                total_cost_usd: 0.0,
+            })
         }
         async fn cost_summary_by_project(&self, _: uuid::Uuid) -> Result<CostSummary, AiError> {
-            Ok(CostSummary { total_generations: 0, total_tokens_input: 0, total_tokens_output: 0, total_cost_usd: 0.0 })
+            Ok(CostSummary {
+                total_generations: 0,
+                total_tokens_input: 0,
+                total_tokens_output: 0,
+                total_cost_usd: 0.0,
+            })
         }
-        async fn count_by_user_since(&self, _: uuid::Uuid, _: chrono::DateTime<chrono::Utc>) -> Result<i64, AiError> {
+        async fn count_by_user_since(
+            &self,
+            _: uuid::Uuid,
+            _: chrono::DateTime<chrono::Utc>,
+        ) -> Result<i64, AiError> {
             Ok(self.count_override.lock().unwrap().unwrap_or(0))
         }
     }
@@ -1440,34 +1601,67 @@ mod tests {
 
     #[async_trait::async_trait]
     impl crate::domain::ai::ports::ContextAssemblyRepository for MockContextRepo {
-        async fn assemble_context(&self, _: uuid::Uuid, _: uuid::Uuid) -> Result<crate::domain::ai::models::GenerationContext, AiError> {
+        async fn assemble_context(
+            &self,
+            _: uuid::Uuid,
+            _: uuid::Uuid,
+        ) -> Result<crate::domain::ai::models::GenerationContext, AiError> {
             unimplemented!()
         }
     }
 
     #[derive(Clone)]
     struct MockSceneRepo {
-        updates: std::sync::Arc<std::sync::Mutex<Vec<crate::domain::timeline::models::UpdateScene>>>,
+        updates:
+            std::sync::Arc<std::sync::Mutex<Vec<crate::domain::timeline::models::UpdateScene>>>,
     }
 
     impl MockSceneRepo {
         fn new() -> Self {
-            Self { updates: std::sync::Arc::new(std::sync::Mutex::new(vec![])) }
+            Self {
+                updates: std::sync::Arc::new(std::sync::Mutex::new(vec![])),
+            }
         }
     }
 
     #[async_trait::async_trait]
     impl crate::domain::timeline::ports::SceneRepository for MockSceneRepo {
-        async fn create(&self, _: uuid::Uuid, _: &crate::domain::timeline::models::CreateScene) -> Result<crate::domain::timeline::models::Scene, crate::domain::timeline::error::TimelineError> {
+        async fn create(
+            &self,
+            _: uuid::Uuid,
+            _: &crate::domain::timeline::models::CreateScene,
+        ) -> Result<
+            crate::domain::timeline::models::Scene,
+            crate::domain::timeline::error::TimelineError,
+        > {
             unimplemented!()
         }
-        async fn find_by_id(&self, _: uuid::Uuid) -> Result<Option<crate::domain::timeline::models::Scene>, crate::domain::timeline::error::TimelineError> {
+        async fn find_by_id(
+            &self,
+            _: uuid::Uuid,
+        ) -> Result<
+            Option<crate::domain::timeline::models::Scene>,
+            crate::domain::timeline::error::TimelineError,
+        > {
             Ok(None)
         }
-        async fn find_detail_by_id(&self, _: uuid::Uuid) -> Result<Option<crate::domain::timeline::models::SceneDetail>, crate::domain::timeline::error::TimelineError> {
+        async fn find_detail_by_id(
+            &self,
+            _: uuid::Uuid,
+        ) -> Result<
+            Option<crate::domain::timeline::models::SceneDetail>,
+            crate::domain::timeline::error::TimelineError,
+        > {
             Ok(None)
         }
-        async fn update(&self, _id: uuid::Uuid, update: &crate::domain::timeline::models::UpdateScene) -> Result<crate::domain::timeline::models::Scene, crate::domain::timeline::error::TimelineError> {
+        async fn update(
+            &self,
+            _id: uuid::Uuid,
+            update: &crate::domain::timeline::models::UpdateScene,
+        ) -> Result<
+            crate::domain::timeline::models::Scene,
+            crate::domain::timeline::error::TimelineError,
+        > {
             self.updates.lock().unwrap().push(update.clone());
             Ok(crate::domain::timeline::models::Scene {
                 id: _id,
@@ -1486,20 +1680,30 @@ mod tests {
                 updated_at: chrono::Utc::now(),
             })
         }
-        async fn delete(&self, _: uuid::Uuid) -> Result<(), crate::domain::timeline::error::TimelineError> {
+        async fn delete(
+            &self,
+            _: uuid::Uuid,
+        ) -> Result<(), crate::domain::timeline::error::TimelineError> {
             Ok(())
         }
-        async fn find_max_position(&self, _: uuid::Uuid) -> Result<f64, crate::domain::timeline::error::TimelineError> {
+        async fn find_max_position(
+            &self,
+            _: uuid::Uuid,
+        ) -> Result<f64, crate::domain::timeline::error::TimelineError> {
             Ok(0.0)
         }
-        async fn mark_needs_revision(&self, _: uuid::Uuid) -> Result<(), crate::domain::timeline::error::TimelineError> {
+        async fn mark_needs_revision(
+            &self,
+            _: uuid::Uuid,
+        ) -> Result<(), crate::domain::timeline::error::TimelineError> {
             Ok(())
         }
     }
 
     fn build_test_ai_service(
         llm: Arc<dyn narrex_llm::LlmProvider>,
-    ) -> AiServiceImpl<MockDraftRepo, MockSummaryRepo, MockLogRepo, MockContextRepo, MockSceneRepo> {
+    ) -> AiServiceImpl<MockDraftRepo, MockSummaryRepo, MockLogRepo, MockContextRepo, MockSceneRepo>
+    {
         AiServiceImpl::new(
             MockDraftRepo,
             MockSummaryRepo,
@@ -1513,7 +1717,8 @@ mod tests {
     fn build_test_ai_service_with_log_repo(
         llm: Arc<dyn narrex_llm::LlmProvider>,
         log_repo: MockLogRepo,
-    ) -> AiServiceImpl<MockDraftRepo, MockSummaryRepo, MockLogRepo, MockContextRepo, MockSceneRepo> {
+    ) -> AiServiceImpl<MockDraftRepo, MockSummaryRepo, MockLogRepo, MockContextRepo, MockSceneRepo>
+    {
         AiServiceImpl::new(
             MockDraftRepo,
             MockSummaryRepo,
@@ -1529,10 +1734,7 @@ mod tests {
     #[tokio::test]
     async fn get_quota_below_warning() {
         let log_repo = MockLogRepo::with_count(10);
-        let svc = build_test_ai_service_with_log_repo(
-            MockLlmProvider::new("{}".into()),
-            log_repo,
-        );
+        let svc = build_test_ai_service_with_log_repo(MockLlmProvider::new("{}".into()), log_repo);
         let quota = svc.get_quota(Uuid::new_v4()).await.unwrap();
         assert_eq!(quota.used, 10);
         assert_eq!(quota.limit, 50);
@@ -1544,10 +1746,7 @@ mod tests {
     #[tokio::test]
     async fn get_quota_at_warning_threshold() {
         let log_repo = MockLogRepo::with_count(40);
-        let svc = build_test_ai_service_with_log_repo(
-            MockLlmProvider::new("{}".into()),
-            log_repo,
-        );
+        let svc = build_test_ai_service_with_log_repo(MockLlmProvider::new("{}".into()), log_repo);
         let quota = svc.get_quota(Uuid::new_v4()).await.unwrap();
         assert_eq!(quota.used, 40);
         assert_eq!(quota.remaining, 10);
@@ -1558,10 +1757,7 @@ mod tests {
     #[tokio::test]
     async fn get_quota_between_warning_and_limit() {
         let log_repo = MockLogRepo::with_count(45);
-        let svc = build_test_ai_service_with_log_repo(
-            MockLlmProvider::new("{}".into()),
-            log_repo,
-        );
+        let svc = build_test_ai_service_with_log_repo(MockLlmProvider::new("{}".into()), log_repo);
         let quota = svc.get_quota(Uuid::new_v4()).await.unwrap();
         assert_eq!(quota.used, 45);
         assert_eq!(quota.remaining, 5);
@@ -1572,10 +1768,7 @@ mod tests {
     #[tokio::test]
     async fn get_quota_at_limit_shows_exceeded() {
         let log_repo = MockLogRepo::with_count(50);
-        let svc = build_test_ai_service_with_log_repo(
-            MockLlmProvider::new("{}".into()),
-            log_repo,
-        );
+        let svc = build_test_ai_service_with_log_repo(MockLlmProvider::new("{}".into()), log_repo);
         let quota = svc.get_quota(Uuid::new_v4()).await.unwrap();
         assert_eq!(quota.used, 50);
         assert_eq!(quota.remaining, 0);
@@ -1586,10 +1779,7 @@ mod tests {
     #[tokio::test]
     async fn get_quota_over_limit_remaining_is_zero() {
         let log_repo = MockLogRepo::with_count(55);
-        let svc = build_test_ai_service_with_log_repo(
-            MockLlmProvider::new("{}".into()),
-            log_repo,
-        );
+        let svc = build_test_ai_service_with_log_repo(MockLlmProvider::new("{}".into()), log_repo);
         let quota = svc.get_quota(Uuid::new_v4()).await.unwrap();
         assert_eq!(quota.remaining, 0);
         assert!(quota.exceeded);
@@ -1598,10 +1788,7 @@ mod tests {
     #[tokio::test]
     async fn check_quota_ok_below_limit() {
         let log_repo = MockLogRepo::with_count(30);
-        let svc = build_test_ai_service_with_log_repo(
-            MockLlmProvider::new("{}".into()),
-            log_repo,
-        );
+        let svc = build_test_ai_service_with_log_repo(MockLlmProvider::new("{}".into()), log_repo);
         let result = svc.check_quota(Uuid::new_v4()).await;
         assert!(result.is_ok());
     }
@@ -1609,10 +1796,7 @@ mod tests {
     #[tokio::test]
     async fn check_quota_errors_at_limit() {
         let log_repo = MockLogRepo::with_count(50);
-        let svc = build_test_ai_service_with_log_repo(
-            MockLlmProvider::new("{}".into()),
-            log_repo,
-        );
+        let svc = build_test_ai_service_with_log_repo(MockLlmProvider::new("{}".into()), log_repo);
         let err = svc.check_quota(Uuid::new_v4()).await.unwrap_err();
         match err {
             AiError::QuotaExceeded { used, limit, .. } => {
@@ -1626,10 +1810,7 @@ mod tests {
     #[tokio::test]
     async fn check_quota_errors_over_limit() {
         let log_repo = MockLogRepo::with_count(60);
-        let svc = build_test_ai_service_with_log_repo(
-            MockLlmProvider::new("{}".into()),
-            log_repo,
-        );
+        let svc = build_test_ai_service_with_log_repo(MockLlmProvider::new("{}".into()), log_repo);
         let err = svc.check_quota(Uuid::new_v4()).await.unwrap_err();
         assert!(matches!(err, AiError::QuotaExceeded { .. }));
     }
@@ -1637,10 +1818,7 @@ mod tests {
     #[tokio::test]
     async fn get_quota_resets_at_is_next_month() {
         let log_repo = MockLogRepo::with_count(0);
-        let svc = build_test_ai_service_with_log_repo(
-            MockLlmProvider::new("{}".into()),
-            log_repo,
-        );
+        let svc = build_test_ai_service_with_log_repo(MockLlmProvider::new("{}".into()), log_repo);
         let quota = svc.get_quota(Uuid::new_v4()).await.unwrap();
         let now = chrono::Utc::now();
         assert!(quota.resets_at > now);

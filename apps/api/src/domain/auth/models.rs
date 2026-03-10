@@ -55,10 +55,7 @@ mod tests {
             display_name: Some(Some("Alice".into())),
             ..Default::default()
         };
-        assert_eq!(
-            up.display_name.as_ref().unwrap().as_deref(),
-            Some("Alice")
-        );
+        assert_eq!(up.display_name.as_ref().unwrap().as_deref(), Some("Alice"));
     }
 
     #[test]

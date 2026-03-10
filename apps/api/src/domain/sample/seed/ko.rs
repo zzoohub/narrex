@@ -1,15 +1,11 @@
 use chrono::Utc;
 use uuid::Uuid;
 
-use crate::domain::character::models::{
-    Character, RelationshipDirection, RelationshipVisual,
-};
+use crate::domain::character::models::{Character, RelationshipDirection, RelationshipVisual};
 use crate::domain::project::models::{PovType, Project, SourceType};
-use crate::domain::timeline::models::{
-    ConnectionType, SceneConnection, SceneStatus, Track,
-};
+use crate::domain::timeline::models::{ConnectionType, SceneConnection, SceneStatus, Track};
 
-use super::{SampleProjectData, SampleScene, build_relationships};
+use super::{build_relationships, SampleProjectData, SampleScene};
 
 pub(super) fn build(user_id: Uuid) -> SampleProjectData {
     let now = Utc::now();
@@ -504,12 +500,48 @@ pub(super) fn build(user_id: Uuid) -> SampleProjectData {
         project_id,
         now,
         vec![
-            (char_hayoon, char_doyoon, "첫사랑 / 재회", RelationshipVisual::Solid, RelationshipDirection::Bidirectional),
-            (char_youngsuk, char_hayoon, "외할머니 → 손녀", RelationshipVisual::Arrowed, RelationshipDirection::AToB),
-            (char_hayoon, char_chaerin, "절친 / 재회", RelationshipVisual::Dashed, RelationshipDirection::Bidirectional),
-            (char_doyoon, char_junseo, "죽마고우", RelationshipVisual::Solid, RelationshipDirection::Bidirectional),
-            (char_junseo, char_chaerin, "짝사랑", RelationshipVisual::Arrowed, RelationshipDirection::AToB),
-            (char_youngsuk, char_doyoon, "편지의 보관자", RelationshipVisual::Dashed, RelationshipDirection::Bidirectional),
+            (
+                char_hayoon,
+                char_doyoon,
+                "첫사랑 / 재회",
+                RelationshipVisual::Solid,
+                RelationshipDirection::Bidirectional,
+            ),
+            (
+                char_youngsuk,
+                char_hayoon,
+                "외할머니 → 손녀",
+                RelationshipVisual::Arrowed,
+                RelationshipDirection::AToB,
+            ),
+            (
+                char_hayoon,
+                char_chaerin,
+                "절친 / 재회",
+                RelationshipVisual::Dashed,
+                RelationshipDirection::Bidirectional,
+            ),
+            (
+                char_doyoon,
+                char_junseo,
+                "죽마고우",
+                RelationshipVisual::Solid,
+                RelationshipDirection::Bidirectional,
+            ),
+            (
+                char_junseo,
+                char_chaerin,
+                "짝사랑",
+                RelationshipVisual::Arrowed,
+                RelationshipDirection::AToB,
+            ),
+            (
+                char_youngsuk,
+                char_doyoon,
+                "편지의 보관자",
+                RelationshipVisual::Dashed,
+                RelationshipDirection::Bidirectional,
+            ),
         ],
     );
 

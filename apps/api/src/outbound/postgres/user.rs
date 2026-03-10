@@ -69,7 +69,11 @@ impl UserRepository for Postgres {
         Ok(row.map(UserRow::into_domain))
     }
 
-    async fn upsert_from_google(&self, info: &GoogleUserInfo, preferred_locale: &str) -> Result<User, AuthError> {
+    async fn upsert_from_google(
+        &self,
+        info: &GoogleUserInfo,
+        preferred_locale: &str,
+    ) -> Result<User, AuthError> {
         let row = sqlx::query_as::<_, UserRow>(
             "INSERT INTO user_account (google_id, email, display_name, profile_image_url, language_preference) \
              VALUES ($1, $2, $3, $4, $5) \

@@ -61,10 +61,12 @@ impl JwtTokenService {
         let mut validation = Validation::new(Algorithm::HS256);
         validation.validate_exp = true;
 
-        let token_data = decode::<Claims>(token, &self.decoding_key(), &validation)
-            .map_err(|e| match e.kind() {
-                jsonwebtoken::errors::ErrorKind::ExpiredSignature => AuthError::TokenExpired,
-                _ => AuthError::InvalidToken(e.to_string()),
+        let token_data =
+            decode::<Claims>(token, &self.decoding_key(), &validation).map_err(|e| {
+                match e.kind() {
+                    jsonwebtoken::errors::ErrorKind::ExpiredSignature => AuthError::TokenExpired,
+                    _ => AuthError::InvalidToken(e.to_string()),
+                }
             })?;
 
         if token_data.claims.kind != expected_kind {
@@ -149,9 +151,14 @@ mod tests {
     async fn access_token_rejected_as_refresh() {
         let s = svc();
         let tokens = s.create_tokens(Uuid::new_v4()).await.unwrap();
-        let err = s.verify_refresh_token(&tokens.access_token).await.unwrap_err();
+        let err = s
+            .verify_refresh_token(&tokens.access_token)
+            .await
+            .unwrap_err();
         assert!(matches!(err, AuthError::InvalidToken(_)));
-        assert!(err.to_string().contains("expected refresh token, got access"));
+        assert!(err
+            .to_string()
+            .contains("expected refresh token, got access"));
     }
 
     #[tokio::test]
@@ -160,7 +167,9 @@ mod tests {
         let token = s.create_refresh_token(Uuid::new_v4()).await.unwrap();
         let err = s.verify_access_token(&token).await.unwrap_err();
         assert!(matches!(err, AuthError::InvalidToken(_)));
-        assert!(err.to_string().contains("expected access token, got refresh"));
+        assert!(err
+            .to_string()
+            .contains("expected access token, got refresh"));
     }
 
     // ---- Invalid token ----
@@ -179,7 +188,10 @@ mod tests {
         let s1 = JwtTokenService::new("secret-one");
         let s2 = JwtTokenService::new("secret-two");
         let tokens = s1.create_tokens(Uuid::new_v4()).await.unwrap();
-        let err = s2.verify_access_token(&tokens.access_token).await.unwrap_err();
+        let err = s2
+            .verify_access_token(&tokens.access_token)
+            .await
+            .unwrap_err();
         assert!(matches!(err, AuthError::InvalidToken(_)));
     }
 
@@ -190,7 +202,9 @@ mod tests {
         let s = svc();
         let user_id = Uuid::new_v4();
         // Create token with negative TTL past the 60s leeway -> already expired
-        let token = s.encode_token(user_id, "access", Duration::seconds(-120)).unwrap();
+        let token = s
+            .encode_token(user_id, "access", Duration::seconds(-120))
+            .unwrap();
         let err = s.verify_token(&token, "access").unwrap_err();
         assert!(matches!(err, AuthError::TokenExpired));
     }
@@ -201,7 +215,9 @@ mod tests {
     fn claims_contain_correct_kind() {
         let s = svc();
         let user_id = Uuid::new_v4();
-        let token = s.encode_token(user_id, "access", Duration::minutes(5)).unwrap();
+        let token = s
+            .encode_token(user_id, "access", Duration::minutes(5))
+            .unwrap();
 
         let mut validation = Validation::default();
         validation.insecure_disable_signature_validation();

@@ -38,8 +38,11 @@ pub async fn list_projects(
         .list_projects(auth.user_id, &params)
         .await?;
 
-    let data: Vec<ProjectSummaryResponse> =
-        result.data.iter().map(ProjectSummaryResponse::from).collect();
+    let data: Vec<ProjectSummaryResponse> = result
+        .data
+        .iter()
+        .map(ProjectSummaryResponse::from)
+        .collect();
 
     Ok(PaginatedResponse::new(
         data,
@@ -106,9 +109,7 @@ pub async fn update_project(
     Path(project_id): Path<Uuid>,
     Json(body): Json<UpdateProjectRequest>,
 ) -> Result<ApiSuccess<ProjectResponse>, ApiError> {
-    let update = body
-        .try_into()
-        .map_err(ApiError::UnprocessableEntity)?;
+    let update = body.try_into().map_err(ApiError::UnprocessableEntity)?;
 
     let project = state
         .project_service()
@@ -168,9 +169,11 @@ pub async fn structure_project(
     tracing::info!(user_id = %auth.user_id, input_len = body.source_input.len(), "structure_project: started");
     let source_input = body.source_input.clone();
     let clarification_answers = body.clarification_answers.clone();
-    let user = state.auth_service().get_user(auth.user_id).await.map_err(|_| {
-        ApiError::Unauthorized("user not found".into())
-    })?;
+    let user = state
+        .auth_service()
+        .get_user(auth.user_id)
+        .await
+        .map_err(|_| ApiError::Unauthorized("user not found".into()))?;
     let locale = user.language_preference;
 
     let stream = async_stream::stream! {
@@ -534,10 +537,7 @@ pub async fn import_project(
     // Extract file from multipart.
     let mut file_data: Option<(String, Vec<u8>)> = None;
     while let Ok(Some(field)) = multipart.next_field().await {
-        let file_name = field
-            .file_name()
-            .map(|s| s.to_string())
-            .unwrap_or_default();
+        let file_name = field.file_name().map(|s| s.to_string()).unwrap_or_default();
         let data = field
             .bytes()
             .await
@@ -546,11 +546,12 @@ pub async fn import_project(
         break; // Only process the first file.
     }
 
-    let (file_name, data) = file_data.ok_or_else(|| ApiError::BadRequest("no file provided".into()))?;
+    let (file_name, data) =
+        file_data.ok_or_else(|| ApiError::BadRequest("no file provided".into()))?;
 
     // Parse file content.
-    let source_input = extract_text_from_file(&file_name, &data)
-        .map_err(|e| ApiError::BadRequest(e))?;
+    let source_input =
+        extract_text_from_file(&file_name, &data).map_err(|e| ApiError::BadRequest(e))?;
 
     if source_input.trim().is_empty() {
         return Err(ApiError::BadRequest("file contains no text content".into()));
@@ -590,16 +591,11 @@ fn extract_text_from_file(file_name: &str, data: &[u8]) -> Result<String, String
         ));
     }
 
-    let ext = file_name
-        .rsplit('.')
-        .next()
-        .unwrap_or("")
-        .to_lowercase();
+    let ext = file_name.rsplit('.').next().unwrap_or("").to_lowercase();
 
     match ext.as_str() {
         "txt" | "md" | "markdown" => {
-            String::from_utf8(data.to_vec())
-                .map_err(|_| "file is not valid UTF-8 text".to_string())
+            String::from_utf8(data.to_vec()).map_err(|_| "file is not valid UTF-8 text".to_string())
         }
         _ => Err(format!(
             "unsupported file format: .{ext}. Supported: .txt, .md"

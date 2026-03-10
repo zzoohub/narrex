@@ -44,9 +44,7 @@ impl ProjectRow {
             era_location: self.era_location,
             pov: self.pov.and_then(|s| s.parse::<PovType>().ok()),
             tone: self.tone,
-            source_type: self
-                .source_type
-                .and_then(|s| s.parse::<SourceType>().ok()),
+            source_type: self.source_type.and_then(|s| s.parse::<SourceType>().ok()),
             source_input: self.source_input,
             created_at: self.created_at,
             updated_at: self.updated_at,

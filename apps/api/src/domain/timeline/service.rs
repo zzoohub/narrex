@@ -6,7 +6,8 @@ use super::models::{
     UpdateScene, UpdateTrack,
 };
 use super::ports::{
-    ConnectionRepository, SceneCharacterRepository, SceneRepository, TimelineService, TrackRepository,
+    ConnectionRepository, SceneCharacterRepository, SceneRepository, TimelineService,
+    TrackRepository,
 };
 
 #[derive(Clone)]
@@ -29,12 +30,7 @@ where
     CR: ConnectionRepository,
     SCR: SceneCharacterRepository,
 {
-    pub fn new(
-        track_repo: TR,
-        scene_repo: SR,
-        connection_repo: CR,
-        scene_char_repo: SCR,
-    ) -> Self {
+    pub fn new(track_repo: TR, scene_repo: SR, connection_repo: CR, scene_char_repo: SCR) -> Self {
         Self {
             track_repo,
             scene_repo,
@@ -227,10 +223,7 @@ where
     /// Mark all `ai_draft` and `edited` scenes in a project as `needs_revision`.
     ///
     /// Called when project config changes affect generation context.
-    pub async fn mark_scenes_needs_revision(
-        &self,
-        project_id: Uuid,
-    ) -> Result<(), TimelineError> {
+    pub async fn mark_scenes_needs_revision(&self, project_id: Uuid) -> Result<(), TimelineError> {
         self.scene_repo.mark_needs_revision(project_id).await
     }
 }
@@ -240,10 +233,18 @@ where
 // ---------------------------------------------------------------------------
 
 #[async_trait::async_trait]
-impl<TR: TrackRepository, SR: SceneRepository, CR: ConnectionRepository, SCR: SceneCharacterRepository>
-    TimelineService for TimelineServiceImpl<TR, SR, CR, SCR>
+impl<
+        TR: TrackRepository,
+        SR: SceneRepository,
+        CR: ConnectionRepository,
+        SCR: SceneCharacterRepository,
+    > TimelineService for TimelineServiceImpl<TR, SR, CR, SCR>
 {
-    async fn create_track(&self, project_id: Uuid, input: &CreateTrack) -> Result<Track, TimelineError> {
+    async fn create_track(
+        &self,
+        project_id: Uuid,
+        input: &CreateTrack,
+    ) -> Result<Track, TimelineError> {
         Self::create_track(self, project_id, input).await
     }
     async fn update_track(&self, id: Uuid, update: &UpdateTrack) -> Result<Track, TimelineError> {
@@ -252,7 +253,11 @@ impl<TR: TrackRepository, SR: SceneRepository, CR: ConnectionRepository, SCR: Sc
     async fn delete_track(&self, id: Uuid) -> Result<(), TimelineError> {
         Self::delete_track(self, id).await
     }
-    async fn create_scene(&self, project_id: Uuid, input: &CreateScene) -> Result<Scene, TimelineError> {
+    async fn create_scene(
+        &self,
+        project_id: Uuid,
+        input: &CreateScene,
+    ) -> Result<Scene, TimelineError> {
         Self::create_scene(self, project_id, input).await
     }
     async fn get_scene(&self, id: Uuid) -> Result<Scene, TimelineError> {
@@ -267,7 +272,11 @@ impl<TR: TrackRepository, SR: SceneRepository, CR: ConnectionRepository, SCR: Sc
     async fn delete_scene(&self, id: Uuid) -> Result<(), TimelineError> {
         Self::delete_scene(self, id).await
     }
-    async fn create_connection(&self, project_id: Uuid, input: &CreateConnection) -> Result<SceneConnection, TimelineError> {
+    async fn create_connection(
+        &self,
+        project_id: Uuid,
+        input: &CreateConnection,
+    ) -> Result<SceneConnection, TimelineError> {
         Self::create_connection(self, project_id, input).await
     }
     async fn delete_connection(&self, id: Uuid) -> Result<(), TimelineError> {
@@ -280,30 +289,51 @@ impl<TR: TrackRepository, SR: SceneRepository, CR: ConnectionRepository, SCR: Sc
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::models::*;
+    use super::*;
     use chrono::Utc;
     use std::sync::{Arc, Mutex};
 
     // ---- Helpers ----
 
     fn make_track(id: Uuid, project_id: Uuid, position: f64) -> Track {
-        Track { id, project_id, position, label: None, created_at: Utc::now(), updated_at: Utc::now() }
+        Track {
+            id,
+            project_id,
+            position,
+            label: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
     }
 
     fn make_scene(id: Uuid, track_id: Uuid, project_id: Uuid, start: f64) -> Scene {
         Scene {
-            id, track_id, project_id, start_position: start, duration: 1.0,
-            status: SceneStatus::Empty, title: "test".into(), plot_summary: None,
-            location: None, mood_tags: vec![], content: None, character_ids: vec![],
-            created_at: Utc::now(), updated_at: Utc::now(),
+            id,
+            track_id,
+            project_id,
+            start_position: start,
+            duration: 1.0,
+            status: SceneStatus::Empty,
+            title: "test".into(),
+            plot_summary: None,
+            location: None,
+            mood_tags: vec![],
+            content: None,
+            character_ids: vec![],
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
         }
     }
 
     fn make_connection(id: Uuid, project_id: Uuid, src: Uuid, tgt: Uuid) -> SceneConnection {
         SceneConnection {
-            id, project_id, source_scene_id: src, target_scene_id: tgt,
-            connection_type: ConnectionType::Branch, created_at: Utc::now(),
+            id,
+            project_id,
+            source_scene_id: src,
+            target_scene_id: tgt,
+            connection_type: ConnectionType::Branch,
+            created_at: Utc::now(),
         }
     }
 
@@ -317,7 +347,10 @@ mod tests {
 
     impl MockTrackRepo {
         fn new(tracks: Vec<Track>) -> Self {
-            Self { tracks: Arc::new(Mutex::new(tracks)), scene_counts: Arc::new(Mutex::new(std::collections::HashMap::new())) }
+            Self {
+                tracks: Arc::new(Mutex::new(tracks)),
+                scene_counts: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            }
         }
         fn with_scene_count(self, track_id: Uuid, count: i64) -> Self {
             self.scene_counts.lock().unwrap().insert(track_id, count);
@@ -327,18 +360,30 @@ mod tests {
 
     #[async_trait::async_trait]
     impl TrackRepository for MockTrackRepo {
-        async fn create(&self, project_id: Uuid, input: &CreateTrack) -> Result<Track, TimelineError> {
+        async fn create(
+            &self,
+            project_id: Uuid,
+            input: &CreateTrack,
+        ) -> Result<Track, TimelineError> {
             let t = Track {
-                id: Uuid::new_v4(), project_id,
+                id: Uuid::new_v4(),
+                project_id,
                 position: input.position.unwrap_or(0.0),
                 label: input.label.clone(),
-                created_at: Utc::now(), updated_at: Utc::now(),
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
             };
             self.tracks.lock().unwrap().push(t.clone());
             Ok(t)
         }
         async fn find_by_id(&self, id: Uuid) -> Result<Option<Track>, TimelineError> {
-            Ok(self.tracks.lock().unwrap().iter().find(|t| t.id == id).cloned())
+            Ok(self
+                .tracks
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|t| t.id == id)
+                .cloned())
         }
         async fn update(&self, id: Uuid, update: &UpdateTrack) -> Result<Track, TimelineError> {
             let mut tracks = self.tracks.lock().unwrap();
@@ -353,11 +398,17 @@ mod tests {
             Ok(())
         }
         async fn count_scenes(&self, track_id: Uuid) -> Result<i64, TimelineError> {
-            Ok(*self.scene_counts.lock().unwrap().get(&track_id).unwrap_or(&0))
+            Ok(*self
+                .scene_counts
+                .lock()
+                .unwrap()
+                .get(&track_id)
+                .unwrap_or(&0))
         }
         async fn find_max_position(&self, project_id: Uuid) -> Result<f64, TimelineError> {
             let tracks = self.tracks.lock().unwrap();
-            let max = tracks.iter()
+            let max = tracks
+                .iter()
                 .filter(|t| t.project_id == project_id)
                 .map(|t| t.position)
                 .fold(0.0_f64, f64::max);
@@ -374,37 +425,71 @@ mod tests {
 
     impl MockSceneRepo {
         fn new(scenes: Vec<Scene>) -> Self {
-            Self { scenes: Arc::new(Mutex::new(scenes)) }
+            Self {
+                scenes: Arc::new(Mutex::new(scenes)),
+            }
         }
-        fn empty() -> Self { Self::new(vec![]) }
+        fn empty() -> Self {
+            Self::new(vec![])
+        }
     }
 
     #[async_trait::async_trait]
     impl SceneRepository for MockSceneRepo {
-        async fn create(&self, project_id: Uuid, input: &CreateScene) -> Result<Scene, TimelineError> {
+        async fn create(
+            &self,
+            project_id: Uuid,
+            input: &CreateScene,
+        ) -> Result<Scene, TimelineError> {
             let s = Scene {
-                id: Uuid::new_v4(), track_id: input.track_id, project_id,
+                id: Uuid::new_v4(),
+                track_id: input.track_id,
+                project_id,
                 start_position: input.start_position.unwrap_or(0.0),
                 duration: input.duration.unwrap_or(1.0),
-                status: SceneStatus::Empty, title: input.title.clone(),
-                plot_summary: input.plot_summary.clone(), location: input.location.clone(),
-                mood_tags: input.mood_tags.clone(), content: None, character_ids: input.character_ids.clone(),
-                created_at: Utc::now(), updated_at: Utc::now(),
+                status: SceneStatus::Empty,
+                title: input.title.clone(),
+                plot_summary: input.plot_summary.clone(),
+                location: input.location.clone(),
+                mood_tags: input.mood_tags.clone(),
+                content: None,
+                character_ids: input.character_ids.clone(),
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
             };
             self.scenes.lock().unwrap().push(s.clone());
             Ok(s)
         }
         async fn find_by_id(&self, id: Uuid) -> Result<Option<Scene>, TimelineError> {
-            Ok(self.scenes.lock().unwrap().iter().find(|s| s.id == id).cloned())
+            Ok(self
+                .scenes
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|s| s.id == id)
+                .cloned())
         }
         async fn find_detail_by_id(&self, id: Uuid) -> Result<Option<SceneDetail>, TimelineError> {
-            Ok(self.scenes.lock().unwrap().iter().find(|s| s.id == id).map(|s| SceneDetail { scene: s.clone(), latest_draft: None }))
+            Ok(self
+                .scenes
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|s| s.id == id)
+                .map(|s| SceneDetail {
+                    scene: s.clone(),
+                    latest_draft: None,
+                }))
         }
         async fn update(&self, id: Uuid, update: &UpdateScene) -> Result<Scene, TimelineError> {
             let mut scenes = self.scenes.lock().unwrap();
             let s = scenes.iter_mut().find(|s| s.id == id).unwrap();
-            if let Some(title) = &update.title { s.title = title.clone(); }
-            if let Some(pos) = update.start_position { s.start_position = pos; }
+            if let Some(title) = &update.title {
+                s.title = title.clone();
+            }
+            if let Some(pos) = update.start_position {
+                s.start_position = pos;
+            }
             Ok(s.clone())
         }
         async fn delete(&self, id: Uuid) -> Result<(), TimelineError> {
@@ -413,7 +498,8 @@ mod tests {
         }
         async fn find_max_position(&self, track_id: Uuid) -> Result<f64, TimelineError> {
             let scenes = self.scenes.lock().unwrap();
-            let max = scenes.iter()
+            let max = scenes
+                .iter()
                 .filter(|s| s.track_id == track_id)
                 .map(|s| s.start_position + s.duration)
                 .fold(0.0_f64, f64::max);
@@ -432,14 +518,31 @@ mod tests {
     }
 
     impl MockConnRepo {
-        fn empty() -> Self { Self { conns: Arc::new(Mutex::new(vec![])) } }
-        fn new(conns: Vec<SceneConnection>) -> Self { Self { conns: Arc::new(Mutex::new(conns)) } }
+        fn empty() -> Self {
+            Self {
+                conns: Arc::new(Mutex::new(vec![])),
+            }
+        }
+        fn new(conns: Vec<SceneConnection>) -> Self {
+            Self {
+                conns: Arc::new(Mutex::new(conns)),
+            }
+        }
     }
 
     #[async_trait::async_trait]
     impl ConnectionRepository for MockConnRepo {
-        async fn create(&self, project_id: Uuid, input: &CreateConnection) -> Result<SceneConnection, TimelineError> {
-            let c = make_connection(Uuid::new_v4(), project_id, input.source_scene_id, input.target_scene_id);
+        async fn create(
+            &self,
+            project_id: Uuid,
+            input: &CreateConnection,
+        ) -> Result<SceneConnection, TimelineError> {
+            let c = make_connection(
+                Uuid::new_v4(),
+                project_id,
+                input.source_scene_id,
+                input.target_scene_id,
+            );
             self.conns.lock().unwrap().push(c.clone());
             Ok(c)
         }
@@ -448,7 +551,12 @@ mod tests {
             Ok(())
         }
         async fn exists(&self, src: Uuid, tgt: Uuid) -> Result<bool, TimelineError> {
-            Ok(self.conns.lock().unwrap().iter().any(|c| c.source_scene_id == src && c.target_scene_id == tgt))
+            Ok(self
+                .conns
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|c| c.source_scene_id == src && c.target_scene_id == tgt))
         }
     }
 
@@ -459,7 +567,11 @@ mod tests {
 
     #[async_trait::async_trait]
     impl SceneCharacterRepository for MockSceneCharRepo {
-        async fn set_characters(&self, _scene_id: Uuid, _character_ids: &[Uuid]) -> Result<(), TimelineError> {
+        async fn set_characters(
+            &self,
+            _scene_id: Uuid,
+            _character_ids: &[Uuid],
+        ) -> Result<(), TimelineError> {
             Ok(())
         }
     }
@@ -468,7 +580,12 @@ mod tests {
         tracks: Vec<Track>,
         scenes: Vec<Scene>,
     ) -> TimelineServiceImpl<MockTrackRepo, MockSceneRepo, MockConnRepo, MockSceneCharRepo> {
-        TimelineServiceImpl::new(MockTrackRepo::new(tracks), MockSceneRepo::new(scenes), MockConnRepo::empty(), MockSceneCharRepo)
+        TimelineServiceImpl::new(
+            MockTrackRepo::new(tracks),
+            MockSceneRepo::new(scenes),
+            MockConnRepo::empty(),
+            MockSceneCharRepo,
+        )
     }
 
     // ---- Track tests ----
@@ -478,7 +595,10 @@ mod tests {
         let pid = Uuid::new_v4();
         let existing = make_track(Uuid::new_v4(), pid, 5.0);
         let svc = build_svc(vec![existing], vec![]);
-        let input = CreateTrack { label: Some("new".into()), position: None };
+        let input = CreateTrack {
+            label: Some("new".into()),
+            position: None,
+        };
         let track = svc.create_track(pid, &input).await.unwrap();
         assert_eq!(track.position, 6.0); // max(5.0) + 1.0
     }
@@ -486,7 +606,10 @@ mod tests {
     #[tokio::test]
     async fn create_track_explicit_position() {
         let svc = build_svc(vec![], vec![]);
-        let input = CreateTrack { label: None, position: Some(10.0) };
+        let input = CreateTrack {
+            label: None,
+            position: Some(10.0),
+        };
         let track = svc.create_track(Uuid::new_v4(), &input).await.unwrap();
         assert_eq!(track.position, 10.0);
     }
@@ -503,7 +626,12 @@ mod tests {
         let tid = Uuid::new_v4();
         let track = make_track(tid, Uuid::new_v4(), 0.0);
         let track_repo = MockTrackRepo::new(vec![track]).with_scene_count(tid, 3);
-        let svc = TimelineServiceImpl::new(track_repo, MockSceneRepo::empty(), MockConnRepo::empty(), MockSceneCharRepo);
+        let svc = TimelineServiceImpl::new(
+            track_repo,
+            MockSceneRepo::empty(),
+            MockConnRepo::empty(),
+            MockSceneCharRepo,
+        );
         let err = svc.delete_track(tid).await.unwrap_err();
         assert!(matches!(err, TimelineError::TrackHasScenes));
     }
@@ -519,7 +647,10 @@ mod tests {
     #[tokio::test]
     async fn update_track_not_found() {
         let svc = build_svc(vec![], vec![]);
-        let err = svc.update_track(Uuid::new_v4(), &UpdateTrack::default()).await.unwrap_err();
+        let err = svc
+            .update_track(Uuid::new_v4(), &UpdateTrack::default())
+            .await
+            .unwrap_err();
         assert!(matches!(err, TimelineError::TrackNotFound));
     }
 
@@ -534,9 +665,14 @@ mod tests {
         let svc = build_svc(vec![track], vec![existing_scene]);
 
         let input = CreateScene {
-            track_id: tid, title: "New".into(),
-            start_position: None, duration: None,
-            plot_summary: None, location: None, mood_tags: vec![], character_ids: vec![],
+            track_id: tid,
+            title: "New".into(),
+            start_position: None,
+            duration: None,
+            plot_summary: None,
+            location: None,
+            mood_tags: vec![],
+            character_ids: vec![],
         };
         let scene = svc.create_scene(pid, &input).await.unwrap();
         assert_eq!(scene.start_position, 101.0); // max(100 + 1) = 101
@@ -547,9 +683,14 @@ mod tests {
     async fn create_scene_track_not_found() {
         let svc = build_svc(vec![], vec![]);
         let input = CreateScene {
-            track_id: Uuid::new_v4(), title: "X".into(),
-            start_position: None, duration: None,
-            plot_summary: None, location: None, mood_tags: vec![], character_ids: vec![],
+            track_id: Uuid::new_v4(),
+            title: "X".into(),
+            start_position: None,
+            duration: None,
+            plot_summary: None,
+            location: None,
+            mood_tags: vec![],
+            character_ids: vec![],
         };
         let err = svc.create_scene(Uuid::new_v4(), &input).await.unwrap_err();
         assert!(matches!(err, TimelineError::TrackNotFound));
@@ -572,7 +713,10 @@ mod tests {
     #[tokio::test]
     async fn update_scene_not_found() {
         let svc = build_svc(vec![], vec![]);
-        let err = svc.update_scene(Uuid::new_v4(), &UpdateScene::default()).await.unwrap_err();
+        let err = svc
+            .update_scene(Uuid::new_v4(), &UpdateScene::default())
+            .await
+            .unwrap_err();
         assert!(matches!(err, TimelineError::SceneNotFound));
     }
 
@@ -585,7 +729,10 @@ mod tests {
         let scene = make_scene(sid, tid, pid, 0.0);
         let svc = build_svc(vec![track], vec![scene]);
 
-        let update = UpdateScene { track_id: Some(Uuid::new_v4()), ..Default::default() };
+        let update = UpdateScene {
+            track_id: Some(Uuid::new_v4()),
+            ..Default::default()
+        };
         let err = svc.update_scene(sid, &update).await.unwrap_err();
         assert!(matches!(err, TimelineError::TrackNotFound));
     }
@@ -612,9 +759,16 @@ mod tests {
         let pid = Uuid::new_v4();
         let s1 = Uuid::new_v4();
         let s2 = Uuid::new_v4();
-        let scenes = vec![make_scene(s1, Uuid::new_v4(), pid, 0.0), make_scene(s2, Uuid::new_v4(), pid, 1.0)];
+        let scenes = vec![
+            make_scene(s1, Uuid::new_v4(), pid, 0.0),
+            make_scene(s2, Uuid::new_v4(), pid, 1.0),
+        ];
         let svc = build_svc(vec![], scenes);
-        let input = CreateConnection { source_scene_id: s1, target_scene_id: s2, connection_type: ConnectionType::Branch };
+        let input = CreateConnection {
+            source_scene_id: s1,
+            target_scene_id: s2,
+            connection_type: ConnectionType::Branch,
+        };
         let conn = svc.create_connection(pid, &input).await.unwrap();
         assert_eq!(conn.source_scene_id, s1);
         assert_eq!(conn.target_scene_id, s2);
@@ -623,8 +777,15 @@ mod tests {
     #[tokio::test]
     async fn create_connection_source_not_found() {
         let svc = build_svc(vec![], vec![]);
-        let input = CreateConnection { source_scene_id: Uuid::new_v4(), target_scene_id: Uuid::new_v4(), connection_type: ConnectionType::Branch };
-        let err = svc.create_connection(Uuid::new_v4(), &input).await.unwrap_err();
+        let input = CreateConnection {
+            source_scene_id: Uuid::new_v4(),
+            target_scene_id: Uuid::new_v4(),
+            connection_type: ConnectionType::Branch,
+        };
+        let err = svc
+            .create_connection(Uuid::new_v4(), &input)
+            .await
+            .unwrap_err();
         assert!(matches!(err, TimelineError::SceneNotFound));
     }
 
@@ -633,7 +794,10 @@ mod tests {
         let pid = Uuid::new_v4();
         let s1 = Uuid::new_v4();
         let s2 = Uuid::new_v4();
-        let scenes = vec![make_scene(s1, Uuid::new_v4(), pid, 0.0), make_scene(s2, Uuid::new_v4(), pid, 1.0)];
+        let scenes = vec![
+            make_scene(s1, Uuid::new_v4(), pid, 0.0),
+            make_scene(s2, Uuid::new_v4(), pid, 1.0),
+        ];
         let existing = make_connection(Uuid::new_v4(), pid, s1, s2);
         let svc = TimelineServiceImpl::new(
             MockTrackRepo::new(vec![]),
@@ -641,7 +805,11 @@ mod tests {
             MockConnRepo::new(vec![existing]),
             MockSceneCharRepo,
         );
-        let input = CreateConnection { source_scene_id: s1, target_scene_id: s2, connection_type: ConnectionType::Branch };
+        let input = CreateConnection {
+            source_scene_id: s1,
+            target_scene_id: s2,
+            connection_type: ConnectionType::Branch,
+        };
         let err = svc.create_connection(pid, &input).await.unwrap_err();
         assert!(matches!(err, TimelineError::ConnectionExists));
     }
@@ -649,6 +817,8 @@ mod tests {
     #[tokio::test]
     async fn mark_scenes_needs_revision_ok() {
         let svc = build_svc(vec![], vec![]);
-        svc.mark_scenes_needs_revision(Uuid::new_v4()).await.unwrap();
+        svc.mark_scenes_needs_revision(Uuid::new_v4())
+            .await
+            .unwrap();
     }
 }

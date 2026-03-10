@@ -12,9 +12,7 @@ use super::request::{
     CreateConnectionRequest, CreateSceneRequest, CreateTrackRequest, UpdateSceneRequest,
     UpdateTrackRequest,
 };
-use super::response::{
-    ConnectionResponse, SceneDetailResponse, SceneResponse, TrackResponse,
-};
+use super::response::{ConnectionResponse, SceneDetailResponse, SceneResponse, TrackResponse};
 
 // ---------------------------------------------------------------------------
 // Tracks

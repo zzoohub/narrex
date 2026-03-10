@@ -43,11 +43,7 @@ struct MaxPositionRow {
 
 #[async_trait::async_trait]
 impl TrackRepository for Postgres {
-    async fn create(
-        &self,
-        project_id: Uuid,
-        input: &CreateTrack,
-    ) -> Result<Track, TimelineError> {
+    async fn create(&self, project_id: Uuid, input: &CreateTrack) -> Result<Track, TimelineError> {
         let position = input.position.unwrap_or(1.0);
 
         let row = sqlx::query_as::<_, TrackRow>(

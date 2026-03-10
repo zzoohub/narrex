@@ -67,7 +67,7 @@ jobs:
 
       - name: Run migrations
         uses: dtolnay/rust-toolchain@stable
-      - run: cargo install sqlx-cli --no-default-features --features postgres
+      - run: cargo install sqlx-cli --no-default-features --features postgres,rustls
       - run: sqlx migrate run --source db/migrations
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}

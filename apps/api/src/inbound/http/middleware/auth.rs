@@ -37,14 +37,13 @@ impl FromRequestParts<AppState> for AuthUser {
         let mut validation = Validation::new(Algorithm::HS256);
         validation.validate_exp = true;
 
-        let token_data = decode::<Claims>(token, &decoding_key, &validation).map_err(
-            |e| match e.kind() {
+        let token_data =
+            decode::<Claims>(token, &decoding_key, &validation).map_err(|e| match e.kind() {
                 jsonwebtoken::errors::ErrorKind::ExpiredSignature => {
                     ApiError::Unauthorized("token expired".into())
                 }
                 _ => ApiError::Unauthorized(format!("invalid token: {e}")),
-            },
-        )?;
+            })?;
 
         if token_data.claims.kind != "access" {
             return Err(ApiError::Unauthorized("not an access token".into()));

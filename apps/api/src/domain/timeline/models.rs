@@ -192,9 +192,18 @@ mod tests {
     #[test]
     fn scene_status_from_str_valid() {
         assert_eq!("empty".parse::<SceneStatus>().unwrap(), SceneStatus::Empty);
-        assert_eq!("ai_draft".parse::<SceneStatus>().unwrap(), SceneStatus::AiDraft);
-        assert_eq!("edited".parse::<SceneStatus>().unwrap(), SceneStatus::Edited);
-        assert_eq!("needs_revision".parse::<SceneStatus>().unwrap(), SceneStatus::NeedsRevision);
+        assert_eq!(
+            "ai_draft".parse::<SceneStatus>().unwrap(),
+            SceneStatus::AiDraft
+        );
+        assert_eq!(
+            "edited".parse::<SceneStatus>().unwrap(),
+            SceneStatus::Edited
+        );
+        assert_eq!(
+            "needs_revision".parse::<SceneStatus>().unwrap(),
+            SceneStatus::NeedsRevision
+        );
     }
 
     #[test]
@@ -206,7 +215,12 @@ mod tests {
 
     #[test]
     fn scene_status_roundtrip() {
-        for s in [SceneStatus::Empty, SceneStatus::AiDraft, SceneStatus::Edited, SceneStatus::NeedsRevision] {
+        for s in [
+            SceneStatus::Empty,
+            SceneStatus::AiDraft,
+            SceneStatus::Edited,
+            SceneStatus::NeedsRevision,
+        ] {
             let str_val = s.to_string();
             let parsed: SceneStatus = str_val.parse().unwrap();
             assert_eq!(parsed, s);
@@ -223,8 +237,14 @@ mod tests {
 
     #[test]
     fn connection_type_from_str_valid() {
-        assert_eq!("branch".parse::<ConnectionType>().unwrap(), ConnectionType::Branch);
-        assert_eq!("merge".parse::<ConnectionType>().unwrap(), ConnectionType::Merge);
+        assert_eq!(
+            "branch".parse::<ConnectionType>().unwrap(),
+            ConnectionType::Branch
+        );
+        assert_eq!(
+            "merge".parse::<ConnectionType>().unwrap(),
+            ConnectionType::Merge
+        );
     }
 
     #[test]

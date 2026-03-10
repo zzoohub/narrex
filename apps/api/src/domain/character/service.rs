@@ -175,26 +175,44 @@ impl<CR: CharacterRepository, RR: RelationshipRepository> CharacterServiceImpl<C
 // ---------------------------------------------------------------------------
 
 #[async_trait::async_trait]
-impl<CR: CharacterRepository, RR: RelationshipRepository> CharacterService for CharacterServiceImpl<CR, RR> {
+impl<CR: CharacterRepository, RR: RelationshipRepository> CharacterService
+    for CharacterServiceImpl<CR, RR>
+{
     async fn list_characters(&self, project_id: Uuid) -> Result<Vec<Character>, CharacterError> {
         Self::list_characters(self, project_id).await
     }
-    async fn create_character(&self, project_id: Uuid, input: &CreateCharacter) -> Result<Character, CharacterError> {
+    async fn create_character(
+        &self,
+        project_id: Uuid,
+        input: &CreateCharacter,
+    ) -> Result<Character, CharacterError> {
         Self::create_character(self, project_id, input).await
     }
     async fn get_character(&self, id: Uuid) -> Result<Character, CharacterError> {
         Self::get_character(self, id).await
     }
-    async fn update_character(&self, id: Uuid, update: &UpdateCharacter) -> Result<Character, CharacterError> {
+    async fn update_character(
+        &self,
+        id: Uuid,
+        update: &UpdateCharacter,
+    ) -> Result<Character, CharacterError> {
         Self::update_character(self, id, update).await
     }
     async fn delete_character(&self, id: Uuid) -> Result<(), CharacterError> {
         Self::delete_character(self, id).await
     }
-    async fn create_relationship(&self, project_id: Uuid, input: &CreateRelationship) -> Result<CharacterRelationship, CharacterError> {
+    async fn create_relationship(
+        &self,
+        project_id: Uuid,
+        input: &CreateRelationship,
+    ) -> Result<CharacterRelationship, CharacterError> {
         Self::create_relationship(self, project_id, input).await
     }
-    async fn update_relationship(&self, id: Uuid, update: &UpdateRelationship) -> Result<CharacterRelationship, CharacterError> {
+    async fn update_relationship(
+        &self,
+        id: Uuid,
+        update: &UpdateRelationship,
+    ) -> Result<CharacterRelationship, CharacterError> {
         Self::update_relationship(self, id, update).await
     }
     async fn delete_relationship(&self, id: Uuid) -> Result<(), CharacterError> {
@@ -204,8 +222,8 @@ impl<CR: CharacterRepository, RR: RelationshipRepository> CharacterService for C
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::models::*;
+    use super::*;
     use chrono::Utc;
     use std::sync::{Arc, Mutex};
 
@@ -251,24 +269,50 @@ mod tests {
 
     impl MockCharRepo {
         fn new(chars: Vec<Character>) -> Self {
-            Self { chars: Arc::new(Mutex::new(chars)) }
+            Self {
+                chars: Arc::new(Mutex::new(chars)),
+            }
         }
     }
 
     #[async_trait::async_trait]
     impl CharacterRepository for MockCharRepo {
-        async fn create(&self, project_id: Uuid, input: &CreateCharacter) -> Result<Character, CharacterError> {
+        async fn create(
+            &self,
+            project_id: Uuid,
+            input: &CreateCharacter,
+        ) -> Result<Character, CharacterError> {
             let ch = make_character(Uuid::new_v4(), project_id, &input.name);
             self.chars.lock().unwrap().push(ch.clone());
             Ok(ch)
         }
         async fn find_by_id(&self, id: Uuid) -> Result<Option<Character>, CharacterError> {
-            Ok(self.chars.lock().unwrap().iter().find(|c| c.id == id).cloned())
+            Ok(self
+                .chars
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|c| c.id == id)
+                .cloned())
         }
-        async fn find_by_project_id(&self, project_id: Uuid) -> Result<Vec<Character>, CharacterError> {
-            Ok(self.chars.lock().unwrap().iter().filter(|c| c.project_id == project_id).cloned().collect())
+        async fn find_by_project_id(
+            &self,
+            project_id: Uuid,
+        ) -> Result<Vec<Character>, CharacterError> {
+            Ok(self
+                .chars
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|c| c.project_id == project_id)
+                .cloned()
+                .collect())
         }
-        async fn update(&self, id: Uuid, update: &UpdateCharacter) -> Result<Character, CharacterError> {
+        async fn update(
+            &self,
+            id: Uuid,
+            update: &UpdateCharacter,
+        ) -> Result<Character, CharacterError> {
             let mut chars = self.chars.lock().unwrap();
             let ch = chars.iter_mut().find(|c| c.id == id).unwrap();
             if let Some(ref name) = update.name {
@@ -291,7 +335,9 @@ mod tests {
 
     impl MockRelRepo {
         fn new(rels: Vec<CharacterRelationship>) -> Self {
-            Self { rels: Arc::new(Mutex::new(rels)) }
+            Self {
+                rels: Arc::new(Mutex::new(rels)),
+            }
         }
         fn empty() -> Self {
             Self::new(vec![])
@@ -300,7 +346,11 @@ mod tests {
 
     #[async_trait::async_trait]
     impl RelationshipRepository for MockRelRepo {
-        async fn create(&self, project_id: Uuid, input: &CreateRelationship) -> Result<CharacterRelationship, CharacterError> {
+        async fn create(
+            &self,
+            project_id: Uuid,
+            input: &CreateRelationship,
+        ) -> Result<CharacterRelationship, CharacterError> {
             let rel = CharacterRelationship {
                 id: Uuid::new_v4(),
                 project_id,
@@ -315,13 +365,36 @@ mod tests {
             self.rels.lock().unwrap().push(rel.clone());
             Ok(rel)
         }
-        async fn find_by_id(&self, id: Uuid) -> Result<Option<CharacterRelationship>, CharacterError> {
-            Ok(self.rels.lock().unwrap().iter().find(|r| r.id == id).cloned())
+        async fn find_by_id(
+            &self,
+            id: Uuid,
+        ) -> Result<Option<CharacterRelationship>, CharacterError> {
+            Ok(self
+                .rels
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|r| r.id == id)
+                .cloned())
         }
-        async fn find_by_project_id(&self, project_id: Uuid) -> Result<Vec<CharacterRelationship>, CharacterError> {
-            Ok(self.rels.lock().unwrap().iter().filter(|r| r.project_id == project_id).cloned().collect())
+        async fn find_by_project_id(
+            &self,
+            project_id: Uuid,
+        ) -> Result<Vec<CharacterRelationship>, CharacterError> {
+            Ok(self
+                .rels
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|r| r.project_id == project_id)
+                .cloned()
+                .collect())
         }
-        async fn update(&self, id: Uuid, update: &UpdateRelationship) -> Result<CharacterRelationship, CharacterError> {
+        async fn update(
+            &self,
+            id: Uuid,
+            update: &UpdateRelationship,
+        ) -> Result<CharacterRelationship, CharacterError> {
             let mut rels = self.rels.lock().unwrap();
             let rel = rels.iter_mut().find(|r| r.id == id).unwrap();
             if let Some(ref label) = update.label {
@@ -334,7 +407,12 @@ mod tests {
             Ok(())
         }
         async fn exists(&self, a: Uuid, b: Uuid) -> Result<bool, CharacterError> {
-            Ok(self.rels.lock().unwrap().iter().any(|r| r.character_a_id == a && r.character_b_id == b))
+            Ok(self
+                .rels
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|r| r.character_a_id == a && r.character_b_id == b))
         }
     }
 
@@ -345,7 +423,16 @@ mod tests {
         let repo = MockCharRepo::new(vec![]);
         let svc = CharacterServiceImpl::new(repo, MockRelRepo::empty());
         let pid = Uuid::new_v4();
-        let input = CreateCharacter { name: "Alice".into(), personality: None, appearance: None, secrets: None, motivation: None, profile_image_url: None, graph_x: None, graph_y: None };
+        let input = CreateCharacter {
+            name: "Alice".into(),
+            personality: None,
+            appearance: None,
+            secrets: None,
+            motivation: None,
+            profile_image_url: None,
+            graph_x: None,
+            graph_y: None,
+        };
         let ch = svc.create_character(pid, &input).await.unwrap();
         assert_eq!(ch.name, "Alice");
         assert_eq!(ch.project_id, pid);
@@ -362,7 +449,8 @@ mod tests {
     async fn get_character_found() {
         let id = Uuid::new_v4();
         let ch = make_character(id, Uuid::new_v4(), "Bob");
-        let svc = CharacterServiceImpl::new(MockCharRepo::new(vec![ch.clone()]), MockRelRepo::empty());
+        let svc =
+            CharacterServiceImpl::new(MockCharRepo::new(vec![ch.clone()]), MockRelRepo::empty());
         let result = svc.get_character(id).await.unwrap();
         assert_eq!(result.name, "Bob");
     }
@@ -370,7 +458,10 @@ mod tests {
     #[tokio::test]
     async fn update_character_not_found() {
         let svc = CharacterServiceImpl::new(MockCharRepo::new(vec![]), MockRelRepo::empty());
-        let err = svc.update_character(Uuid::new_v4(), &UpdateCharacter::default()).await.unwrap_err();
+        let err = svc
+            .update_character(Uuid::new_v4(), &UpdateCharacter::default())
+            .await
+            .unwrap_err();
         assert!(matches!(err, CharacterError::NotFound));
     }
 
@@ -397,7 +488,10 @@ mod tests {
         // Create two chars with deterministic UUIDs
         let id_a = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
         let id_b = Uuid::parse_str("00000000-0000-0000-0000-000000000002").unwrap();
-        let chars = vec![make_character(id_a, pid, "A"), make_character(id_b, pid, "B")];
+        let chars = vec![
+            make_character(id_a, pid, "A"),
+            make_character(id_b, pid, "B"),
+        ];
         let rel_repo = MockRelRepo::empty();
         let svc = CharacterServiceImpl::new(MockCharRepo::new(chars), rel_repo.clone());
 
@@ -421,7 +515,10 @@ mod tests {
         let pid = Uuid::new_v4();
         let id_a = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
         let id_b = Uuid::parse_str("00000000-0000-0000-0000-000000000002").unwrap();
-        let chars = vec![make_character(id_a, pid, "A"), make_character(id_b, pid, "B")];
+        let chars = vec![
+            make_character(id_a, pid, "A"),
+            make_character(id_b, pid, "B"),
+        ];
         let svc = CharacterServiceImpl::new(MockCharRepo::new(chars), MockRelRepo::empty());
 
         let input = CreateRelationship {
@@ -440,7 +537,10 @@ mod tests {
         let pid = Uuid::new_v4();
         let id_a = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
         let id_b = Uuid::parse_str("00000000-0000-0000-0000-000000000002").unwrap();
-        let chars = vec![make_character(id_a, pid, "A"), make_character(id_b, pid, "B")];
+        let chars = vec![
+            make_character(id_a, pid, "A"),
+            make_character(id_b, pid, "B"),
+        ];
         let svc = CharacterServiceImpl::new(MockCharRepo::new(chars), MockRelRepo::empty());
 
         let input = CreateRelationship {
@@ -459,9 +559,13 @@ mod tests {
         let pid = Uuid::new_v4();
         let id_a = Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap();
         let id_b = Uuid::parse_str("00000000-0000-0000-0000-000000000002").unwrap();
-        let chars = vec![make_character(id_a, pid, "A"), make_character(id_b, pid, "B")];
+        let chars = vec![
+            make_character(id_a, pid, "A"),
+            make_character(id_b, pid, "B"),
+        ];
         let existing = make_relationship(Uuid::new_v4(), pid, id_a, id_b);
-        let svc = CharacterServiceImpl::new(MockCharRepo::new(chars), MockRelRepo::new(vec![existing]));
+        let svc =
+            CharacterServiceImpl::new(MockCharRepo::new(chars), MockRelRepo::new(vec![existing]));
 
         let input = CreateRelationship {
             character_a_id: id_a,

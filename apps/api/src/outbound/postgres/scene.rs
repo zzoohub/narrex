@@ -4,9 +4,7 @@ use uuid::Uuid;
 
 use crate::domain::ai::models::{Draft, DraftSource};
 use crate::domain::timeline::error::TimelineError;
-use crate::domain::timeline::models::{
-    CreateScene, Scene, SceneDetail, SceneStatus, UpdateScene,
-};
+use crate::domain::timeline::models::{CreateScene, Scene, SceneDetail, SceneStatus, UpdateScene};
 use crate::domain::timeline::ports::{SceneCharacterRepository, SceneRepository};
 
 use super::Postgres;
@@ -110,11 +108,7 @@ struct MaxPositionRow {
 
 #[async_trait::async_trait]
 impl SceneRepository for Postgres {
-    async fn create(
-        &self,
-        project_id: Uuid,
-        input: &CreateScene,
-    ) -> Result<Scene, TimelineError> {
+    async fn create(&self, project_id: Uuid, input: &CreateScene) -> Result<Scene, TimelineError> {
         let start_position = input.start_position.unwrap_or(0.0);
         let duration = input.duration.unwrap_or(1.0);
 
@@ -143,14 +137,12 @@ impl SceneRepository for Postgres {
 
         // Insert scene_character assignments.
         for character_id in &input.character_ids {
-            sqlx::query(
-                "INSERT INTO scene_character (scene_id, character_id) VALUES ($1, $2)",
-            )
-            .bind(row.id)
-            .bind(character_id)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| TimelineError::Unknown(e.into()))?;
+            sqlx::query("INSERT INTO scene_character (scene_id, character_id) VALUES ($1, $2)")
+                .bind(row.id)
+                .bind(character_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| TimelineError::Unknown(e.into()))?;
         }
 
         tx.commit()
@@ -321,14 +313,12 @@ impl SceneCharacterRepository for Postgres {
 
         // Insert new assignments.
         for character_id in character_ids {
-            sqlx::query(
-                "INSERT INTO scene_character (scene_id, character_id) VALUES ($1, $2)",
-            )
-            .bind(scene_id)
-            .bind(character_id)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| TimelineError::Unknown(e.into()))?;
+            sqlx::query("INSERT INTO scene_character (scene_id, character_id) VALUES ($1, $2)")
+                .bind(scene_id)
+                .bind(character_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| TimelineError::Unknown(e.into()))?;
         }
 
         tx.commit()

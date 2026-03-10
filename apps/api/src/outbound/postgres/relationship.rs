@@ -83,10 +83,7 @@ impl RelationshipRepository for Postgres {
         Ok(row.into_domain())
     }
 
-    async fn find_by_id(
-        &self,
-        id: Uuid,
-    ) -> Result<Option<CharacterRelationship>, CharacterError> {
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<CharacterRelationship>, CharacterError> {
         let row = sqlx::query_as::<_, RelationshipRow>(
             "SELECT id, project_id, character_a_id, character_b_id, label, visual_type::text, direction::text, created_at, updated_at \
              FROM character_relationship WHERE id = $1",

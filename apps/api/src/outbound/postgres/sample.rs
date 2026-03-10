@@ -120,14 +120,12 @@ impl SampleProjectRepository for Postgres {
 
             // scene_character junction
             for cid in &s.character_ids {
-                sqlx::query(
-                    "INSERT INTO scene_character (scene_id, character_id) VALUES ($1, $2)",
-                )
-                .bind(s.id)
-                .bind(cid)
-                .execute(&mut *tx)
-                .await
-                .map_err(|e| ProjectError::Unknown(e.into()))?;
+                sqlx::query("INSERT INTO scene_character (scene_id, character_id) VALUES ($1, $2)")
+                    .bind(s.id)
+                    .bind(cid)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(|e| ProjectError::Unknown(e.into()))?;
             }
         }
 

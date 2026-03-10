@@ -74,10 +74,7 @@ impl GenerationLogRepository for Postgres {
         Ok(row.into_domain())
     }
 
-    async fn cost_summary_by_project(
-        &self,
-        project_id: Uuid,
-    ) -> Result<CostSummary, AiError> {
+    async fn cost_summary_by_project(&self, project_id: Uuid) -> Result<CostSummary, AiError> {
         let row = sqlx::query_as::<_, CostSummaryRow>(
             "SELECT \
                 COUNT(*) AS total_generations, \

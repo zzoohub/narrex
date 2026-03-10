@@ -8,8 +8,7 @@ use uuid::Uuid;
 use super::error::AiError;
 use super::models::{
     CostSummary, CreateDraftParams, CreateManualDraft, Draft, DraftSummary, EditDraftRequest,
-    GenerationContext, GenerationLog, QuotaInfo, SceneSummary,
-    StructuredOutput, TimelineOutput,
+    GenerationContext, GenerationLog, QuotaInfo, SceneSummary, StructuredOutput, TimelineOutput,
 };
 use super::service::SseEvent;
 
@@ -19,11 +18,8 @@ pub trait DraftRepository: Clone + Send + Sync + 'static {
 
     async fn find_latest_by_scene(&self, scene_id: Uuid) -> Result<Option<Draft>, AiError>;
 
-    async fn find_by_version(
-        &self,
-        scene_id: Uuid,
-        version: i32,
-    ) -> Result<Option<Draft>, AiError>;
+    async fn find_by_version(&self, scene_id: Uuid, version: i32)
+        -> Result<Option<Draft>, AiError>;
 
     async fn list_by_scene(&self, scene_id: Uuid) -> Result<Vec<DraftSummary>, AiError>;
 
@@ -55,10 +51,7 @@ pub trait GenerationLogRepository: Clone + Send + Sync + 'static {
 
     async fn cost_summary_by_user(&self, user_id: Uuid) -> Result<CostSummary, AiError>;
 
-    async fn cost_summary_by_project(
-        &self,
-        project_id: Uuid,
-    ) -> Result<CostSummary, AiError>;
+    async fn cost_summary_by_project(&self, project_id: Uuid) -> Result<CostSummary, AiError>;
 
     async fn count_by_user_since(
         &self,
@@ -99,11 +92,21 @@ pub trait AiService: Send + Sync {
         locale: &str,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<SseEvent, Infallible>> + Send>>, AiError>;
 
-    async fn save_manual_draft(&self, scene_id: Uuid, input: &CreateManualDraft) -> Result<Draft, AiError>;
+    async fn save_manual_draft(
+        &self,
+        scene_id: Uuid,
+        input: &CreateManualDraft,
+    ) -> Result<Draft, AiError>;
     async fn list_drafts(&self, scene_id: Uuid) -> Result<Vec<DraftSummary>, AiError>;
     async fn get_draft(&self, scene_id: Uuid, version: i32) -> Result<Draft, AiError>;
     async fn get_scene_summary(&self, scene_id: Uuid) -> Result<SceneSummary, AiError>;
-    async fn upsert_scene_summary(&self, scene_id: Uuid, draft_version: i32, summary_text: &str, model: Option<&str>) -> Result<SceneSummary, AiError>;
+    async fn upsert_scene_summary(
+        &self,
+        scene_id: Uuid,
+        draft_version: i32,
+        summary_text: &str,
+        model: Option<&str>,
+    ) -> Result<SceneSummary, AiError>;
     async fn user_cost_summary(&self, user_id: Uuid) -> Result<CostSummary, AiError>;
     async fn project_cost_summary(&self, project_id: Uuid) -> Result<CostSummary, AiError>;
     async fn get_quota(&self, user_id: Uuid) -> Result<QuotaInfo, AiError>;
@@ -114,14 +117,20 @@ pub trait AiService: Send + Sync {
         source_input: &str,
         clarification_answers: Option<&[String]>,
         locale: &str,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>, AiError>;
+    ) -> Result<
+        Pin<Box<dyn Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>,
+        AiError,
+    >;
 
     async fn stream_characters(
         &self,
         source_input: &str,
         world_context: &str,
         locale: &str,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>, AiError>;
+    ) -> Result<
+        Pin<Box<dyn Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>,
+        AiError,
+    >;
 
     async fn stream_timeline(
         &self,
@@ -129,7 +138,10 @@ pub trait AiService: Send + Sync {
         world_context: &str,
         characters_context: &str,
         locale: &str,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>, AiError>;
+    ) -> Result<
+        Pin<Box<dyn Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>,
+        AiError,
+    >;
 
     async fn retry_timeline(
         &self,

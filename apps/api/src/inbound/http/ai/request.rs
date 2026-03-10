@@ -28,9 +28,7 @@ pub struct SaveDraftRequest {
 
 impl From<SaveDraftRequest> for CreateManualDraft {
     fn from(r: SaveDraftRequest) -> Self {
-        Self {
-            content: r.content,
-        }
+        Self { content: r.content }
     }
 }
 

@@ -365,9 +365,18 @@ mod tests {
 
     #[test]
     fn draft_source_from_str() {
-        assert_eq!("ai_generation".parse::<DraftSource>().unwrap(), DraftSource::AiGeneration);
-        assert_eq!("ai_edit".parse::<DraftSource>().unwrap(), DraftSource::AiEdit);
-        assert_eq!("manual".parse::<DraftSource>().unwrap(), DraftSource::Manual);
+        assert_eq!(
+            "ai_generation".parse::<DraftSource>().unwrap(),
+            DraftSource::AiGeneration
+        );
+        assert_eq!(
+            "ai_edit".parse::<DraftSource>().unwrap(),
+            DraftSource::AiEdit
+        );
+        assert_eq!(
+            "manual".parse::<DraftSource>().unwrap(),
+            DraftSource::Manual
+        );
     }
 
     #[test]
@@ -378,7 +387,11 @@ mod tests {
 
     #[test]
     fn draft_source_roundtrip() {
-        for v in [DraftSource::AiGeneration, DraftSource::AiEdit, DraftSource::Manual] {
+        for v in [
+            DraftSource::AiGeneration,
+            DraftSource::AiEdit,
+            DraftSource::Manual,
+        ] {
             assert_eq!(v.to_string().parse::<DraftSource>().unwrap(), v);
         }
     }
@@ -395,10 +408,22 @@ mod tests {
 
     #[test]
     fn generation_type_from_str() {
-        assert_eq!("scene".parse::<GenerationType>().unwrap(), GenerationType::Scene);
-        assert_eq!("summary".parse::<GenerationType>().unwrap(), GenerationType::Summary);
-        assert_eq!("structuring".parse::<GenerationType>().unwrap(), GenerationType::Structuring);
-        assert_eq!("edit".parse::<GenerationType>().unwrap(), GenerationType::Edit);
+        assert_eq!(
+            "scene".parse::<GenerationType>().unwrap(),
+            GenerationType::Scene
+        );
+        assert_eq!(
+            "summary".parse::<GenerationType>().unwrap(),
+            GenerationType::Summary
+        );
+        assert_eq!(
+            "structuring".parse::<GenerationType>().unwrap(),
+            GenerationType::Structuring
+        );
+        assert_eq!(
+            "edit".parse::<GenerationType>().unwrap(),
+            GenerationType::Edit
+        );
     }
 
     #[test]
@@ -409,7 +434,12 @@ mod tests {
 
     #[test]
     fn generation_type_roundtrip() {
-        for v in [GenerationType::Scene, GenerationType::Summary, GenerationType::Structuring, GenerationType::Edit] {
+        for v in [
+            GenerationType::Scene,
+            GenerationType::Summary,
+            GenerationType::Structuring,
+            GenerationType::Edit,
+        ] {
             assert_eq!(v.to_string().parse::<GenerationType>().unwrap(), v);
         }
     }
@@ -425,9 +455,18 @@ mod tests {
 
     #[test]
     fn generation_status_from_str() {
-        assert_eq!("success".parse::<GenerationStatus>().unwrap(), GenerationStatus::Success);
-        assert_eq!("failure".parse::<GenerationStatus>().unwrap(), GenerationStatus::Failure);
-        assert_eq!("partial".parse::<GenerationStatus>().unwrap(), GenerationStatus::Partial);
+        assert_eq!(
+            "success".parse::<GenerationStatus>().unwrap(),
+            GenerationStatus::Success
+        );
+        assert_eq!(
+            "failure".parse::<GenerationStatus>().unwrap(),
+            GenerationStatus::Failure
+        );
+        assert_eq!(
+            "partial".parse::<GenerationStatus>().unwrap(),
+            GenerationStatus::Partial
+        );
     }
 
     #[test]
@@ -438,7 +477,11 @@ mod tests {
 
     #[test]
     fn generation_status_roundtrip() {
-        for v in [GenerationStatus::Success, GenerationStatus::Failure, GenerationStatus::Partial] {
+        for v in [
+            GenerationStatus::Success,
+            GenerationStatus::Failure,
+            GenerationStatus::Partial,
+        ] {
             assert_eq!(v.to_string().parse::<GenerationStatus>().unwrap(), v);
         }
     }
@@ -563,14 +606,23 @@ mod tests {
         assert_eq!(output.tone.as_deref(), Some("어둡고 긴장감 있는"));
         assert_eq!(output.characters.len(), 1);
         assert_eq!(output.characters[0].name, "이수현");
-        assert_eq!(output.characters[0].personality.as_deref(), Some("냉정하지만 속은 따뜻한"));
+        assert_eq!(
+            output.characters[0].personality.as_deref(),
+            Some("냉정하지만 속은 따뜻한")
+        );
         assert_eq!(output.relationships.len(), 1);
         assert_eq!(output.relationships[0].label, "라이벌");
         assert_eq!(output.tracks.len(), 1);
         assert_eq!(output.tracks[0].scenes.len(), 1);
         assert_eq!(output.tracks[0].scenes[0].title, "시작");
-        assert_eq!(output.tracks[0].scenes[0].mood_tags.as_ref().unwrap().len(), 2);
-        assert_eq!(output.tracks[0].scenes[0].characters.as_ref().unwrap(), &vec!["이수현".to_string()]);
+        assert_eq!(
+            output.tracks[0].scenes[0].mood_tags.as_ref().unwrap().len(),
+            2
+        );
+        assert_eq!(
+            output.tracks[0].scenes[0].characters.as_ref().unwrap(),
+            &vec!["이수현".to_string()]
+        );
     }
 
     #[test]

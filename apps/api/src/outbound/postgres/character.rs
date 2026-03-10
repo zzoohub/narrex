@@ -84,10 +84,7 @@ impl CharacterRepository for Postgres {
         Ok(row.map(CharacterRow::into_domain))
     }
 
-    async fn find_by_project_id(
-        &self,
-        project_id: Uuid,
-    ) -> Result<Vec<Character>, CharacterError> {
+    async fn find_by_project_id(&self, project_id: Uuid) -> Result<Vec<Character>, CharacterError> {
         let rows = sqlx::query_as::<_, CharacterRow>(
             "SELECT id, project_id, name, personality, appearance, secrets, motivation, profile_image_url, graph_x, graph_y, created_at, updated_at \
              FROM character WHERE project_id = $1",

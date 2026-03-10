@@ -42,12 +42,18 @@ mod tests {
 
     #[test]
     fn display_relationship_not_found() {
-        assert_eq!(CharacterError::RelationshipNotFound.to_string(), "relationship not found");
+        assert_eq!(
+            CharacterError::RelationshipNotFound.to_string(),
+            "relationship not found"
+        );
     }
 
     #[test]
     fn display_relationship_exists() {
-        assert_eq!(CharacterError::RelationshipExists.to_string(), "relationship already exists");
+        assert_eq!(
+            CharacterError::RelationshipExists.to_string(),
+            "relationship already exists"
+        );
     }
 
     #[test]

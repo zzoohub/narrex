@@ -28,11 +28,7 @@ impl<R: ProjectRepository> ProjectServiceImpl<R> {
         self.repo.create(project).await
     }
 
-    pub async fn get_project(
-        &self,
-        id: Uuid,
-        user_id: Uuid,
-    ) -> Result<Project, ProjectError> {
+    pub async fn get_project(&self, id: Uuid, user_id: Uuid) -> Result<Project, ProjectError> {
         let project = self
             .repo
             .find_by_id(id)
@@ -69,11 +65,7 @@ impl<R: ProjectRepository> ProjectServiceImpl<R> {
         self.repo.update(id, update).await
     }
 
-    pub async fn delete_project(
-        &self,
-        id: Uuid,
-        user_id: Uuid,
-    ) -> Result<(), ProjectError> {
+    pub async fn delete_project(&self, id: Uuid, user_id: Uuid) -> Result<(), ProjectError> {
         let project = self
             .repo
             .find_by_id(id)
@@ -85,11 +77,7 @@ impl<R: ProjectRepository> ProjectServiceImpl<R> {
         self.repo.soft_delete(id).await
     }
 
-    pub async fn get_workspace(
-        &self,
-        id: Uuid,
-        user_id: Uuid,
-    ) -> Result<Workspace, ProjectError> {
+    pub async fn get_workspace(&self, id: Uuid, user_id: Uuid) -> Result<Workspace, ProjectError> {
         // First verify ownership.
         let project = self
             .repo
@@ -112,16 +100,29 @@ impl<R: ProjectRepository> ProjectServiceImpl<R> {
 
 #[async_trait::async_trait]
 impl<R: ProjectRepository> ProjectService for ProjectServiceImpl<R> {
-    async fn create_project(&self, project: &Project, user_id: Uuid) -> Result<Project, ProjectError> {
+    async fn create_project(
+        &self,
+        project: &Project,
+        user_id: Uuid,
+    ) -> Result<Project, ProjectError> {
         Self::create_project(self, project, user_id).await
     }
     async fn get_project(&self, id: Uuid, user_id: Uuid) -> Result<Project, ProjectError> {
         Self::get_project(self, id, user_id).await
     }
-    async fn list_projects(&self, user_id: Uuid, params: &PaginationParams) -> Result<PaginatedResult<ProjectSummary>, ProjectError> {
+    async fn list_projects(
+        &self,
+        user_id: Uuid,
+        params: &PaginationParams,
+    ) -> Result<PaginatedResult<ProjectSummary>, ProjectError> {
         Self::list_projects(self, user_id, params).await
     }
-    async fn update_project(&self, id: Uuid, user_id: Uuid, update: &UpdateProject) -> Result<Project, ProjectError> {
+    async fn update_project(
+        &self,
+        id: Uuid,
+        user_id: Uuid,
+        update: &UpdateProject,
+    ) -> Result<Project, ProjectError> {
         Self::update_project(self, id, user_id, update).await
     }
     async fn delete_project(&self, id: Uuid, user_id: Uuid) -> Result<(), ProjectError> {
@@ -336,7 +337,10 @@ mod tests {
             title: Some("New Title".into()),
             ..Default::default()
         };
-        let result = svc.update_project(project_id, user_id, &update).await.unwrap();
+        let result = svc
+            .update_project(project_id, user_id, &update)
+            .await
+            .unwrap();
         assert_eq!(result.title, "New Title");
     }
 
@@ -346,7 +350,9 @@ mod tests {
         let svc = ProjectServiceImpl::new(repo);
 
         let update = UpdateProject::default();
-        let result = svc.update_project(Uuid::new_v4(), Uuid::new_v4(), &update).await;
+        let result = svc
+            .update_project(Uuid::new_v4(), Uuid::new_v4(), &update)
+            .await;
         assert!(matches!(result.unwrap_err(), ProjectError::NotFound));
     }
 
@@ -359,7 +365,9 @@ mod tests {
         let svc = ProjectServiceImpl::new(repo);
 
         let update = UpdateProject::default();
-        let result = svc.update_project(project_id, Uuid::new_v4(), &update).await;
+        let result = svc
+            .update_project(project_id, Uuid::new_v4(), &update)
+            .await;
         assert!(matches!(result.unwrap_err(), ProjectError::Forbidden));
     }
 

@@ -442,7 +442,11 @@ impl TimelineService for StubTimelineService {
     async fn delete_scene(&self, _: Uuid) -> Result<(), TimelineError> {
         Err(TimelineError::SceneNotFound)
     }
-    async fn create_connection(&self, _: Uuid, _: &CreateConnection) -> Result<SceneConnection, TimelineError> {
+    async fn create_connection(
+        &self,
+        _: Uuid,
+        _: &CreateConnection,
+    ) -> Result<SceneConnection, TimelineError> {
         Err(TimelineError::ConnectionNotFound)
     }
     async fn delete_connection(&self, _: Uuid) -> Result<(), TimelineError> {
@@ -460,22 +464,38 @@ impl CharacterService for StubCharacterService {
     async fn list_characters(&self, _: Uuid) -> Result<Vec<Character>, CharacterError> {
         Ok(vec![])
     }
-    async fn create_character(&self, _: Uuid, _: &CreateCharacter) -> Result<Character, CharacterError> {
+    async fn create_character(
+        &self,
+        _: Uuid,
+        _: &CreateCharacter,
+    ) -> Result<Character, CharacterError> {
         Err(CharacterError::NotFound)
     }
     async fn get_character(&self, _: Uuid) -> Result<Character, CharacterError> {
         Err(CharacterError::NotFound)
     }
-    async fn update_character(&self, _: Uuid, _: &UpdateCharacter) -> Result<Character, CharacterError> {
+    async fn update_character(
+        &self,
+        _: Uuid,
+        _: &UpdateCharacter,
+    ) -> Result<Character, CharacterError> {
         Err(CharacterError::NotFound)
     }
     async fn delete_character(&self, _: Uuid) -> Result<(), CharacterError> {
         Err(CharacterError::NotFound)
     }
-    async fn create_relationship(&self, _: Uuid, _: &CreateRelationship) -> Result<CharacterRelationship, CharacterError> {
+    async fn create_relationship(
+        &self,
+        _: Uuid,
+        _: &CreateRelationship,
+    ) -> Result<CharacterRelationship, CharacterError> {
         Err(CharacterError::NotFound)
     }
-    async fn update_relationship(&self, _: Uuid, _: &UpdateRelationship) -> Result<CharacterRelationship, CharacterError> {
+    async fn update_relationship(
+        &self,
+        _: Uuid,
+        _: &UpdateRelationship,
+    ) -> Result<CharacterRelationship, CharacterError> {
         Err(CharacterError::RelationshipNotFound)
     }
     async fn delete_relationship(&self, _: Uuid) -> Result<(), CharacterError> {
@@ -487,10 +507,23 @@ pub struct StubAiService;
 
 #[async_trait::async_trait]
 impl AiService for StubAiService {
-    async fn generate_scene_draft(&self, _: Uuid, _: Uuid, _: Uuid, _: &str) -> Result<Pin<Box<dyn Stream<Item = Result<SseEvent, Infallible>> + Send>>, AiError> {
+    async fn generate_scene_draft(
+        &self,
+        _: Uuid,
+        _: Uuid,
+        _: Uuid,
+        _: &str,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<SseEvent, Infallible>> + Send>>, AiError> {
         Err(AiError::SceneNotFound)
     }
-    async fn edit_scene_draft(&self, _: Uuid, _: Uuid, _: Uuid, _: &EditDraftRequest, _: &str) -> Result<Pin<Box<dyn Stream<Item = Result<SseEvent, Infallible>> + Send>>, AiError> {
+    async fn edit_scene_draft(
+        &self,
+        _: Uuid,
+        _: Uuid,
+        _: Uuid,
+        _: &EditDraftRequest,
+        _: &str,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<SseEvent, Infallible>> + Send>>, AiError> {
         Err(AiError::SceneNotFound)
     }
     async fn save_manual_draft(&self, _: Uuid, _: &CreateManualDraft) -> Result<Draft, AiError> {
@@ -505,7 +538,13 @@ impl AiService for StubAiService {
     async fn get_scene_summary(&self, _: Uuid) -> Result<SceneSummary, AiError> {
         Err(AiError::SceneNotFound)
     }
-    async fn upsert_scene_summary(&self, _: Uuid, _: i32, _: &str, _: Option<&str>) -> Result<SceneSummary, AiError> {
+    async fn upsert_scene_summary(
+        &self,
+        _: Uuid,
+        _: i32,
+        _: &str,
+        _: Option<&str>,
+    ) -> Result<SceneSummary, AiError> {
         Err(AiError::SceneNotFound)
     }
     async fn user_cost_summary(&self, _: Uuid) -> Result<CostSummary, AiError> {
@@ -544,19 +583,56 @@ impl AiService for StubAiService {
             resets_at: Utc::now(),
         })
     }
-    async fn stream_world(&self, _: &str, _: Option<&[String]>, _: &str) -> Result<Pin<Box<dyn Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>, AiError> {
+    async fn stream_world(
+        &self,
+        _: &str,
+        _: Option<&[String]>,
+        _: &str,
+    ) -> Result<
+        Pin<Box<dyn Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>,
+        AiError,
+    > {
         Err(AiError::GenerationFailed("not available in tests".into()))
     }
-    async fn stream_characters(&self, _: &str, _: &str, _: &str) -> Result<Pin<Box<dyn Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>, AiError> {
+    async fn stream_characters(
+        &self,
+        _: &str,
+        _: &str,
+        _: &str,
+    ) -> Result<
+        Pin<Box<dyn Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>,
+        AiError,
+    > {
         Err(AiError::GenerationFailed("not available in tests".into()))
     }
-    async fn stream_timeline(&self, _: &str, _: &str, _: &str, _: &str) -> Result<Pin<Box<dyn Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>, AiError> {
+    async fn stream_timeline(
+        &self,
+        _: &str,
+        _: &str,
+        _: &str,
+        _: &str,
+    ) -> Result<
+        Pin<Box<dyn Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>,
+        AiError,
+    > {
         Err(AiError::GenerationFailed("not available in tests".into()))
     }
-    async fn retry_timeline(&self, _: &str, _: &str, _: &str, _: &str, _: &str) -> Result<(TimelineOutput, String, String, u32, u32), AiError> {
+    async fn retry_timeline(
+        &self,
+        _: &str,
+        _: &str,
+        _: &str,
+        _: &str,
+        _: &str,
+    ) -> Result<(TimelineOutput, String, String, u32, u32), AiError> {
         Err(AiError::GenerationFailed("not available in tests".into()))
     }
-    async fn generate_structure(&self, _: &str, _: Option<&[String]>, _: &str) -> Result<(StructuredOutput, String, String, u32, u32), AiError> {
+    async fn generate_structure(
+        &self,
+        _: &str,
+        _: Option<&[String]>,
+        _: &str,
+    ) -> Result<(StructuredOutput, String, String, u32, u32), AiError> {
         Err(AiError::GenerationFailed("not available in tests".into()))
     }
     async fn log_generation(&self, _: &GenerationLog) -> Result<(), AiError> {

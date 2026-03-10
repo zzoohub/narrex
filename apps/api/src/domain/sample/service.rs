@@ -22,11 +22,7 @@ impl<R: SampleProjectRepository> SampleProjectService<R> {
     /// Returns `Some(project)` if created, `None` if the user already has projects.
     /// Errors from the repo are logged and swallowed — sample project creation
     /// must never block the auth flow.
-    pub async fn ensure_sample_project(
-        &self,
-        user_id: Uuid,
-        locale: &str,
-    ) -> Option<Project> {
+    pub async fn ensure_sample_project(&self, user_id: Uuid, locale: &str) -> Option<Project> {
         match self.try_create(user_id, locale).await {
             Ok(project) => project,
             Err(e) => {
@@ -36,7 +32,11 @@ impl<R: SampleProjectRepository> SampleProjectService<R> {
         }
     }
 
-    async fn try_create(&self, user_id: Uuid, locale: &str) -> Result<Option<Project>, ProjectError> {
+    async fn try_create(
+        &self,
+        user_id: Uuid,
+        locale: &str,
+    ) -> Result<Option<Project>, ProjectError> {
         if self.repo.has_projects(user_id).await? {
             return Ok(None);
         }
@@ -121,7 +121,10 @@ mod tests {
 
         let result = svc.ensure_sample_project(Uuid::new_v4(), "ko").await;
         assert!(result.is_some(), "should return the created project");
-        assert!(repo.was_created(), "should have called create_sample_project");
+        assert!(
+            repo.was_created(),
+            "should have called create_sample_project"
+        );
     }
 
     #[tokio::test]
@@ -130,7 +133,10 @@ mod tests {
         let svc = SampleProjectService::new(repo.clone());
 
         let result = svc.ensure_sample_project(Uuid::new_v4(), "en").await;
-        assert!(result.is_none(), "should return None when user has projects");
+        assert!(
+            result.is_none(),
+            "should return None when user has projects"
+        );
         assert!(!repo.was_created(), "should not create sample project");
     }
 

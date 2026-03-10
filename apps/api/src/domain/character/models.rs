@@ -164,9 +164,18 @@ mod tests {
 
     #[test]
     fn relationship_visual_from_str() {
-        assert_eq!("solid".parse::<RelationshipVisual>().unwrap(), RelationshipVisual::Solid);
-        assert_eq!("dashed".parse::<RelationshipVisual>().unwrap(), RelationshipVisual::Dashed);
-        assert_eq!("arrowed".parse::<RelationshipVisual>().unwrap(), RelationshipVisual::Arrowed);
+        assert_eq!(
+            "solid".parse::<RelationshipVisual>().unwrap(),
+            RelationshipVisual::Solid
+        );
+        assert_eq!(
+            "dashed".parse::<RelationshipVisual>().unwrap(),
+            RelationshipVisual::Dashed
+        );
+        assert_eq!(
+            "arrowed".parse::<RelationshipVisual>().unwrap(),
+            RelationshipVisual::Arrowed
+        );
     }
 
     #[test]
@@ -177,7 +186,11 @@ mod tests {
 
     #[test]
     fn relationship_visual_roundtrip() {
-        for v in [RelationshipVisual::Solid, RelationshipVisual::Dashed, RelationshipVisual::Arrowed] {
+        for v in [
+            RelationshipVisual::Solid,
+            RelationshipVisual::Dashed,
+            RelationshipVisual::Arrowed,
+        ] {
             assert_eq!(v.to_string().parse::<RelationshipVisual>().unwrap(), v);
         }
     }
@@ -186,16 +199,28 @@ mod tests {
 
     #[test]
     fn relationship_direction_display() {
-        assert_eq!(RelationshipDirection::Bidirectional.to_string(), "bidirectional");
+        assert_eq!(
+            RelationshipDirection::Bidirectional.to_string(),
+            "bidirectional"
+        );
         assert_eq!(RelationshipDirection::AToB.to_string(), "a_to_b");
         assert_eq!(RelationshipDirection::BToA.to_string(), "b_to_a");
     }
 
     #[test]
     fn relationship_direction_from_str() {
-        assert_eq!("bidirectional".parse::<RelationshipDirection>().unwrap(), RelationshipDirection::Bidirectional);
-        assert_eq!("a_to_b".parse::<RelationshipDirection>().unwrap(), RelationshipDirection::AToB);
-        assert_eq!("b_to_a".parse::<RelationshipDirection>().unwrap(), RelationshipDirection::BToA);
+        assert_eq!(
+            "bidirectional".parse::<RelationshipDirection>().unwrap(),
+            RelationshipDirection::Bidirectional
+        );
+        assert_eq!(
+            "a_to_b".parse::<RelationshipDirection>().unwrap(),
+            RelationshipDirection::AToB
+        );
+        assert_eq!(
+            "b_to_a".parse::<RelationshipDirection>().unwrap(),
+            RelationshipDirection::BToA
+        );
     }
 
     #[test]
@@ -206,7 +231,11 @@ mod tests {
 
     #[test]
     fn relationship_direction_roundtrip() {
-        for d in [RelationshipDirection::Bidirectional, RelationshipDirection::AToB, RelationshipDirection::BToA] {
+        for d in [
+            RelationshipDirection::Bidirectional,
+            RelationshipDirection::AToB,
+            RelationshipDirection::BToA,
+        ] {
             assert_eq!(d.to_string().parse::<RelationshipDirection>().unwrap(), d);
         }
     }
