@@ -16,7 +16,8 @@ use super::models::{
     MONTHLY_GENERATION_LIMIT, MONTHLY_GENERATION_WARNING_THRESHOLD,
 };
 use super::ports::{
-    ContextAssemblyRepository, DraftRepository, GenerationLogRepository, SceneSummaryRepository,
+    AiService, ContextAssemblyRepository, DraftRepository, GenerationLogRepository,
+    SceneSummaryRepository,
 };
 use super::prompt::PromptBuilder;
 
@@ -769,6 +770,113 @@ pub enum SseEvent {
     Progress { message: String },
     StructuringCompleted { workspace: crate::domain::project::models::Workspace },
     Error { message: String },
+}
+
+// ---------------------------------------------------------------------------
+// AiService trait implementation (delegates to inherent methods)
+// ---------------------------------------------------------------------------
+
+#[async_trait::async_trait]
+impl<DR, SSR, GLR, CAR, SR> AiService for AiServiceImpl<DR, SSR, GLR, CAR, SR>
+where
+    DR: DraftRepository,
+    SSR: SceneSummaryRepository,
+    GLR: GenerationLogRepository,
+    CAR: ContextAssemblyRepository,
+    SR: SceneRepository,
+{
+    async fn generate_scene_draft(
+        &self,
+        user_id: Uuid,
+        project_id: Uuid,
+        scene_id: Uuid,
+        locale: &str,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<SseEvent, Infallible>> + Send>>, AiError> {
+        Self::generate_scene_draft(self, user_id, project_id, scene_id, locale).await
+    }
+    async fn edit_scene_draft(
+        &self,
+        user_id: Uuid,
+        project_id: Uuid,
+        scene_id: Uuid,
+        edit_req: &EditDraftRequest,
+        locale: &str,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<SseEvent, Infallible>> + Send>>, AiError> {
+        Self::edit_scene_draft(self, user_id, project_id, scene_id, edit_req, locale).await
+    }
+    async fn save_manual_draft(&self, scene_id: Uuid, input: &CreateManualDraft) -> Result<Draft, AiError> {
+        Self::save_manual_draft(self, scene_id, input).await
+    }
+    async fn list_drafts(&self, scene_id: Uuid) -> Result<Vec<DraftSummary>, AiError> {
+        Self::list_drafts(self, scene_id).await
+    }
+    async fn get_draft(&self, scene_id: Uuid, version: i32) -> Result<Draft, AiError> {
+        Self::get_draft(self, scene_id, version).await
+    }
+    async fn get_scene_summary(&self, scene_id: Uuid) -> Result<SceneSummary, AiError> {
+        Self::get_scene_summary(self, scene_id).await
+    }
+    async fn upsert_scene_summary(&self, scene_id: Uuid, draft_version: i32, summary_text: &str, model: Option<&str>) -> Result<SceneSummary, AiError> {
+        Self::upsert_scene_summary(self, scene_id, draft_version, summary_text, model).await
+    }
+    async fn user_cost_summary(&self, user_id: Uuid) -> Result<CostSummary, AiError> {
+        Self::user_cost_summary(self, user_id).await
+    }
+    async fn project_cost_summary(&self, project_id: Uuid) -> Result<CostSummary, AiError> {
+        Self::project_cost_summary(self, project_id).await
+    }
+    async fn get_quota(&self, user_id: Uuid) -> Result<QuotaInfo, AiError> {
+        Self::get_quota(self, user_id).await
+    }
+    async fn check_quota(&self, user_id: Uuid) -> Result<QuotaInfo, AiError> {
+        Self::check_quota(self, user_id).await
+    }
+    async fn stream_world(
+        &self,
+        source_input: &str,
+        clarification_answers: Option<&[String]>,
+        locale: &str,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>, AiError> {
+        Self::stream_world(self, source_input, clarification_answers, locale).await
+    }
+    async fn stream_characters(
+        &self,
+        source_input: &str,
+        world_context: &str,
+        locale: &str,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>, AiError> {
+        Self::stream_characters(self, source_input, world_context, locale).await
+    }
+    async fn stream_timeline(
+        &self,
+        source_input: &str,
+        world_context: &str,
+        characters_context: &str,
+        locale: &str,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>> + Send>>, AiError> {
+        Self::stream_timeline(self, source_input, world_context, characters_context, locale).await
+    }
+    async fn retry_timeline(
+        &self,
+        source_input: &str,
+        world_context: &str,
+        characters_context: &str,
+        failed_output: &str,
+        locale: &str,
+    ) -> Result<(TimelineOutput, String, String, u32, u32), AiError> {
+        Self::retry_timeline(self, source_input, world_context, characters_context, failed_output, locale).await
+    }
+    async fn generate_structure(
+        &self,
+        source_input: &str,
+        clarification_answers: Option<&[String]>,
+        locale: &str,
+    ) -> Result<(StructuredOutput, String, String, u32, u32), AiError> {
+        Self::generate_structure(self, source_input, clarification_answers, locale).await
+    }
+    async fn log_generation(&self, log: &GenerationLog) -> Result<(), AiError> {
+        Self::log_generation(self, log).await
+    }
 }
 
 #[cfg(test)]

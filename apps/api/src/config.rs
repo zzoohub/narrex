@@ -68,4 +68,30 @@ impl Config {
                 .unwrap_or_else(|_| "http://localhost:9000".into()),
         })
     }
+
+    /// Create a test configuration with safe defaults.
+    ///
+    /// Only available in test builds — cannot be called from production code.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn test() -> Self {
+        Self {
+            run_mode: "test".into(),
+            port: 0,
+            database_url: String::new(),
+            jwt_secret: "test-secret-for-integration-tests-1234".into(),
+            google_client_id: "test-client-id".into(),
+            google_client_secret: "test-client-secret".into(),
+            google_redirect_uri: "http://localhost/callback".into(),
+            cf_account_id: String::new(),
+            cf_api_token: String::new(),
+            gemini_api_key: String::new(),
+            web_app_url: "http://localhost:3000".into(),
+            cors_origin: "http://localhost:3000".into(),
+            r2_account_id: String::new(),
+            r2_access_key_id: String::new(),
+            r2_secret_access_key: String::new(),
+            r2_bucket_name: "test-bucket".into(),
+            r2_public_url: "http://localhost:9000".into(),
+        }
+    }
 }

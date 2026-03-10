@@ -5,7 +5,7 @@ use super::models::{
     Character, CharacterRelationship, CreateCharacter, CreateRelationship, UpdateCharacter,
     UpdateRelationship,
 };
-use super::ports::{CharacterRepository, RelationshipRepository};
+use super::ports::{CharacterRepository, CharacterService, RelationshipRepository};
 
 #[derive(Clone)]
 pub struct CharacterServiceImpl<CR: CharacterRepository, RR: RelationshipRepository> {
@@ -167,6 +167,38 @@ impl<CR: CharacterRepository, RR: RelationshipRepository> CharacterServiceImpl<C
             .await?
             .ok_or(CharacterError::RelationshipNotFound)?;
         self.rel_repo.delete(id).await
+    }
+}
+
+// ---------------------------------------------------------------------------
+// CharacterService trait implementation (delegates to inherent methods)
+// ---------------------------------------------------------------------------
+
+#[async_trait::async_trait]
+impl<CR: CharacterRepository, RR: RelationshipRepository> CharacterService for CharacterServiceImpl<CR, RR> {
+    async fn list_characters(&self, project_id: Uuid) -> Result<Vec<Character>, CharacterError> {
+        Self::list_characters(self, project_id).await
+    }
+    async fn create_character(&self, project_id: Uuid, input: &CreateCharacter) -> Result<Character, CharacterError> {
+        Self::create_character(self, project_id, input).await
+    }
+    async fn get_character(&self, id: Uuid) -> Result<Character, CharacterError> {
+        Self::get_character(self, id).await
+    }
+    async fn update_character(&self, id: Uuid, update: &UpdateCharacter) -> Result<Character, CharacterError> {
+        Self::update_character(self, id, update).await
+    }
+    async fn delete_character(&self, id: Uuid) -> Result<(), CharacterError> {
+        Self::delete_character(self, id).await
+    }
+    async fn create_relationship(&self, project_id: Uuid, input: &CreateRelationship) -> Result<CharacterRelationship, CharacterError> {
+        Self::create_relationship(self, project_id, input).await
+    }
+    async fn update_relationship(&self, id: Uuid, update: &UpdateRelationship) -> Result<CharacterRelationship, CharacterError> {
+        Self::update_relationship(self, id, update).await
+    }
+    async fn delete_relationship(&self, id: Uuid) -> Result<(), CharacterError> {
+        Self::delete_relationship(self, id).await
     }
 }
 

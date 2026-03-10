@@ -4,7 +4,7 @@ use super::error::ProjectError;
 use super::models::{
     PaginatedResult, PaginationParams, Project, ProjectSummary, UpdateProject, Workspace,
 };
-use super::ports::ProjectRepository;
+use super::ports::{ProjectRepository, ProjectService};
 
 #[derive(Clone)]
 pub struct ProjectServiceImpl<R: ProjectRepository> {
@@ -103,6 +103,32 @@ impl<R: ProjectRepository> ProjectServiceImpl<R> {
             .get_workspace(id)
             .await?
             .ok_or(ProjectError::NotFound)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ProjectService trait implementation (delegates to inherent methods)
+// ---------------------------------------------------------------------------
+
+#[async_trait::async_trait]
+impl<R: ProjectRepository> ProjectService for ProjectServiceImpl<R> {
+    async fn create_project(&self, project: &Project, user_id: Uuid) -> Result<Project, ProjectError> {
+        Self::create_project(self, project, user_id).await
+    }
+    async fn get_project(&self, id: Uuid, user_id: Uuid) -> Result<Project, ProjectError> {
+        Self::get_project(self, id, user_id).await
+    }
+    async fn list_projects(&self, user_id: Uuid, params: &PaginationParams) -> Result<PaginatedResult<ProjectSummary>, ProjectError> {
+        Self::list_projects(self, user_id, params).await
+    }
+    async fn update_project(&self, id: Uuid, user_id: Uuid, update: &UpdateProject) -> Result<Project, ProjectError> {
+        Self::update_project(self, id, user_id, update).await
+    }
+    async fn delete_project(&self, id: Uuid, user_id: Uuid) -> Result<(), ProjectError> {
+        Self::delete_project(self, id, user_id).await
+    }
+    async fn get_workspace(&self, id: Uuid, user_id: Uuid) -> Result<Workspace, ProjectError> {
+        Self::get_workspace(self, id, user_id).await
     }
 }
 

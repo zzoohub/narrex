@@ -38,3 +38,12 @@ aws-sdk-s3 = "1"
 aws-config = { version = "1", features = ["behavior-version-latest"] }
 aws-types = "1"
 uuid = { version = "1", features = ["v4", "serde"] }
+
+[features]
+default = []
+test-support = []
+
+[dev-dependencies]
+narrex-api = { path = ".", features = ["test-support"] }
+http-body-util = "0.1"
+tower = { version = "0.5", features = ["util"] }

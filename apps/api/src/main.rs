@@ -33,6 +33,11 @@ async fn main() -> anyhow::Result<()> {
     let config = Config::from_env()?;
     tracing::info!(port = config.port, "configuration loaded");
 
+    // Defence-in-depth: refuse to start in test mode on release builds.
+    if config.run_mode == "test" && !cfg!(debug_assertions) {
+        anyhow::bail!("RUN_MODE=test is not permitted in release builds");
+    }
+
     // 3. Create Postgres adapter (creates the PgPool internally).
     let postgres = Postgres::connect(&config.database_url).await?;
     tracing::info!("database connected");
@@ -85,7 +90,7 @@ async fn main() -> anyhow::Result<()> {
         character_service,
         ai_service,
         sample_service,
-        postgres,
+        Some(postgres.pool().clone()),
         config,
     );
 

@@ -2,7 +2,7 @@ use uuid::Uuid;
 
 use super::error::AuthError;
 use super::models::{AuthTokens, GoogleUserInfo, UpdateProfile, User};
-use super::ports::{AvatarStorage, TokenService, UserRepository};
+use super::ports::{AuthService, AvatarStorage, TokenService, UserRepository};
 
 #[derive(Clone)]
 pub struct AuthServiceImpl<U: UserRepository, T: TokenService, S: AvatarStorage> {
@@ -134,7 +134,7 @@ impl<U: UserRepository, T: TokenService, S: AvatarStorage> AuthServiceImpl<U, T,
         self.google_callback(google_info, "en").await
     }
 
-    /// Upload a profile avatar image and update the user's profile URL.
+    /// Upload a profile avatar image and update the user's avatar URL.
     pub async fn upload_avatar(
         &self,
         user_id: Uuid,
@@ -164,6 +164,38 @@ impl<U: UserRepository, T: TokenService, S: AvatarStorage> AuthServiceImpl<U, T,
             ..Default::default()
         };
         self.user_repo.update_profile(user_id, &update).await
+    }
+}
+
+// ---------------------------------------------------------------------------
+// AuthService trait implementation (delegates to inherent methods)
+// ---------------------------------------------------------------------------
+
+#[async_trait::async_trait]
+impl<U: UserRepository, T: TokenService, S: AvatarStorage> AuthService for AuthServiceImpl<U, T, S> {
+    async fn google_callback(&self, google_info: GoogleUserInfo, preferred_locale: &str) -> Result<(User, AuthTokens, String), AuthError> {
+        Self::google_callback(self, google_info, preferred_locale).await
+    }
+    async fn refresh_tokens(&self, refresh_token: &str) -> Result<(AuthTokens, String), AuthError> {
+        Self::refresh_tokens(self, refresh_token).await
+    }
+    async fn verify_token(&self, token: &str) -> Result<Uuid, AuthError> {
+        Self::verify_token(self, token).await
+    }
+    async fn get_user(&self, user_id: Uuid) -> Result<User, AuthError> {
+        Self::get_user(self, user_id).await
+    }
+    async fn update_profile(&self, user_id: Uuid, update: &UpdateProfile) -> Result<User, AuthError> {
+        Self::update_profile(self, user_id, update).await
+    }
+    async fn delete_account(&self, user_id: Uuid) -> Result<(), AuthError> {
+        Self::delete_account(self, user_id).await
+    }
+    async fn upload_avatar(&self, user_id: Uuid, content_type: &str, data: Vec<u8>) -> Result<User, AuthError> {
+        Self::upload_avatar(self, user_id, content_type, data).await
+    }
+    async fn test_login(&self, email: &str, name: Option<&str>) -> Result<(User, AuthTokens, String), AuthError> {
+        Self::test_login(self, email, name).await
     }
 }
 

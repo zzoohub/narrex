@@ -6,7 +6,7 @@ use super::models::{
     UpdateScene, UpdateTrack,
 };
 use super::ports::{
-    ConnectionRepository, SceneCharacterRepository, SceneRepository, TrackRepository,
+    ConnectionRepository, SceneCharacterRepository, SceneRepository, TimelineService, TrackRepository,
 };
 
 #[derive(Clone)]
@@ -232,6 +232,49 @@ where
         project_id: Uuid,
     ) -> Result<(), TimelineError> {
         self.scene_repo.mark_needs_revision(project_id).await
+    }
+}
+
+// ---------------------------------------------------------------------------
+// TimelineService trait implementation (delegates to inherent methods)
+// ---------------------------------------------------------------------------
+
+#[async_trait::async_trait]
+impl<TR: TrackRepository, SR: SceneRepository, CR: ConnectionRepository, SCR: SceneCharacterRepository>
+    TimelineService for TimelineServiceImpl<TR, SR, CR, SCR>
+{
+    async fn create_track(&self, project_id: Uuid, input: &CreateTrack) -> Result<Track, TimelineError> {
+        Self::create_track(self, project_id, input).await
+    }
+    async fn update_track(&self, id: Uuid, update: &UpdateTrack) -> Result<Track, TimelineError> {
+        Self::update_track(self, id, update).await
+    }
+    async fn delete_track(&self, id: Uuid) -> Result<(), TimelineError> {
+        Self::delete_track(self, id).await
+    }
+    async fn create_scene(&self, project_id: Uuid, input: &CreateScene) -> Result<Scene, TimelineError> {
+        Self::create_scene(self, project_id, input).await
+    }
+    async fn get_scene(&self, id: Uuid) -> Result<Scene, TimelineError> {
+        Self::get_scene(self, id).await
+    }
+    async fn get_scene_detail(&self, id: Uuid) -> Result<SceneDetail, TimelineError> {
+        Self::get_scene_detail(self, id).await
+    }
+    async fn update_scene(&self, id: Uuid, update: &UpdateScene) -> Result<Scene, TimelineError> {
+        Self::update_scene(self, id, update).await
+    }
+    async fn delete_scene(&self, id: Uuid) -> Result<(), TimelineError> {
+        Self::delete_scene(self, id).await
+    }
+    async fn create_connection(&self, project_id: Uuid, input: &CreateConnection) -> Result<SceneConnection, TimelineError> {
+        Self::create_connection(self, project_id, input).await
+    }
+    async fn delete_connection(&self, id: Uuid) -> Result<(), TimelineError> {
+        Self::delete_connection(self, id).await
+    }
+    async fn mark_scenes_needs_revision(&self, project_id: Uuid) -> Result<(), TimelineError> {
+        Self::mark_scenes_needs_revision(self, project_id).await
     }
 }
 

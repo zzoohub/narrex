@@ -15,13 +15,12 @@ use tower_http::trace::TraceLayer;
 use tracing::info;
 
 use crate::config::Config;
-use crate::domain::ai::service::AiServiceImpl;
-use crate::domain::auth::service::AuthServiceImpl;
-use crate::domain::character::service::CharacterServiceImpl;
-use crate::domain::project::service::ProjectServiceImpl;
-use crate::domain::sample::service::SampleProjectService;
-use crate::domain::timeline::service::TimelineServiceImpl;
-use crate::outbound::postgres::Postgres;
+use crate::domain::ai::ports::AiService;
+use crate::domain::auth::ports::AuthService;
+use crate::domain::character::ports::CharacterService;
+use crate::domain::project::ports::ProjectService;
+use crate::domain::sample::ports::SampleService;
+use crate::domain::timeline::ports::TimelineService;
 
 use super::ai::handlers as ai_handlers;
 use super::auth::handlers as auth_handlers;
@@ -31,45 +30,34 @@ use super::project::handlers as project_handlers;
 use super::timeline::handlers as timeline_handlers;
 
 // ---------------------------------------------------------------------------
-// Service type aliases (concrete adapter types)
-// ---------------------------------------------------------------------------
-
-pub type AuthSvc = AuthServiceImpl<Postgres, crate::outbound::jwt::JwtTokenService, crate::outbound::storage::R2Storage>;
-pub type ProjectSvc = ProjectServiceImpl<Postgres>;
-pub type TimelineSvc = TimelineServiceImpl<Postgres, Postgres, Postgres, Postgres>;
-pub type CharacterSvc = CharacterServiceImpl<Postgres, Postgres>;
-pub type AiSvc = AiServiceImpl<Postgres, Postgres, Postgres, Postgres, Postgres>;
-pub type SampleSvc = SampleProjectService<Postgres>;
-
-// ---------------------------------------------------------------------------
 // AppState
 // ---------------------------------------------------------------------------
 
-/// Concrete application state shared across all handlers.
+/// Application state shared across all handlers.
 ///
-/// Services are held behind `Arc` so the state is cheap to clone.
+/// Services are held behind `Arc<dyn Trait>` for testability.
 #[derive(Clone)]
 pub struct AppState {
-    auth_service: Arc<AuthSvc>,
-    project_service: Arc<ProjectSvc>,
-    timeline_service: Arc<TimelineSvc>,
-    character_service: Arc<CharacterSvc>,
-    ai_service: Arc<AiSvc>,
-    sample_service: Arc<SampleSvc>,
-    postgres: Postgres,
+    auth_service: Arc<dyn AuthService>,
+    project_service: Arc<dyn ProjectService>,
+    timeline_service: Arc<dyn TimelineService>,
+    character_service: Arc<dyn CharacterService>,
+    ai_service: Arc<dyn AiService>,
+    sample_service: Arc<dyn SampleService>,
+    pool: Option<PgPool>,
     pub jwt_secret: String,
     config: Arc<Config>,
 }
 
 impl AppState {
     pub fn new(
-        auth_service: AuthSvc,
-        project_service: ProjectSvc,
-        timeline_service: TimelineSvc,
-        character_service: CharacterSvc,
-        ai_service: AiSvc,
-        sample_service: SampleSvc,
-        postgres: Postgres,
+        auth_service: impl AuthService + 'static,
+        project_service: impl ProjectService + 'static,
+        timeline_service: impl TimelineService + 'static,
+        character_service: impl CharacterService + 'static,
+        ai_service: impl AiService + 'static,
+        sample_service: impl SampleService + 'static,
+        pool: Option<PgPool>,
         config: Config,
     ) -> Self {
         let jwt_secret = config.jwt_secret.clone();
@@ -80,38 +68,38 @@ impl AppState {
             character_service: Arc::new(character_service),
             ai_service: Arc::new(ai_service),
             sample_service: Arc::new(sample_service),
-            postgres,
+            pool,
             jwt_secret,
             config: Arc::new(config),
         }
     }
 
-    pub fn auth_service(&self) -> &AuthSvc {
-        &self.auth_service
+    pub fn auth_service(&self) -> &dyn AuthService {
+        self.auth_service.as_ref()
     }
 
-    pub fn project_service(&self) -> &ProjectSvc {
-        &self.project_service
+    pub fn project_service(&self) -> &dyn ProjectService {
+        self.project_service.as_ref()
     }
 
-    pub fn timeline_service(&self) -> &TimelineSvc {
-        &self.timeline_service
+    pub fn timeline_service(&self) -> &dyn TimelineService {
+        self.timeline_service.as_ref()
     }
 
-    pub fn character_service(&self) -> &CharacterSvc {
-        &self.character_service
+    pub fn character_service(&self) -> &dyn CharacterService {
+        self.character_service.as_ref()
     }
 
-    pub fn ai_service(&self) -> &AiSvc {
-        &self.ai_service
+    pub fn ai_service(&self) -> &dyn AiService {
+        self.ai_service.as_ref()
     }
 
-    pub fn sample_service(&self) -> &SampleSvc {
-        &self.sample_service
+    pub fn sample_service(&self) -> Arc<dyn SampleService> {
+        self.sample_service.clone()
     }
 
-    pub fn db_pool(&self) -> &PgPool {
-        self.postgres.pool()
+    pub fn db_pool(&self) -> Option<&PgPool> {
+        self.pool.as_ref()
     }
 
     pub fn config(&self) -> &Config {
@@ -161,7 +149,7 @@ impl HttpServer {
 // Router
 // ---------------------------------------------------------------------------
 
-fn build_router(state: AppState, cors_origin: &str) -> Router {
+pub fn build_router(state: AppState, cors_origin: &str) -> Router {
     let cors = CorsLayer::new()
         .allow_origin(
             cors_origin

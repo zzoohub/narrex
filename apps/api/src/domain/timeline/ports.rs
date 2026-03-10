@@ -81,3 +81,22 @@ pub trait SceneCharacterRepository: Clone + Send + Sync + 'static {
         character_ids: &[Uuid],
     ) -> Result<(), TimelineError>;
 }
+
+// ---------------------------------------------------------------------------
+// Inbound port: TimelineService (used by HTTP handlers)
+// ---------------------------------------------------------------------------
+
+#[async_trait::async_trait]
+pub trait TimelineService: Send + Sync {
+    async fn create_track(&self, project_id: Uuid, input: &CreateTrack) -> Result<Track, TimelineError>;
+    async fn update_track(&self, id: Uuid, update: &UpdateTrack) -> Result<Track, TimelineError>;
+    async fn delete_track(&self, id: Uuid) -> Result<(), TimelineError>;
+    async fn create_scene(&self, project_id: Uuid, input: &CreateScene) -> Result<Scene, TimelineError>;
+    async fn get_scene(&self, id: Uuid) -> Result<Scene, TimelineError>;
+    async fn get_scene_detail(&self, id: Uuid) -> Result<SceneDetail, TimelineError>;
+    async fn update_scene(&self, id: Uuid, update: &UpdateScene) -> Result<Scene, TimelineError>;
+    async fn delete_scene(&self, id: Uuid) -> Result<(), TimelineError>;
+    async fn create_connection(&self, project_id: Uuid, input: &CreateConnection) -> Result<SceneConnection, TimelineError>;
+    async fn delete_connection(&self, id: Uuid) -> Result<(), TimelineError>;
+    async fn mark_scenes_needs_revision(&self, project_id: Uuid) -> Result<(), TimelineError>;
+}

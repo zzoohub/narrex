@@ -12,9 +12,13 @@ pub struct HealthResponse {
 
 /// `GET /health` — checks DB connectivity, no auth required.
 pub async fn health_check(State(state): State<AppState>) -> Json<HealthResponse> {
-    let db_status = match sqlx::query("SELECT 1").execute(state.db_pool()).await {
-        Ok(_) => "connected",
-        Err(_) => "disconnected",
+    let db_status = if let Some(pool) = state.db_pool() {
+        match sqlx::query("SELECT 1").execute(pool).await {
+            Ok(_) => "connected",
+            Err(_) => "disconnected",
+        }
+    } else {
+        "unavailable"
     };
 
     Json(HealthResponse {

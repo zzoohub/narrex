@@ -122,7 +122,7 @@ pub async fn handle_google_callback(
 
     // Create sample project for first-time users (REQ-063).
     // Runs in background — never blocks the auth redirect.
-    let sample_svc = state.sample_service().clone();
+    let sample_svc = state.sample_service();
     let sample_user_id = user.id;
     let sample_locale = preferred_locale.clone();
     let handle = tokio::spawn(async move {

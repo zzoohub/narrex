@@ -3,7 +3,7 @@ use uuid::Uuid;
 use crate::domain::project::error::ProjectError;
 use crate::domain::project::models::Project;
 
-use super::ports::SampleProjectRepository;
+use super::ports::{SampleProjectRepository, SampleService};
 use super::seed::build_sample_project;
 
 #[derive(Clone)]
@@ -45,6 +45,17 @@ impl<R: SampleProjectRepository> SampleProjectService<R> {
         let project = data.project.clone();
         self.repo.create_sample_project(&data).await?;
         Ok(Some(project))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SampleService trait implementation (delegates to inherent methods)
+// ---------------------------------------------------------------------------
+
+#[async_trait::async_trait]
+impl<R: SampleProjectRepository> SampleService for SampleProjectService<R> {
+    async fn ensure_sample_project(&self, user_id: Uuid, locale: &str) -> Option<Project> {
+        Self::ensure_sample_project(self, user_id, locale).await
     }
 }
 
