@@ -14,9 +14,9 @@ TRUNCATE user_account CASCADE;
 -- Users
 -- =============================================================================
 
-INSERT INTO user_account (id, google_id, email, display_name, profile_image_url) VALUES
-  ('00000000-0000-0000-0000-000000000001', 'google_dev_001', 'dev@narrex.local', 'Dev User', NULL),
-  ('00000000-0000-0000-0000-000000000002', 'google_dev_002', 'tester@narrex.local', 'Test Writer', NULL);
+INSERT INTO user_account (id, google_id, email, display_name, profile_image_url, theme_preference, language_preference) VALUES
+  ('00000000-0000-0000-0000-000000000001', 'google_dev_001', 'dev@narrex.local', 'Dev User', NULL, 'dark', 'ko'),
+  ('00000000-0000-0000-0000-000000000002', 'google_dev_002', 'tester@narrex.local', 'Test Writer', NULL, 'system', 'en');
 
 -- =============================================================================
 -- Projects
@@ -543,7 +543,16 @@ INSERT INTO generation_log (id, user_id, project_id, scene_id, duration_ms, toke
    '10000000-0000-0000-0000-000000000001', NULL,
    5600, 2200, 850, 'structuring', 'success', '@cf/meta/llama-3.3-70b-instruct-fp8-fast', 'cloudflare_workers_ai', 0.000000);
 
--- Fix generation_log error_message column for non-failure rows (NULL by default, only set above for failure)
--- No action needed — NULL is the default.
+-- =============================================================================
+-- Backfill scene.content from latest draft per scene
+-- =============================================================================
+
+UPDATE scene s SET content = d.content
+FROM (
+  SELECT DISTINCT ON (scene_id) scene_id, content
+  FROM draft
+  ORDER BY scene_id, version DESC
+) d
+WHERE s.id = d.scene_id;
 
 COMMIT;

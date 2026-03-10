@@ -1,1 +1,0 @@
-ALTER TABLE scene DROP COLUMN IF EXISTS content;

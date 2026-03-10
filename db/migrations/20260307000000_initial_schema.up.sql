@@ -45,6 +45,10 @@ CREATE TABLE user_account (
     email             TEXT        NOT NULL,
     display_name      TEXT,
     profile_image_url TEXT,
+    theme_preference  TEXT        NOT NULL DEFAULT 'system'
+        CONSTRAINT chk_user_theme CHECK (theme_preference IN ('system', 'light', 'dark')),
+    language_preference TEXT      NOT NULL DEFAULT 'ko'
+        CONSTRAINT chk_user_language CHECK (language_preference IN ('ko', 'en')),
     CONSTRAINT uq_user_google_id UNIQUE (google_id),
     CONSTRAINT uq_user_email UNIQUE (email),
     CONSTRAINT chk_user_email_length CHECK (char_length(email) <= 255),
@@ -70,7 +74,7 @@ CREATE TABLE project (
     era_location    TEXT,
     pov             pov_type,
     tone            TEXT,
-    source_type     TEXT        CONSTRAINT project_source_type_check CHECK (source_type IN ('free_text', 'file_import', 'template')),
+    source_type     TEXT        CONSTRAINT project_source_type_check CHECK (source_type IN ('free_text', 'file_import', 'template', 'sample')),
     source_input    TEXT,
     source_file_key TEXT,
     CONSTRAINT chk_project_title_length CHECK (char_length(title) <= 200),
@@ -82,6 +86,11 @@ COMMENT ON COLUMN project.source_input IS 'Original user text input or extracted
 COMMENT ON COLUMN project.source_file_key IS 'Cloudflare R2 object key for imported file';
 
 CREATE INDEX idx_project_user_id ON project (user_id) WHERE deleted_at IS NULL;
+
+-- Prevent duplicate sample projects per user (defence against TOCTOU race).
+CREATE UNIQUE INDEX uq_one_sample_per_user
+    ON project (user_id)
+    WHERE source_type = 'sample' AND deleted_at IS NULL;
 
 CREATE TRIGGER trg_project_updated_at
     BEFORE UPDATE ON project
@@ -117,6 +126,7 @@ CREATE TABLE scene (
     duration        DOUBLE PRECISION NOT NULL DEFAULT 1.0,
     status          scene_status     NOT NULL DEFAULT 'empty',
     title           TEXT             NOT NULL,
+    content         TEXT,
     plot_summary    TEXT,
     location        TEXT,
     mood_tags       TEXT[]           DEFAULT '{}',
@@ -128,6 +138,7 @@ CREATE TABLE scene (
 
 COMMENT ON TABLE scene IS 'Scene on the timeline. Central entity for AI context assembly.';
 COMMENT ON COLUMN scene.project_id IS 'Denormalized from track.project_id for query performance';
+COMMENT ON COLUMN scene.content IS 'User manuscript text. Auto-saved from editor. NULL = no content yet. Distinct from drafts table which stores AI generation history.';
 COMMENT ON COLUMN scene.start_position IS 'Fractional ordering. Initial spacing: 1024.0. Insert at midpoint.';
 COMMENT ON COLUMN scene.duration IS 'Timeline extent. Default 1.0. Overlapping ranges on different tracks = simultaneous.';
 COMMENT ON COLUMN scene.mood_tags IS 'Override config-level tone for this scene';

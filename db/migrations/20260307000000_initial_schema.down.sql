@@ -10,6 +10,7 @@ DROP TABLE IF EXISTS character;
 DROP TABLE IF EXISTS scene_connection;
 DROP TABLE IF EXISTS scene;
 DROP TABLE IF EXISTS track;
+DROP INDEX IF EXISTS uq_one_sample_per_user;
 DROP TABLE IF EXISTS project;
 DROP TABLE IF EXISTS user_account;
 
