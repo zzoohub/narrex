@@ -6,7 +6,7 @@ import { Portal } from 'solid-js/web'
 
 export interface ContextMenuItem {
   label: string
-  icon?: JSX.Element
+  icon?: JSX.Element | (() => JSX.Element)
   onClick: () => void
   danger?: boolean
   disabled?: boolean
@@ -199,7 +199,7 @@ export function ContextMenu(props: ContextMenuProps) {
                   >
                     <Show when={menuItem.icon}>
                       <span class="flex-shrink-0 opacity-70">
-                        {menuItem.icon}
+                        {typeof menuItem.icon === 'function' ? menuItem.icon() : menuItem.icon}
                       </span>
                     </Show>
                     <span class="truncate">{menuItem.label}</span>

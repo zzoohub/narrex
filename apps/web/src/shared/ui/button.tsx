@@ -8,7 +8,7 @@ interface ButtonProps extends JSX.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant
   size?: Size
   loading?: boolean
-  icon?: JSX.Element
+  icon?: JSX.Element | (() => JSX.Element)
 }
 
 const variantClasses: Record<Variant, string> = {
@@ -57,7 +57,7 @@ export const Button: ParentComponent<ButtonProps> = (allProps) => {
       <Show when={props.loading}>
         <span class="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
       </Show>
-      <Show when={!props.loading && props.icon}>{props.icon}</Show>
+      <Show when={!props.loading && props.icon}>{typeof props.icon === 'function' ? props.icon() : props.icon}</Show>
       {props.children}
     </button>
   )

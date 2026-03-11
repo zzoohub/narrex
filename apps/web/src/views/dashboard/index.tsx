@@ -235,7 +235,7 @@ export function DashboardView() {
               fallback={
                 <Button
                   variant="primary"
-                  icon={<IconPlus size={16} />}
+                  icon={() => <IconPlus size={16} />}
                   onClick={() => openLoginGate('newProject')}
                 >
                   {t('dashboard.newProject')}
@@ -243,7 +243,7 @@ export function DashboardView() {
               }
             >
               <Link to="/new">
-                <Button variant="primary" icon={<IconPlus size={16} />}>
+                <Button variant="primary" icon={() => <IconPlus size={16} />}>
                   {t('dashboard.newProject')}
                 </Button>
               </Link>
@@ -382,7 +382,7 @@ export function DashboardView() {
                   {t('dashboard.empty.description')}
                 </p>
                 <Link to="/new">
-                  <Button variant="primary" size="lg" icon={<IconPlus size={18} />}>
+                  <Button variant="primary" size="lg" icon={() => <IconPlus size={18} />}>
                     {t('dashboard.empty.cta')}
                   </Button>
                 </Link>
@@ -398,7 +398,7 @@ export function DashboardView() {
                       items={[
                         {
                           label: t('common.delete'),
-                          icon: <IconTrash size={14} />,
+                          icon: () => <IconTrash size={14} />,
                           danger: true,
                           onClick: () => setDeleteTarget(project),
                         },

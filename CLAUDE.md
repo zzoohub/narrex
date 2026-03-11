@@ -27,6 +27,7 @@ Narrex is a web-based visual novel editor with AI scene generation for Korean we
 - Import upward in FSD layers (shared ← entities ← features ← widgets ← views ← app)
 - Hardcode user-facing strings — use `useI18n()` with both `ko` and `en` entries
 - Skip RFC 9457 ProblemDetail format for API error responses
+- Pass JSX directly as component props — use arrow functions instead: `icon={() => <Icon />}` not `icon={<Icon />}`. SolidJS SSR compiler wraps JSX props in getters (lazy, inside parent), but client compiler evaluates eagerly (before parent), causing hydration key mismatch → "template2 is not a function" in dev mode.
 
 ## Build & Dev Commands
 
