@@ -59,7 +59,7 @@ function WorkspaceLayout() {
   const [configOpen, setConfigOpen] = createSignal(false)
 
   // ---- Panel visibility ----
-  const [leftOpen, setLeftOpen] = createSignal(false)
+  const [leftOpen, setLeftOpen] = createSignal(true)
   const [rightOpen, setRightOpen] = createSignal(false)
   const [bottomOpen, setBottomOpen] = createSignal(true)
 
