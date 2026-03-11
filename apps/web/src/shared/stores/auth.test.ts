@@ -11,7 +11,7 @@ vi.mock('@/shared/api/client', () => ({
   del: vi.fn(),
   ApiError: class ApiError extends Error {
     status: number
-    constructor(status: number, problem: any) {
+    constructor(status: number, _problem: any) {
       super('ApiError')
       this.status = status
     }

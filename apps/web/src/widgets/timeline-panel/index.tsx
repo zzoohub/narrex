@@ -942,7 +942,7 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
           <Button
             variant="ghost"
             size="sm"
-            icon={<IconPlus size={14} />}
+            icon={() => <IconPlus size={14} />}
             onClick={() => ws.addTrack(`Track ${ws.trackScenes().length + 1}`)}
           >
             {t('timeline.addTrack')}

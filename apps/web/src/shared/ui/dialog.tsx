@@ -1,4 +1,4 @@
-import { createEffect, onCleanup, onMount, Show } from 'solid-js'
+import { createEffect, onCleanup, Show } from 'solid-js'
 import { Portal } from 'solid-js/web'
 import { useI18n } from '@/shared/lib/i18n'
 import { Button } from './button'

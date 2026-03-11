@@ -490,7 +490,7 @@ function GraphView(props: {
           <Button
             variant="ghost"
             size="sm"
-            icon={<IconPlus size={14} />}
+            icon={() => <IconPlus size={14} />}
             onClick={() => ws.addCharacter(props.t('characters.newName') || 'New Character')}
           >
             {props.t('characters.add')}
@@ -567,7 +567,7 @@ function GraphView(props: {
               <Button
                 variant="secondary"
                 size="sm"
-                icon={<IconPlus size={14} />}
+                icon={() => <IconPlus size={14} />}
                 class="mt-4"
                 onClick={() => ws.addCharacter(props.t('characters.newName') || 'New Character')}
               >
@@ -1059,7 +1059,7 @@ function CharacterCard(props: {
           variant="danger"
           size="sm"
           class="w-full mt-4"
-          icon={<IconTrash size={14} />}
+          icon={() => <IconTrash size={14} />}
           onClick={() => setShowDeleteDialog(true)}
         >
           {props.t('characters.deleteCharacter')}

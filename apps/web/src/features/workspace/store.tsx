@@ -20,7 +20,7 @@ import * as sceneApi from '@/entities/scene/api'
 import * as trackApi from '@/entities/track/api'
 import * as characterApi from '@/entities/character/api'
 import * as connectionApi from '@/entities/connection/api'
-import { buildDemoWorkspace, DEMO_PROJECT_ID } from '@/shared/fixtures/demo-project'
+import { buildDemoWorkspace } from '@/shared/fixtures/demo-project'
 
 // ---- Types ------------------------------------------------------------------
 

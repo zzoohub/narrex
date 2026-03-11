@@ -230,7 +230,7 @@ export function SceneDetail() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    icon={<IconPlus size={14} />}
+                    icon={() => <IconPlus size={14} />}
                     onClick={() => setShowCharDropdown((v) => !v)}
                   >
                     {t('common.add')}
@@ -288,7 +288,7 @@ export function SceneDetail() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      icon={<IconPlus size={14} />}
+                      icon={() => <IconPlus size={14} />}
                       onClick={() => setShowMoodInput(true)}
                     >
                       {t('common.add')}

@@ -20,7 +20,7 @@ import { SceneDetail } from '@/widgets/scene-detail'
 
 export function WorkspaceView() {
   const params = useParams({ from: '/project/$id' })
-  const { state, isGuest } = useAuth()
+  const { state } = useAuth()
   const { locale } = useI18n()
   const isDemo = () => params().id === DEMO_PROJECT_ID
 

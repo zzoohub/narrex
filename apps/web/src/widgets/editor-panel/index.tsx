@@ -401,7 +401,7 @@ export function EditorPanel() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    icon={<IconStop size={14} />}
+                    icon={() => <IconStop size={14} />}
                     onClick={handleStop}
                   >
                     {t('editor.stop')}
@@ -411,7 +411,7 @@ export function EditorPanel() {
                   <Button
                     variant="primary"
                     size="sm"
-                    icon={<IconSparkles size={14} />}
+                    icon={() => <IconSparkles size={14} />}
                     onClick={handleRegenerate}
                     disabled={!s().plotSummary}
                   >
@@ -456,7 +456,7 @@ export function EditorPanel() {
                     <Button
                       variant="primary"
                       size="lg"
-                      icon={<IconSparkles size={18} />}
+                      icon={() => <IconSparkles size={18} />}
                       disabled={!s().plotSummary}
                       onClick={handleGenerate}
                     >
@@ -526,7 +526,7 @@ export function EditorPanel() {
                               style={{ animation: 'pulse-dot 1.2s ease-in-out infinite' }}
                             />
                             {t('editor.editing')}
-                            <Button variant="ghost" size="sm" icon={<IconStop size={14} />} onClick={handleStop}>
+                            <Button variant="ghost" size="sm" icon={() => <IconStop size={14} />} onClick={handleStop}>
                               {t('editor.stop')}
                             </Button>
                           </div>

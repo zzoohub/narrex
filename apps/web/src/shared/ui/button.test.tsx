@@ -75,13 +75,13 @@ describe('Button', () => {
   })
 
   it('renders icon when provided', () => {
-    const icon = <span data-testid="icon">*</span>
+    const icon = () => <span data-testid="icon">*</span>
     render(() => <Button icon={icon}>Test</Button>)
     expect(screen.getByTestId('icon')).toBeInTheDocument()
   })
 
   it('hides icon when loading', () => {
-    const icon = <span data-testid="icon">*</span>
+    const icon = () => <span data-testid="icon">*</span>
     render(() => <Button icon={icon} loading>Test</Button>)
     expect(screen.queryByTestId('icon')).not.toBeInTheDocument()
   })

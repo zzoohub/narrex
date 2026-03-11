@@ -19,7 +19,7 @@ import {
 import { listProjects, deleteProject } from '@/entities/project'
 import type { ProjectSummary } from '@/entities/project'
 import { useAuth } from '@/shared/stores/auth'
-import { buildDemoProjectSummary, DEMO_PROJECT_ID } from '@/shared/fixtures/demo-project'
+import { buildDemoProjectSummary } from '@/shared/fixtures/demo-project'
 import { LoginGateModal } from '@/features/auth'
 import type { LoginGateReason } from '@/features/auth'
 

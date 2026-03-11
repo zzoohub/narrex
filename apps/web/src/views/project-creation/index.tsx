@@ -507,7 +507,7 @@ export function ProjectCreationView() {
                 variant="primary"
                 size="lg"
                 disabled={!canSubmit()}
-                icon={<IconSparkles size={18} />}
+                icon={() => <IconSparkles size={18} />}
                 onClick={handleSubmit}
               >
                 {t('creation.submit')}
@@ -566,7 +566,7 @@ export function ProjectCreationView() {
                 <Button
                   variant="primary"
                   size="lg"
-                  icon={<IconSparkles size={18} />}
+                  icon={() => <IconSparkles size={18} />}
                   onClick={handleClarifySubmit}
                 >
                   {t('creation.submit')}

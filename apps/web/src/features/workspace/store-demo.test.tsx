@@ -63,8 +63,8 @@ function renderDemoWorkspace(cb: (ws: WorkspaceContextValue) => void): Promise<v
         return null
       }
 
-      // @ts-ignore — JSX in test
-      const el = (
+      // @ts-expect-error — JSX in test
+      const _el = (
         <WorkspaceProvider projectId={DEMO_PROJECT_ID} isDemo={true}>
           <Child />
         </WorkspaceProvider>
