@@ -53,11 +53,12 @@ vi.mock('@/features/workspace', () => ({
 vi.mock('d3', () => ({
   forceSimulation: () => ({
     force: vi.fn().mockReturnThis(),
-    nodes: vi.fn().mockReturnThis(),
+    nodes: vi.fn().mockReturnValue([]),
     on: vi.fn().mockReturnThis(),
     alpha: vi.fn().mockReturnThis(),
     restart: vi.fn(),
     stop: vi.fn(),
+    tick: vi.fn(),
     alphaTarget: vi.fn().mockReturnThis(),
   }),
   forceLink: () => ({
@@ -90,6 +91,13 @@ function renderCharacterMap(props: { fullscreen?: boolean; onExitFullscreen?: ()
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+
+// ResizeObserver is not available in jsdom
+globalThis.ResizeObserver = class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+} as unknown as typeof ResizeObserver
 
 describe('CharacterMap', () => {
   beforeEach(() => {

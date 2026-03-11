@@ -1,4 +1,4 @@
-import { createSignal, createEffect, onMount, onCleanup, untrack, For, Index, Show } from 'solid-js'
+import { createSignal, createEffect, createMemo, onMount, onCleanup, untrack, For, Index, Show } from 'solid-js'
 import { Portal } from 'solid-js/web'
 import { useI18n } from '@/shared/lib/i18n'
 import { useWorkspace } from '@/features/workspace'
@@ -135,7 +135,9 @@ function GraphView(props: {
   /* ── Build / rebuild simulation ──────────────────────────────────── */
 
   function rebuildSimulation() {
-    simulation?.stop()
+    if (simulation) {
+      simulation.stop()
+    }
 
     if (!svgRef) return
 
@@ -187,13 +189,27 @@ function GraphView(props: {
       .on('tick', () => {
         const map = new Map<string, { x: number; y: number }>()
         sim.nodes().forEach((n) => {
-          // Clamp nodes within viewport
           n.x = Math.max(pad, Math.min(width - pad, n.x!))
           n.y = Math.max(pad, Math.min(height - pad, n.y!))
           map.set(n.id, { x: n.x, y: n.y })
         })
         setNodePositions(map)
       })
+
+    // Run simulation synchronously to compute settled positions immediately.
+    // This bypasses the rAF-based ticker which browsers may skip when the
+    // panel is collapsed (opacity: 0 / overflow: hidden).
+    sim.stop()
+    for (let i = 0; i < 300; i++) sim.tick()
+
+    // Set final positions
+    const map = new Map<string, { x: number; y: number }>()
+    sim.nodes().forEach((n) => {
+      n.x = Math.max(pad, Math.min(width - pad, n.x!))
+      n.y = Math.max(pad, Math.min(height - pad, n.y!))
+      map.set(n.id, { x: n.x, y: n.y })
+    })
+    setNodePositions(map)
 
     simulation = sim
   }
@@ -214,35 +230,23 @@ function GraphView(props: {
     untrack(() => rebuildSimulation())
   })
 
-  /* Rebuild when SVG becomes visible / resizes (e.g. collapsed panel opens).
-     Without this, demo mode loads data synchronously while the panel is
-     still width:0 — the simulation builds with fallback dimensions and
-     nodes may end up outside the actual viewport. */
+  /* Rebuild when SVG dimensions change (e.g. collapsed panel opens) */
   let prevSvgWidth = 0
   let prevSvgHeight = 0
-
-  onMount(() => {
-    if (!svgRef || typeof ResizeObserver === 'undefined') return
-    const ro = new ResizeObserver((entries) => {
-      const entry = entries[0]
-      if (!entry) return
-      const { width, height } = entry.contentRect
-      // Only rebuild when dimensions meaningfully change (avoids loops)
-      if (
-        width > 0 && height > 0 &&
-        (Math.abs(width - prevSvgWidth) > 10 || Math.abs(height - prevSvgHeight) > 10)
-      ) {
-        prevSvgWidth = width
-        prevSvgHeight = height
-        rebuildSimulation()
-      }
-    })
-    ro.observe(svgRef)
-    onCleanup(() => ro.disconnect())
+  const resizeObserver = new ResizeObserver(() => {
+    if (!svgRef) return
+    const w = svgRef.clientWidth
+    const h = svgRef.clientHeight
+    if (w > 0 && h > 0 && (w !== prevSvgWidth || h !== prevSvgHeight)) {
+      prevSvgWidth = w
+      prevSvgHeight = h
+      rebuildSimulation()
+    }
   })
 
   onCleanup(() => {
     simulation?.stop()
+    resizeObserver.disconnect()
   })
 
   /* ── Node dragging (d3-drag on SVG) ─────────────────────────────── */
@@ -573,7 +577,14 @@ function GraphView(props: {
           }
         >
           <svg
-            ref={svgRef}
+            ref={(el) => {
+              svgRef = el
+              resizeObserver.observe(el)
+              // Trigger simulation when SVG first mounts — the createEffect
+              // may have already fired (before Show rendered this element)
+              // so svgRef was unassigned and rebuildSimulation returned early.
+              untrack(() => rebuildSimulation())
+            }}
             class="absolute inset-0 w-full h-full"
             style={{ 'touch-action': 'none' }}
           >
@@ -605,8 +616,10 @@ function GraphView(props: {
             {/* Relationship lines */}
             <For each={ws.state.relationships}>
               {(rel) => {
-                const posA = () => nodePositions().get(rel.characterAId)
-                const posB = () => nodePositions().get(rel.characterBId)
+                const charA = () => ws.state.characters.find((c) => c.id === rel.characterAId)
+                const charB = () => ws.state.characters.find((c) => c.id === rel.characterBId)
+                const posA = createMemo(() => nodePositions().get(rel.characterAId) ?? (charA() ? { x: charA()!.graphX ?? 0, y: charA()!.graphY ?? 0 } : null))
+                const posB = createMemo(() => nodePositions().get(rel.characterBId) ?? (charB() ? { x: charB()!.graphX ?? 0, y: charB()!.graphY ?? 0 } : null))
 
                 return (
                   <Show when={posA() && posB()}>
@@ -678,87 +691,90 @@ function GraphView(props: {
             {/* Character nodes */}
             <For each={ws.state.characters}>
               {(char) => {
-                const pos = () => nodePositions().get(char.id)
+                // Use createMemo to ensure reactive tracking of nodePositions
+                // inside For item scope (plain derivations may not re-trigger
+                // SVG attribute updates after SSR hydration).
+                const pos = createMemo(() => {
+                  const sim = nodePositions().get(char.id)
+                  if (sim) return sim
+                  return { x: char.graphX ?? 0, y: char.graphY ?? 0 }
+                })
                 const r = () => getNodeRadius(getConnectionCount(char.id, ws.state.relationships))
                 const diameter = () => r() * 2
 
                 return (
-                  <Show when={pos()}>
-                    {(p) => (
-                      <ContextMenu items={charContextItems(char.id)} svg>
-                        <g
-                          class="cursor-grab active:cursor-grabbing"
-                          style={{ 'pointer-events': 'all' }}
+                  <ContextMenu items={charContextItems(char.id)} svg>
+                    <g
+                      class="cursor-grab active:cursor-grabbing"
+                      style={{ 'pointer-events': 'all' }}
+                    >
+                      {/* Main circle — drag to move */}
+                      <Show when={char.profileImageUrl && !failedAvatars().has(char.id)}>
+                        <defs>
+                          <clipPath id={`avatar-clip-${char.id}`}>
+                            <circle cx={pos().x} cy={pos().y} r={r()} />
+                          </clipPath>
+                        </defs>
+                        <image
+                          href={char.profileImageUrl!}
+                          x={pos().x - r()}
+                          y={pos().y - r()}
+                          width={diameter()}
+                          height={diameter()}
+                          clip-path={`url(#avatar-clip-${char.id})`}
+                          class="pointer-events-none"
+                          onError={() => setFailedAvatars((prev) => new Set(prev).add(char.id))}
+                        />
+                      </Show>
+                      <circle
+                        cx={pos().x}
+                        cy={pos().y}
+                        r={r()}
+                        class={char.profileImageUrl && !failedAvatars().has(char.id)
+                          ? 'fill-none stroke-border-default hover:stroke-accent transition-colors'
+                          : 'fill-surface-raised stroke-border-default hover:stroke-accent transition-colors'}
+                        stroke-width={2}
+                        onPointerDown={(e) => handleNodePointerDown(char.id, e)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (!didDrag) props.onSelect(char.id)
+                        }}
+                      />
+
+                      {/* Initial letter (only if no image) */}
+                      <Show when={!char.profileImageUrl || failedAvatars().has(char.id)}>
+                        <text
+                          x={pos().x}
+                          y={pos().y}
+                          text-anchor="middle"
+                          dominant-baseline="central"
+                          class="text-sm font-semibold fill-fg select-none pointer-events-none"
                         >
-                          {/* Main circle — drag to move */}
-                          <Show when={char.profileImageUrl && !failedAvatars().has(char.id)}>
-                            <defs>
-                              <clipPath id={`avatar-clip-${char.id}`}>
-                                <circle cx={p().x} cy={p().y} r={r()} />
-                              </clipPath>
-                            </defs>
-                            <image
-                              href={char.profileImageUrl!}
-                              x={p().x - r()}
-                              y={p().y - r()}
-                              width={diameter()}
-                              height={diameter()}
-                              clip-path={`url(#avatar-clip-${char.id})`}
-                              class="pointer-events-none"
-                              onError={() => setFailedAvatars((prev) => new Set(prev).add(char.id))}
-                            />
-                          </Show>
-                          <circle
-                            cx={p().x}
-                            cy={p().y}
-                            r={r()}
-                            class={char.profileImageUrl && !failedAvatars().has(char.id)
-                              ? 'fill-none stroke-border-default hover:stroke-accent transition-colors'
-                              : 'fill-surface-raised stroke-border-default hover:stroke-accent transition-colors'}
-                            stroke-width={2}
-                            onPointerDown={(e) => handleNodePointerDown(char.id, e)}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              if (!didDrag) props.onSelect(char.id)
-                            }}
-                          />
+                          {char.name.charAt(0)}
+                        </text>
+                      </Show>
 
-                          {/* Initial letter (only if no image) */}
-                          <Show when={!char.profileImageUrl || failedAvatars().has(char.id)}>
-                            <text
-                              x={p().x}
-                              y={p().y}
-                              text-anchor="middle"
-                              dominant-baseline="central"
-                              class="text-sm font-semibold fill-fg select-none pointer-events-none"
-                            >
-                              {char.name.charAt(0)}
-                            </text>
-                          </Show>
+                      {/* Name label below */}
+                      <text
+                        x={pos().x}
+                        y={pos().y + r() + 12}
+                        text-anchor="middle"
+                        class="text-[11px] fill-fg-secondary select-none pointer-events-none"
+                      >
+                        {char.name}
+                      </text>
 
-                          {/* Name label below */}
-                          <text
-                            x={p().x}
-                            y={p().y + r() + 12}
-                            text-anchor="middle"
-                            class="text-[11px] fill-fg-secondary select-none pointer-events-none"
-                          >
-                            {char.name}
-                          </text>
-
-                          {/* Edge handle for relationship creation (small circle at bottom-right) */}
-                          <circle
-                            cx={p().x + r() * 0.7}
-                            cy={p().y + r() * 0.7}
-                            r={6}
-                            class="fill-accent/60 hover:fill-accent stroke-surface-raised cursor-crosshair transition-colors"
-                            stroke-width={2}
-                            onPointerDown={(e) => handleEdgeHandlePointerDown(char.id, e)}
-                          />
-                        </g>
-                      </ContextMenu>
-                    )}
-                  </Show>
+                      {/* Edge handle for relationship creation (small circle at bottom-right) */}
+                      <circle
+                        cx={pos().x + r() * 0.7}
+                        cy={pos().y + r() * 0.7}
+                        r={6}
+                        class="fill-accent/60 hover:fill-accent stroke-surface-raised cursor-crosshair transition-colors"
+                        stroke-width={2}
+                        onPointerDown={(e) => handleEdgeHandlePointerDown(char.id, e)}
+                      />
+                    </g>
+                  </ContextMenu>
                 )
               }}
             </For>
