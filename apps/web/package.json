@@ -34,6 +34,7 @@
     "@solidjs/testing-library": "^0.8.10",
     "@testing-library/jest-dom": "^6.9.1",
     "@types/d3": "^7.4.3",
+    "@types/node": "^25.4.0",
     "@typescript-eslint/parser": "^8.57.0",
     "@vitest/coverage-v8": "^4.0.18",
     "eslint": "^10.0.3",

@@ -1,6 +1,8 @@
+/// <reference types="node" />
 import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
 /**
  * Architecture test: prevent passing JSX directly as component props.
@@ -37,7 +39,7 @@ const JSX_AS_PROP_PATTERN = /(\w+)=\{<[A-Z]/g;
 
 describe("no JSX passed directly as props", () => {
   it("should use arrow functions instead of direct JSX for component props", () => {
-    const srcDir = join(import.meta.dirname, "..");
+    const srcDir = join(dirname(fileURLToPath(import.meta.url)), "..");
     const files = collectTsxFiles(srcDir);
     const violations: string[] = [];
 

@@ -549,8 +549,7 @@ pub async fn import_project(
         file_data.ok_or_else(|| ApiError::BadRequest("no file provided".into()))?;
 
     // Parse file content.
-    let source_input =
-        extract_text_from_file(&file_name, &data).map_err(ApiError::BadRequest)?;
+    let source_input = extract_text_from_file(&file_name, &data).map_err(ApiError::BadRequest)?;
 
     if source_input.trim().is_empty() {
         return Err(ApiError::BadRequest("file contains no text content".into()));
