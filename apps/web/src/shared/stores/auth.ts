@@ -18,6 +18,7 @@ type AuthState = 'loading' | 'authenticated' | 'unauthenticated'
 
 const [authState, setAuthState] = createSignal<AuthState>('loading')
 const [user, setUser] = createSignal<AuthUser | null>(null)
+const [isGuest, setIsGuest] = createSignal(true) // fail-closed: assume guest until proven authenticated
 
 // ---- API calls --------------------------------------------------------------
 
@@ -60,6 +61,7 @@ export async function initAuth(): Promise<void> {
     if (me) {
       setUser(me)
       setAuthState('authenticated')
+      setIsGuest(false)
       return
     }
   }
@@ -72,11 +74,13 @@ export async function initAuth(): Promise<void> {
     if (me) {
       setUser(me)
       setAuthState('authenticated')
+      setIsGuest(false)
       return
     }
   }
 
   setAuthState('unauthenticated')
+  // isGuest already defaults to true
 }
 
 export function loginWithGoogle(): void {
@@ -97,6 +101,7 @@ export async function handleOAuthCallback(code: string): Promise<boolean> {
     setAccessToken(data.data.accessToken)
     setUser(data.data.user)
     setAuthState('authenticated')
+    setIsGuest(false)
     return true
   } catch {
     return false
@@ -112,6 +117,7 @@ export async function logout(): Promise<void> {
   setAccessToken(null)
   setUser(null)
   setAuthState('unauthenticated')
+  setIsGuest(true)
 }
 
 export async function deleteAccount(): Promise<void> {
@@ -119,6 +125,7 @@ export async function deleteAccount(): Promise<void> {
   setAccessToken(null)
   setUser(null)
   setAuthState('unauthenticated')
+  setIsGuest(true)
 }
 
 export async function updateProfile(data: {
@@ -159,6 +166,7 @@ export function useAuth() {
   return {
     state: authState,
     user,
+    isGuest,
     loginWithGoogle,
     logout,
     deleteAccount,

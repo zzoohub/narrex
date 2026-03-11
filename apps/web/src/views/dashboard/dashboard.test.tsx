@@ -17,6 +17,7 @@ vi.mock('@/shared/stores/auth', () => ({
   useAuth: () => ({
     state: () => 'authenticated',
     user: () => ({ id: 'u1', displayName: 'Test User', email: 'test@test.com', profileImageUrl: null }),
+    isGuest: () => false,
     loginWithGoogle: vi.fn(),
     logout: mockLogout,
   }),

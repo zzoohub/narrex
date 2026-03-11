@@ -78,14 +78,16 @@ export function ContextMenu(props: ContextMenuProps) {
     if (open()) close()
   }
 
-  document.addEventListener('mousedown', handleOutsideClick, true)
-  document.addEventListener('keydown', handleEscape, true)
-  window.addEventListener('scroll', handleScroll, true)
-  onCleanup(() => {
-    document.removeEventListener('mousedown', handleOutsideClick, true)
-    document.removeEventListener('keydown', handleEscape, true)
-    window.removeEventListener('scroll', handleScroll, true)
-  })
+  if (typeof document !== 'undefined') {
+    document.addEventListener('mousedown', handleOutsideClick, true)
+    document.addEventListener('keydown', handleEscape, true)
+    window.addEventListener('scroll', handleScroll, true)
+    onCleanup(() => {
+      document.removeEventListener('mousedown', handleOutsideClick, true)
+      document.removeEventListener('keydown', handleEscape, true)
+      window.removeEventListener('scroll', handleScroll, true)
+    })
+  }
 
   /* ── keyboard nav inside menu ───────────────────────────────────── */
 

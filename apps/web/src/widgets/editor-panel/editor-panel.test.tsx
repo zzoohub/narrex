@@ -12,6 +12,13 @@ vi.mock('@/features/generation', () => ({
   streamEdit: vi.fn(),
 }))
 
+vi.mock('@/shared/stores/auth', () => ({
+  useAuth: () => ({
+    isGuest: () => false,
+    loginWithGoogle: vi.fn(),
+  }),
+}))
+
 const mockSetDraftContent = vi.fn()
 const mockMarkSceneEdited = vi.fn()
 const mockSelectScene = vi.fn()

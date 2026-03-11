@@ -2,6 +2,8 @@ import { createSignal, createEffect, Show, onCleanup } from 'solid-js'
 import { useI18n } from '@/shared/lib/i18n'
 import { useWorkspace } from '@/features/workspace'
 import { streamGeneration, streamEdit } from '@/features/generation'
+import { useAuth } from '@/shared/stores/auth'
+import { LoginGateModal } from '@/features/auth'
 import { ApiError } from '@/shared/api'
 import type { QuotaInfo } from '@/entities/quota'
 import {
@@ -18,6 +20,10 @@ import {
 export function EditorPanel() {
   const { t } = useI18n()
   const ws = useWorkspace()
+  const { isGuest } = useAuth()
+
+  // ---- Login gate for AI features -----------------------------------------
+  const [loginGateOpen, setLoginGateOpen] = createSignal(false)
 
   // ---- Local state ----------------------------------------------------------
 
@@ -94,8 +100,10 @@ export function EditorPanel() {
     }
   }
 
-  document.addEventListener('keydown', handleUndoRedoKey)
-  onCleanup(() => document.removeEventListener('keydown', handleUndoRedoKey))
+  if (typeof document !== 'undefined') {
+    document.addEventListener('keydown', handleUndoRedoKey)
+    onCleanup(() => document.removeEventListener('keydown', handleUndoRedoKey))
+  }
 
   // ---- Helpers ---------------------------------------------------------------
 
@@ -151,10 +159,12 @@ export function EditorPanel() {
     setShowToolbar(true)
   }
 
-  document.addEventListener('selectionchange', handleSelectionChange)
-  onCleanup(() => {
-    document.removeEventListener('selectionchange', handleSelectionChange)
-  })
+  if (typeof document !== 'undefined') {
+    document.addEventListener('selectionchange', handleSelectionChange)
+    onCleanup(() => {
+      document.removeEventListener('selectionchange', handleSelectionChange)
+    })
+  }
 
   // ---- Sync editor content when scene changes ------------------------------
 
@@ -175,6 +185,7 @@ export function EditorPanel() {
   // ---- AI generation --------------------------------------------------------
 
   async function handleGenerate() {
+    if (isGuest()) { setLoginGateOpen(true); return }
     const s = scene()
     if (!s) return
     setQuotaError(null)
@@ -215,6 +226,7 @@ export function EditorPanel() {
   }
 
   function handleRegenerate() {
+    if (isGuest()) { setLoginGateOpen(true); return }
     setShowRegenDialog(true)
   }
 
@@ -228,6 +240,7 @@ export function EditorPanel() {
   // ---- AI edit (floating toolbar) -------------------------------------------
 
   async function handleAiEdit() {
+    if (isGuest()) { setLoginGateOpen(true); return }
     const s = scene()
     if (!s) return
     const direction = aiDirection()
@@ -610,6 +623,12 @@ export function EditorPanel() {
           </>
         )}
       </Show>
+      {/* ── Login gate modal (guest AI gate) ─────────────────── */}
+      <LoginGateModal
+        open={loginGateOpen()}
+        reason="aiGeneration"
+        onClose={() => setLoginGateOpen(false)}
+      />
     </div>
   )
 }

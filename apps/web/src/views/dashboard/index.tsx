@@ -1,4 +1,4 @@
-import { createResource, createSignal, For, onCleanup, Show, Suspense } from 'solid-js'
+import { createResource, createSignal, For, onCleanup, onMount, Show, Suspense } from 'solid-js'
 import { Link } from '@tanstack/solid-router'
 import { useI18n } from '@/shared/lib/i18n'
 import { useTheme } from '@/shared/stores/theme'
@@ -19,16 +19,39 @@ import {
 import { listProjects, deleteProject } from '@/entities/project'
 import type { ProjectSummary } from '@/entities/project'
 import { useAuth } from '@/shared/stores/auth'
+import { buildDemoProjectSummary, DEMO_PROJECT_ID } from '@/shared/fixtures/demo-project'
+import { LoginGateModal } from '@/features/auth'
+import type { LoginGateReason } from '@/features/auth'
 
 export function DashboardView() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const { theme, toggle } = useTheme()
-  const { state: authState, user, loginWithGoogle, logout } = useAuth()
+  const { state: authState, user, isGuest, loginWithGoogle, logout } = useAuth()
 
-  const [projects, { refetch }] = createResource(async () => {
-    const res = await listProjects()
-    return res.data
-  })
+  // ── Login gate ──
+  const [loginGateOpen, setLoginGateOpen] = createSignal(false)
+  const [loginGateReason, setLoginGateReason] = createSignal<LoginGateReason>('newProject')
+
+  function openLoginGate(reason: LoginGateReason) {
+    setLoginGateReason(reason)
+    setLoginGateOpen(true)
+  }
+
+  // ── Data source: fixture for guest, API for authenticated ──
+  const guest = () => isGuest()
+  const demoProjects = () => [buildDemoProjectSummary(locale())]
+
+  const [projects, { refetch }] = createResource(
+    () => authState() === 'authenticated' ? true : false,
+    async (shouldFetch) => {
+      if (!shouldFetch) return []
+      const res = await listProjects()
+      return res.data
+    },
+  )
+
+  const displayProjects = (): ProjectSummary[] =>
+    guest() ? demoProjects() : (projects() ?? [])
 
   function formatDate(dateStr: string) {
     return new Date(dateStr).toLocaleDateString('ko-KR', {
@@ -51,26 +74,33 @@ export function DashboardView() {
   const handleEscape = (e: KeyboardEvent) => {
     if (profileOpen() && e.key === 'Escape') setProfileOpen(false)
   }
-  document.addEventListener('mousedown', handleOutsideClick, true)
-  document.addEventListener('keydown', handleEscape, true)
-  onCleanup(() => {
-    document.removeEventListener('mousedown', handleOutsideClick, true)
-    document.removeEventListener('keydown', handleEscape, true)
-  })
+  if (typeof document !== 'undefined') {
+    onMount(() => {
+      document.addEventListener('mousedown', handleOutsideClick, true)
+      document.addEventListener('keydown', handleEscape, true)
+    })
+    onCleanup(() => {
+      document.removeEventListener('mousedown', handleOutsideClick, true)
+      document.removeEventListener('keydown', handleEscape, true)
+    })
+  }
 
   // ── Responsive check ──
   const [isMobile, setIsMobile] = createSignal(false)
   if (typeof window !== 'undefined') {
-    const check = () => setIsMobile(window.innerWidth < 768)
-    check()
-    window.addEventListener('resize', check)
-    onCleanup(() => window.removeEventListener('resize', check))
+    onMount(() => {
+      const check = () => setIsMobile(window.innerWidth < 768)
+      check()
+      window.addEventListener('resize', check)
+      onCleanup(() => window.removeEventListener('resize', check))
+    })
   }
 
   // ── Delete project ──
   const [deleteTarget, setDeleteTarget] = createSignal<ProjectSummary | null>(null)
 
   async function handleDeleteConfirm() {
+    if (guest()) return
     const target = deleteTarget()
     if (!target) return
     setDeleteTarget(null)
@@ -197,164 +227,257 @@ export function DashboardView() {
         {/* Title row */}
         <div class="flex items-center justify-between mb-8">
           <h2 class="text-2xl font-display font-semibold text-fg">
-            {t('dashboard.title')}
+            {guest() ? t('dashboard.guestTitle') : t('dashboard.title')}
           </h2>
-          <Show when={!projects.loading && (projects()?.length ?? 0) > 0}>
-            <Link to="/new">
-              <Button variant="primary" icon={<IconPlus size={16} />}>
-                {t('dashboard.newProject')}
-              </Button>
-            </Link>
+          <Show when={displayProjects().length > 0}>
+            <Show
+              when={!guest()}
+              fallback={
+                <Button
+                  variant="primary"
+                  icon={<IconPlus size={16} />}
+                  onClick={() => openLoginGate('newProject')}
+                >
+                  {t('dashboard.newProject')}
+                </Button>
+              }
+            >
+              <Link to="/new">
+                <Button variant="primary" icon={<IconPlus size={16} />}>
+                  {t('dashboard.newProject')}
+                </Button>
+              </Link>
+            </Show>
           </Show>
         </div>
 
-        <Suspense
-          fallback={
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-              <SkeletonCard />
-              <SkeletonCard />
-              <SkeletonCard />
-            </div>
-          }
-        >
-          {/* ── Loading state ──────────────────────────────────────── */}
-          <Show when={projects.loading}>
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-              <SkeletonCard />
-              <SkeletonCard />
-              <SkeletonCard />
-            </div>
-          </Show>
-
-          {/* ── Error state ────────────────────────────────────────── */}
-          <Show when={projects.error}>
-            <div class="flex flex-col items-center justify-center py-32 text-center animate-fade-in">
-              <p class="text-sm text-fg-muted mb-4">
-                {t('creation.error')}
-              </p>
-              <Button variant="secondary" onClick={() => refetch()}>
-                {t('creation.errorRetry')}
-              </Button>
-            </div>
-          </Show>
-
-          {/* ── Empty state ────────────────────────────────────────── */}
-          <Show when={!projects.loading && !projects.error && projects()?.length === 0}>
-            <div class="flex flex-col items-center justify-center py-32 text-center animate-fade-in">
-              {/* Illustration placeholder */}
-              <div class="w-28 h-28 rounded-3xl bg-surface border border-border-default flex items-center justify-center mb-8">
-                <svg
-                  width="48"
-                  height="48"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.2"
-                  class="text-fg-muted"
-                >
-                  <path d="M12 20h9" stroke-linecap="round" />
-                  <path d="M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4L16.5 3.5z" />
-                </svg>
-              </div>
-              <h3 class="text-xl font-display font-semibold text-fg mb-2">
-                {t('dashboard.empty.title')}
-              </h3>
-              <p class="text-sm text-fg-muted mb-8">
-                {t('dashboard.empty.description')}
-              </p>
-              <Link to="/new">
-                <Button variant="primary" size="lg" icon={<IconPlus size={18} />}>
-                  {t('dashboard.empty.cta')}
-                </Button>
-              </Link>
-            </div>
-          </Show>
-
-          {/* ── Loaded state ───────────────────────────────────────── */}
-          <Show when={!projects.loading && !projects.error && (projects()?.length ?? 0) > 0}>
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-              <For each={projects()}>
-                {(project: ProjectSummary, i) => (
-                  <ContextMenu
-                    items={[
-                      {
-                        label: t('common.delete'),
-                        icon: <IconTrash size={14} />,
-                        danger: true,
-                        onClick: () => setDeleteTarget(project),
-                      },
-                    ]}
+        {/* ── Guest mode: show demo project immediately ────────── */}
+        <Show when={guest()}>
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            <For each={demoProjects()}>
+              {(project: ProjectSummary) => (
+                <div data-project-card={project.id}>
+                  <Link
+                    to="/project/$id"
+                    params={{ id: project.id }}
+                    class="block"
                   >
-                    <div data-project-card={project.id}>
-                      <Link
-                        to="/project/$id"
-                        params={{ id: project.id }}
-                        class="block"
-                        style={{ "animation-delay": `${i() * 60}ms` }}
-                      >
-                        <Card interactive class="animate-slide-up h-full">
-                          <div class="flex flex-col gap-3">
-                            {/* Title */}
-                            <h3 class="text-base font-semibold text-fg leading-snug line-clamp-2">
-                              {project.title}
-                            </h3>
+                    <Card interactive class="animate-slide-up h-full">
+                      <div class="flex flex-col gap-3">
+                        <div class="flex items-center gap-2">
+                          <h3 class="text-base font-semibold text-fg leading-snug line-clamp-2">
+                            {project.title}
+                          </h3>
+                          <span class="text-[10px] font-medium px-1.5 py-0.5 rounded bg-fg-muted/20 text-fg-muted uppercase tracking-wide">
+                            {t('dashboard.demoBadge')}
+                          </span>
+                        </div>
 
-                            {/* Genre tag + progress */}
-                            <div class="flex items-center gap-2">
-                              <Show when={project.genre}>
-                                <span class="text-xs font-medium px-2 py-0.5 rounded-md bg-accent-muted text-accent">
-                                  {project.genre}
-                                </span>
-                              </Show>
-                              <Show when={project.sceneCount > 0}>
-                                <span class="text-xs text-fg-muted">
-                                  {t('dashboard.card.scenes', {
-                                    drafted: project.draftedSceneCount,
-                                    total: project.sceneCount,
-                                  })}
-                                </span>
-                              </Show>
-                            </div>
+                        <div class="flex items-center gap-2">
+                          <Show when={project.genre}>
+                            <span class="text-xs font-medium px-2 py-0.5 rounded-md bg-accent-muted text-accent">
+                              {project.genre}
+                            </span>
+                          </Show>
+                          <Show when={project.sceneCount > 0}>
+                            <span class="text-xs text-fg-muted">
+                              {t('dashboard.card.scenes', {
+                                drafted: project.draftedSceneCount,
+                                total: project.sceneCount,
+                              })}
+                            </span>
+                          </Show>
+                        </div>
 
-                            {/* Progress bar */}
-                            <Show when={project.sceneCount > 0}>
-                              <div class="w-full h-1.5 rounded-full bg-surface-raised overflow-hidden">
-                                <div
-                                  class="h-full rounded-full bg-accent transition-all duration-300"
-                                  style={{
-                                    width: `${Math.round((project.draftedSceneCount / project.sceneCount) * 100)}%`,
-                                  }}
-                                />
-                              </div>
-                            </Show>
-
-                            {/* Dates */}
-                            <div class="flex items-center justify-between text-xs pt-1">
-                              <span class="text-fg-muted">
-                                {t('dashboard.card.lastEdited')}: {formatDate(project.updatedAt)}
-                              </span>
-                            </div>
+                        <Show when={project.sceneCount > 0}>
+                          <div class="w-full h-1.5 rounded-full bg-surface-raised overflow-hidden">
+                            <div
+                              class="h-full rounded-full bg-accent transition-all duration-300"
+                              style={{
+                                width: `${Math.round((project.draftedSceneCount / project.sceneCount) * 100)}%`,
+                              }}
+                            />
                           </div>
-                        </Card>
-                      </Link>
-                    </div>
-                  </ContextMenu>
-                )}
-              </For>
+                        </Show>
 
-              {/* Ghost "new" card */}
-              <Link to="/new" class="block">
-                <div class="rounded-xl border-2 border-dashed border-border-default h-full min-h-[180px] flex flex-col items-center justify-center gap-2 text-fg-muted hover:border-accent/40 hover:text-accent transition-colors cursor-pointer">
-                  <IconPlus size={28} />
-                  <span class="text-sm font-medium">
-                    {t('dashboard.newProject')}
-                  </span>
+                        <div class="flex items-center justify-between text-xs pt-1">
+                          <span class="text-fg-muted">
+                            {t('dashboard.card.lastEdited')}: {formatDate(project.updatedAt)}
+                          </span>
+                        </div>
+                      </div>
+                    </Card>
+                  </Link>
                 </div>
-              </Link>
-            </div>
-          </Show>
-        </Suspense>
+              )}
+            </For>
+
+            {/* Ghost "new" card — opens login gate */}
+            <button
+              type="button"
+              class="rounded-xl border-2 border-dashed border-border-default h-full min-h-[180px] flex flex-col items-center justify-center gap-2 text-fg-muted hover:border-accent/40 hover:text-accent transition-colors cursor-pointer"
+              onClick={() => openLoginGate('newProject')}
+            >
+              <IconPlus size={28} />
+              <span class="text-sm font-medium">
+                {t('dashboard.newProject')}
+              </span>
+            </button>
+          </div>
+        </Show>
+
+        {/* ── Authenticated mode: API-driven ──────────────────── */}
+        <Show when={!guest()}>
+          <Suspense
+            fallback={
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                <SkeletonCard />
+                <SkeletonCard />
+                <SkeletonCard />
+              </div>
+            }
+          >
+            {/* ── Loading state ──────────────────────────────────────── */}
+            <Show when={projects.loading}>
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                <SkeletonCard />
+                <SkeletonCard />
+                <SkeletonCard />
+              </div>
+            </Show>
+
+            {/* ── Error state ────────────────────────────────────────── */}
+            <Show when={projects.error}>
+              <div class="flex flex-col items-center justify-center py-32 text-center animate-fade-in">
+                <p class="text-sm text-fg-muted mb-4">
+                  {t('creation.error')}
+                </p>
+                <Button variant="secondary" onClick={() => refetch()}>
+                  {t('creation.errorRetry')}
+                </Button>
+              </div>
+            </Show>
+
+            {/* ── Empty state ────────────────────────────────────────── */}
+            <Show when={!projects.loading && !projects.error && projects()?.length === 0}>
+              <div class="flex flex-col items-center justify-center py-32 text-center animate-fade-in">
+                <div class="w-28 h-28 rounded-3xl bg-surface border border-border-default flex items-center justify-center mb-8">
+                  <svg
+                    width="48"
+                    height="48"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.2"
+                    class="text-fg-muted"
+                  >
+                    <path d="M12 20h9" stroke-linecap="round" />
+                    <path d="M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4L16.5 3.5z" />
+                  </svg>
+                </div>
+                <h3 class="text-xl font-display font-semibold text-fg mb-2">
+                  {t('dashboard.empty.title')}
+                </h3>
+                <p class="text-sm text-fg-muted mb-8">
+                  {t('dashboard.empty.description')}
+                </p>
+                <Link to="/new">
+                  <Button variant="primary" size="lg" icon={<IconPlus size={18} />}>
+                    {t('dashboard.empty.cta')}
+                  </Button>
+                </Link>
+              </div>
+            </Show>
+
+            {/* ── Loaded state ───────────────────────────────────────── */}
+            <Show when={!projects.loading && !projects.error && (projects()?.length ?? 0) > 0}>
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                <For each={projects()}>
+                  {(project: ProjectSummary, i) => (
+                    <ContextMenu
+                      items={[
+                        {
+                          label: t('common.delete'),
+                          icon: <IconTrash size={14} />,
+                          danger: true,
+                          onClick: () => setDeleteTarget(project),
+                        },
+                      ]}
+                    >
+                      <div data-project-card={project.id}>
+                        <Link
+                          to="/project/$id"
+                          params={{ id: project.id }}
+                          class="block"
+                          style={{ "animation-delay": `${i() * 60}ms` }}
+                        >
+                          <Card interactive class="animate-slide-up h-full">
+                            <div class="flex flex-col gap-3">
+                              <h3 class="text-base font-semibold text-fg leading-snug line-clamp-2">
+                                {project.title}
+                              </h3>
+
+                              <div class="flex items-center gap-2">
+                                <Show when={project.genre}>
+                                  <span class="text-xs font-medium px-2 py-0.5 rounded-md bg-accent-muted text-accent">
+                                    {project.genre}
+                                  </span>
+                                </Show>
+                                <Show when={project.sceneCount > 0}>
+                                  <span class="text-xs text-fg-muted">
+                                    {t('dashboard.card.scenes', {
+                                      drafted: project.draftedSceneCount,
+                                      total: project.sceneCount,
+                                    })}
+                                  </span>
+                                </Show>
+                              </div>
+
+                              <Show when={project.sceneCount > 0}>
+                                <div class="w-full h-1.5 rounded-full bg-surface-raised overflow-hidden">
+                                  <div
+                                    class="h-full rounded-full bg-accent transition-all duration-300"
+                                    style={{
+                                      width: `${Math.round((project.draftedSceneCount / project.sceneCount) * 100)}%`,
+                                    }}
+                                  />
+                                </div>
+                              </Show>
+
+                              <div class="flex items-center justify-between text-xs pt-1">
+                                <span class="text-fg-muted">
+                                  {t('dashboard.card.lastEdited')}: {formatDate(project.updatedAt)}
+                                </span>
+                              </div>
+                            </div>
+                          </Card>
+                        </Link>
+                      </div>
+                    </ContextMenu>
+                  )}
+                </For>
+
+                {/* Ghost "new" card */}
+                <Link to="/new" class="block">
+                  <div class="rounded-xl border-2 border-dashed border-border-default h-full min-h-[180px] flex flex-col items-center justify-center gap-2 text-fg-muted hover:border-accent/40 hover:text-accent transition-colors cursor-pointer">
+                    <IconPlus size={28} />
+                    <span class="text-sm font-medium">
+                      {t('dashboard.newProject')}
+                    </span>
+                  </div>
+                </Link>
+              </div>
+            </Show>
+          </Suspense>
+        </Show>
       </main>
+
+      {/* ── Login gate modal (guest) ─────────────────────────────── */}
+      <LoginGateModal
+        open={loginGateOpen()}
+        reason={loginGateReason()}
+        onClose={() => setLoginGateOpen(false)}
+      />
 
       {/* ── Delete confirmation dialog ─────────────────────────────── */}
       <Dialog

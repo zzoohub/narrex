@@ -783,12 +783,14 @@ function RelationshipPopover(props: {
     if (e.key === 'Escape') props.onClose()
   }
 
-  document.addEventListener('mousedown', handleOutsideClick, true)
-  document.addEventListener('keydown', handleEscape, true)
-  onCleanup(() => {
-    document.removeEventListener('mousedown', handleOutsideClick, true)
-    document.removeEventListener('keydown', handleEscape, true)
-  })
+  if (typeof document !== 'undefined') {
+    document.addEventListener('mousedown', handleOutsideClick, true)
+    document.addEventListener('keydown', handleEscape, true)
+    onCleanup(() => {
+      document.removeEventListener('mousedown', handleOutsideClick, true)
+      document.removeEventListener('keydown', handleEscape, true)
+    })
+  }
 
   const visualTypes: { value: RelationshipVisual; label: string }[] = [
     { value: 'solid', label: 'Solid' },

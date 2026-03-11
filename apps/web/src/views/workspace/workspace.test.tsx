@@ -43,6 +43,14 @@ vi.mock('@/widgets/scene-detail', () => ({
   SceneDetail: () => <div data-testid="scene-detail">Detail</div>,
 }))
 
+vi.mock('@/shared/stores/auth', () => ({
+  useAuth: () => ({
+    state: () => 'authenticated',
+    isGuest: () => false,
+    loginWithGoogle: vi.fn(),
+  }),
+}))
+
 const mockSelectScene = vi.fn()
 const mockRemoveScene = vi.fn()
 const mockStartGeneration = vi.fn()

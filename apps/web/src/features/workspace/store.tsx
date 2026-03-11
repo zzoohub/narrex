@@ -20,6 +20,7 @@ import * as sceneApi from '@/entities/scene/api'
 import * as trackApi from '@/entities/track/api'
 import * as characterApi from '@/entities/character/api'
 import * as connectionApi from '@/entities/connection/api'
+import { buildDemoWorkspace, DEMO_PROJECT_ID } from '@/shared/fixtures/demo-project'
 
 // ---- Types ------------------------------------------------------------------
 
@@ -111,7 +112,8 @@ function debounce(fn: () => void, ms: number) {
 
 const WorkspaceContext = createContext<WorkspaceContextValue>()
 
-export const WorkspaceProvider: ParentComponent<{ projectId: string }> = (props) => {
+export const WorkspaceProvider: ParentComponent<{ projectId: string; isDemo?: boolean; demoLocale?: 'ko' | 'en' }> = (props) => {
+  const demo = props.isDemo ?? false
   const [state, setState] = createStore<WorkspaceState>({
     project: null,
     tracks: [],
@@ -142,7 +144,7 @@ export const WorkspaceProvider: ParentComponent<{ projectId: string }> = (props)
     const pending = charPendingUpdates.get(charId)
     if (pending) {
       charPendingUpdates.delete(charId)
-      characterApi.updateCharacter(props.projectId, charId, pending).catch(() => setSaveStatus('error'))
+      if (!demo) characterApi.updateCharacter(props.projectId, charId, pending).catch(() => setSaveStatus('error'))
     }
     charSaveTimers.delete(charId)
   }
@@ -151,6 +153,7 @@ export const WorkspaceProvider: ParentComponent<{ projectId: string }> = (props)
   const contentSaveTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
   function saveContentToServer(sceneId: string, content: string) {
+    if (demo) return
     const existing = contentSaveTimers.get(sceneId)
     if (existing) clearTimeout(existing)
     contentSaveTimers.set(sceneId, setTimeout(() => {
@@ -176,6 +179,21 @@ export const WorkspaceProvider: ParentComponent<{ projectId: string }> = (props)
   // ---- Load workspace ----
 
   async function loadWorkspace(projectId: string): Promise<void> {
+    if (demo) {
+      const data = buildDemoWorkspace(props.demoLocale ?? 'ko')
+      batch(() => {
+        setState('project', data.project)
+        setState('tracks', data.tracks)
+        setState('scenes', data.scenes)
+        setState('characters', data.characters)
+        setState('relationships', data.relationships)
+        setState('connections', data.connections)
+        setSelectedSceneId(null)
+        setSelectedCharacterId(null)
+        setSaveStatus('saved')
+      })
+      return
+    }
     try {
       const { data } = await projectApi.getWorkspace(projectId)
       batch(() => {
@@ -284,22 +302,24 @@ export const WorkspaceProvider: ParentComponent<{ projectId: string }> = (props)
     setState(produce((s) => { s.scenes.push(newScene) }))
     setSelectedSceneId(id)
 
-    sceneApi.createScene(props.projectId, { trackId, title: '', startPosition }).then(
-      ({ data }) => {
-        setState(produce((s) => {
-          const idx = s.scenes.findIndex((sc) => sc.id === id)
-          if (idx !== -1) s.scenes[idx] = data
-        }))
-        setSelectedSceneId(data.id)
-      },
-      () => {
-        setState(produce((s) => {
-          const idx = s.scenes.findIndex((sc) => sc.id === id)
-          if (idx !== -1) s.scenes.splice(idx, 1)
-        }))
-        setSaveStatus('error')
-      },
-    )
+    if (!demo) {
+      sceneApi.createScene(props.projectId, { trackId, title: '', startPosition }).then(
+        ({ data }) => {
+          setState(produce((s) => {
+            const idx = s.scenes.findIndex((sc) => sc.id === id)
+            if (idx !== -1) s.scenes[idx] = data
+          }))
+          setSelectedSceneId(data.id)
+        },
+        () => {
+          setState(produce((s) => {
+            const idx = s.scenes.findIndex((sc) => sc.id === id)
+            if (idx !== -1) s.scenes.splice(idx, 1)
+          }))
+          setSaveStatus('error')
+        },
+      )
+    }
   }
 
   function updateScene(sceneId: string, updates: Partial<Scene>): void {
@@ -308,7 +328,7 @@ export const WorkspaceProvider: ParentComponent<{ projectId: string }> = (props)
       if (scene) Object.assign(scene, updates)
     }))
     markSaving()
-    sceneApi.updateScene(props.projectId, sceneId, updates).catch(() => setSaveStatus('error'))
+    if (!demo) sceneApi.updateScene(props.projectId, sceneId, updates).catch(() => setSaveStatus('error'))
   }
 
   function removeScene(sceneId: string): void {
@@ -321,10 +341,12 @@ export const WorkspaceProvider: ParentComponent<{ projectId: string }> = (props)
       if (selectedSceneId() === sceneId) setSelectedSceneId(null)
     })
 
-    sceneApi.deleteScene(props.projectId, sceneId).catch(() => {
-      setState(produce((s) => { s.scenes.splice(idx, 0, snapshot) }))
-      setSaveStatus('error')
-    })
+    if (!demo) {
+      sceneApi.deleteScene(props.projectId, sceneId).catch(() => {
+        setState(produce((s) => { s.scenes.splice(idx, 0, snapshot) }))
+        setSaveStatus('error')
+      })
+    }
   }
 
   function moveScene(sceneId: string, newTrackId: string, newStartPosition: number): void {
@@ -337,13 +359,15 @@ export const WorkspaceProvider: ParentComponent<{ projectId: string }> = (props)
       if (sc) { sc.trackId = newTrackId; sc.startPosition = newStartPosition }
     }))
 
-    sceneApi.updateScene(props.projectId, sceneId, { trackId: newTrackId, startPosition: newStartPosition }).catch(() => {
-      setState(produce((s) => {
-        const sc = s.scenes.find((x) => x.id === sceneId)
-        if (sc) { sc.trackId = prev.trackId; sc.startPosition = prev.startPosition }
-      }))
-      setSaveStatus('error')
-    })
+    if (!demo) {
+      sceneApi.updateScene(props.projectId, sceneId, { trackId: newTrackId, startPosition: newStartPosition }).catch(() => {
+        setState(produce((s) => {
+          const sc = s.scenes.find((x) => x.id === sceneId)
+          if (sc) { sc.trackId = prev.trackId; sc.startPosition = prev.startPosition }
+        }))
+        setSaveStatus('error')
+      })
+    }
   }
 
   function markSceneEdited(sceneId: string): void {
@@ -354,7 +378,7 @@ export const WorkspaceProvider: ParentComponent<{ projectId: string }> = (props)
         if (sc) sc.status = 'edited'
       }))
       markSaving()
-      sceneApi.updateScene(props.projectId, sceneId, { status: 'edited' } as any).catch(() => setSaveStatus('error'))
+      if (!demo) sceneApi.updateScene(props.projectId, sceneId, { status: 'edited' } as any).catch(() => setSaveStatus('error'))
     }
   }
 
@@ -371,21 +395,23 @@ export const WorkspaceProvider: ParentComponent<{ projectId: string }> = (props)
     const newTrack: Track = { id, projectId: props.projectId, position: maxPos, label, createdAt: now, updatedAt: now }
     setState(produce((s) => { s.tracks.push(newTrack) }))
 
-    trackApi.createTrack(props.projectId, { label, position: maxPos }).then(
-      ({ data }) => {
-        setState(produce((s) => {
-          const idx = s.tracks.findIndex((t) => t.id === id)
-          if (idx !== -1) s.tracks[idx] = data
-        }))
-      },
-      () => {
-        setState(produce((s) => {
-          const idx = s.tracks.findIndex((t) => t.id === id)
-          if (idx !== -1) s.tracks.splice(idx, 1)
-        }))
-        setSaveStatus('error')
-      },
-    )
+    if (!demo) {
+      trackApi.createTrack(props.projectId, { label, position: maxPos }).then(
+        ({ data }) => {
+          setState(produce((s) => {
+            const idx = s.tracks.findIndex((t) => t.id === id)
+            if (idx !== -1) s.tracks[idx] = data
+          }))
+        },
+        () => {
+          setState(produce((s) => {
+            const idx = s.tracks.findIndex((t) => t.id === id)
+            if (idx !== -1) s.tracks.splice(idx, 1)
+          }))
+          setSaveStatus('error')
+        },
+      )
+    }
   }
 
   function updateTrack(trackId: string, label: string): void {
@@ -394,7 +420,7 @@ export const WorkspaceProvider: ParentComponent<{ projectId: string }> = (props)
       if (track) track.label = label
     }))
     markSaving()
-    trackApi.updateTrack(props.projectId, trackId, { label }).catch(() => setSaveStatus('error'))
+    if (!demo) trackApi.updateTrack(props.projectId, trackId, { label }).catch(() => setSaveStatus('error'))
   }
 
   function removeTrack(trackId: string): void {
@@ -412,13 +438,15 @@ export const WorkspaceProvider: ParentComponent<{ projectId: string }> = (props)
       if (selId && sceneSnaps.some((sc) => sc.id === selId)) setSelectedSceneId(null)
     })
 
-    trackApi.deleteTrack(props.projectId, trackId).catch(() => {
-      setState(produce((s) => {
-        s.tracks.splice(idx, 0, trackSnap)
-        s.scenes.push(...sceneSnaps)
-      }))
-      setSaveStatus('error')
-    })
+    if (!demo) {
+      trackApi.deleteTrack(props.projectId, trackId).catch(() => {
+        setState(produce((s) => {
+          s.tracks.splice(idx, 0, trackSnap)
+          s.scenes.push(...sceneSnaps)
+        }))
+        setSaveStatus('error')
+      })
+    }
   }
 
   // ---- Character CRUD ----
@@ -437,22 +465,24 @@ export const WorkspaceProvider: ParentComponent<{ projectId: string }> = (props)
     setState(produce((s) => { s.characters.push(newChar) }))
     setSelectedCharacterId(id)
 
-    characterApi.createCharacter(props.projectId, { name, graphX: newChar.graphX!, graphY: newChar.graphY! }).then(
-      ({ data }) => {
-        setState(produce((s) => {
-          const idx = s.characters.findIndex((c) => c.id === id)
-          if (idx !== -1) s.characters[idx] = data
-        }))
-        setSelectedCharacterId(data.id)
-      },
-      () => {
-        setState(produce((s) => {
-          const idx = s.characters.findIndex((c) => c.id === id)
-          if (idx !== -1) s.characters.splice(idx, 1)
-        }))
-        setSaveStatus('error')
-      },
-    )
+    if (!demo) {
+      characterApi.createCharacter(props.projectId, { name, graphX: newChar.graphX!, graphY: newChar.graphY! }).then(
+        ({ data }) => {
+          setState(produce((s) => {
+            const idx = s.characters.findIndex((c) => c.id === id)
+            if (idx !== -1) s.characters[idx] = data
+          }))
+          setSelectedCharacterId(data.id)
+        },
+        () => {
+          setState(produce((s) => {
+            const idx = s.characters.findIndex((c) => c.id === id)
+            if (idx !== -1) s.characters.splice(idx, 1)
+          }))
+          setSaveStatus('error')
+        },
+      )
+    }
   }
 
   function updateCharacter(charId: string, updates: Partial<Character>): void {
@@ -491,10 +521,12 @@ export const WorkspaceProvider: ParentComponent<{ projectId: string }> = (props)
       if (selectedCharacterId() === charId) setSelectedCharacterId(null)
     })
 
-    characterApi.deleteCharacter(props.projectId, charId).catch(() => {
-      setState(produce((s) => { s.characters.push(snapshot) }))
-      setSaveStatus('error')
-    })
+    if (!demo) {
+      characterApi.deleteCharacter(props.projectId, charId).catch(() => {
+        setState(produce((s) => { s.characters.push(snapshot) }))
+        setSaveStatus('error')
+      })
+    }
   }
 
   function selectCharacter(charId: string | null): void {
@@ -514,21 +546,23 @@ export const WorkspaceProvider: ParentComponent<{ projectId: string }> = (props)
     }
     setState(produce((s) => { s.relationships.push(newRel) }))
 
-    characterApi.createRelationship(props.projectId, { characterAId, characterBId, label, visualType, direction: 'bidirectional' }).then(
-      ({ data }) => {
-        setState(produce((s) => {
-          const idx = s.relationships.findIndex((r) => r.id === id)
-          if (idx !== -1) s.relationships[idx] = data
-        }))
-      },
-      () => {
-        setState(produce((s) => {
-          const idx = s.relationships.findIndex((r) => r.id === id)
-          if (idx !== -1) s.relationships.splice(idx, 1)
-        }))
-        setSaveStatus('error')
-      },
-    )
+    if (!demo) {
+      characterApi.createRelationship(props.projectId, { characterAId, characterBId, label, visualType, direction: 'bidirectional' }).then(
+        ({ data }) => {
+          setState(produce((s) => {
+            const idx = s.relationships.findIndex((r) => r.id === id)
+            if (idx !== -1) s.relationships[idx] = data
+          }))
+        },
+        () => {
+          setState(produce((s) => {
+            const idx = s.relationships.findIndex((r) => r.id === id)
+            if (idx !== -1) s.relationships.splice(idx, 1)
+          }))
+          setSaveStatus('error')
+        },
+      )
+    }
   }
 
   function updateRelationship(relId: string, updates: Partial<CharacterRelationship>): void {
@@ -537,7 +571,7 @@ export const WorkspaceProvider: ParentComponent<{ projectId: string }> = (props)
       if (rel) Object.assign(rel, updates)
     }))
     markSaving()
-    characterApi.updateRelationship(props.projectId, relId, updates).catch(() => setSaveStatus('error'))
+    if (!demo) characterApi.updateRelationship(props.projectId, relId, updates).catch(() => setSaveStatus('error'))
   }
 
   function removeRelationship(relId: string): void {
@@ -546,10 +580,12 @@ export const WorkspaceProvider: ParentComponent<{ projectId: string }> = (props)
     const snapshot = { ...state.relationships[idx]! }
     setState(produce((s) => { s.relationships.splice(idx, 1) }))
 
-    characterApi.deleteRelationship(props.projectId, relId).catch(() => {
-      setState(produce((s) => { s.relationships.splice(idx, 0, snapshot) }))
-      setSaveStatus('error')
-    })
+    if (!demo) {
+      characterApi.deleteRelationship(props.projectId, relId).catch(() => {
+        setState(produce((s) => { s.relationships.splice(idx, 0, snapshot) }))
+        setSaveStatus('error')
+      })
+    }
   }
 
   // ---- Connection CRUD ----
@@ -560,21 +596,23 @@ export const WorkspaceProvider: ParentComponent<{ projectId: string }> = (props)
     const newConn: SceneConnection = { id, projectId: props.projectId, sourceSceneId, targetSceneId, connectionType, createdAt: now }
     setState(produce((s) => { s.connections.push(newConn) }))
 
-    connectionApi.createConnection(props.projectId, { sourceSceneId, targetSceneId, connectionType }).then(
-      ({ data }) => {
-        setState(produce((s) => {
-          const idx = s.connections.findIndex((c) => c.id === id)
-          if (idx !== -1) s.connections[idx] = data
-        }))
-      },
-      () => {
-        setState(produce((s) => {
-          const idx = s.connections.findIndex((c) => c.id === id)
-          if (idx !== -1) s.connections.splice(idx, 1)
-        }))
-        setSaveStatus('error')
-      },
-    )
+    if (!demo) {
+      connectionApi.createConnection(props.projectId, { sourceSceneId, targetSceneId, connectionType }).then(
+        ({ data }) => {
+          setState(produce((s) => {
+            const idx = s.connections.findIndex((c) => c.id === id)
+            if (idx !== -1) s.connections[idx] = data
+          }))
+        },
+        () => {
+          setState(produce((s) => {
+            const idx = s.connections.findIndex((c) => c.id === id)
+            if (idx !== -1) s.connections.splice(idx, 1)
+          }))
+          setSaveStatus('error')
+        },
+      )
+    }
   }
 
   function removeConnection(connId: string): void {
@@ -583,10 +621,12 @@ export const WorkspaceProvider: ParentComponent<{ projectId: string }> = (props)
     const snapshot = { ...state.connections[idx]! }
     setState(produce((s) => { s.connections.splice(idx, 1) }))
 
-    connectionApi.deleteConnection(props.projectId, connId).catch(() => {
-      setState(produce((s) => { s.connections.splice(idx, 0, snapshot) }))
-      setSaveStatus('error')
-    })
+    if (!demo) {
+      connectionApi.deleteConnection(props.projectId, connId).catch(() => {
+        setState(produce((s) => { s.connections.splice(idx, 0, snapshot) }))
+        setSaveStatus('error')
+      })
+    }
   }
 
   // ---- Project / Config ----
@@ -611,7 +651,7 @@ export const WorkspaceProvider: ParentComponent<{ projectId: string }> = (props)
     }))
     if (isConfigChange) setConfigVersion((v) => v + 1)
     markSaving()
-    projectApi.updateProject(props.projectId, updates).catch(() => setSaveStatus('error'))
+    if (!demo) projectApi.updateProject(props.projectId, updates).catch(() => setSaveStatus('error'))
   }
 
   // ---- Draft content ----

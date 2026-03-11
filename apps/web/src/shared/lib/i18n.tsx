@@ -208,6 +208,14 @@ const translations: Record<Locale, Record<string, string>> = {
     'settings.quota.unlimited': '무제한',
     'settings.quota.loadError': '사용량 정보를 불러올 수 없습니다.',
     'common.retry': '다시 시도',
+    // Guest mode
+    'dashboard.demoBadge': '체험용',
+    'dashboard.guestTitle': '프로젝트',
+    'loginGate.title': '로그인이 필요합니다',
+    'loginGate.newProject': '새 프로젝트를 만들려면 로그인이 필요합니다.',
+    'loginGate.aiGeneration': 'AI 초고 생성은 로그인 후 이용할 수 있습니다.',
+    'loginGate.cta': 'Google로 로그인',
+    'loginGate.cancel': '나중에',
   },
   en: {
     'nav.projects': 'Projects',
@@ -399,6 +407,14 @@ const translations: Record<Locale, Record<string, string>> = {
     'settings.quota.unlimited': 'Unlimited',
     'settings.quota.loadError': 'Could not load usage info.',
     'common.retry': 'Retry',
+    // Guest mode
+    'dashboard.demoBadge': 'Demo',
+    'dashboard.guestTitle': 'Projects',
+    'loginGate.title': 'Sign in required',
+    'loginGate.newProject': 'Sign in to create a new project.',
+    'loginGate.aiGeneration': 'Sign in to use AI draft generation.',
+    'loginGate.cta': 'Sign in with Google',
+    'loginGate.cancel': 'Later',
   },
 }
 

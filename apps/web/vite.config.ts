@@ -5,9 +5,11 @@ import { tanstackStart } from '@tanstack/solid-start/plugin/vite'
 import solidPlugin from 'vite-plugin-solid'
 import { cloudflare } from '@cloudflare/vite-plugin'
 
+const isCloudflare = process.env.CF === '1' || process.argv.includes('build')
+
 export default defineConfig({
   plugins: [
-    cloudflare({ viteEnvironment: { name: 'ssr' } }),
+    ...(isCloudflare ? [cloudflare({ viteEnvironment: { name: 'ssr' } })] : []),
     viteTsConfigPaths({
       projects: ['./tsconfig.json'],
     }),

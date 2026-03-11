@@ -2,7 +2,7 @@
 
 **Status:** Draft
 **Author:** zzoo
-**Last Updated:** 2026-03-04
+**Last Updated:** 2026-03-12
 **Full PRD:** docs/prd.md
 **Product Brief:** docs/product-brief.md
 
@@ -55,7 +55,7 @@ The core loop is: idea in -> visual structure out -> arrange story -> generate s
 | P0 | REQ-001 | User can create a new project by entering free-form text describing their story idea | Accept any length of text input. System should handle inputs ranging from a single sentence to multi-page dumps. If input is too vague to structure (fewer than ~2 meaningful story elements), system asks 2-3 clarifying questions before proceeding. | Primary entry point. Most users will start here. |
 | P0 | REQ-002 | User can create a new project by importing a file | Support standalone Markdown (.md) and plain text (.txt) files via drag-and-drop or file picker. Parse and extract narrative content, character references, and plot points. Notion .zip export deferred — users can export individual pages as .md instead. | Secondary entry point. Users with existing notes need this path. |
 | P0 | REQ-004 | System auto-structures any input into initial Config, Timeline, and Character Map | From the user's input, generate: (a) Config bar values (genre, theme, era/location, POV, tone) inferred from content; (b) Timeline with ordered scenes representing key plot points — placing simultaneous events on parallel tracks where applicable; (c) Character Map with character nodes and inferred relationships. All generated elements are editable. System shows a brief summary of what it inferred and invites the user to review and adjust. | The core "magic moment." Without this, the product is just another blank canvas. |
-| P0 | REQ-063 | System auto-creates a sample project on first signup | On first Google OAuth signup, server inserts a pre-crafted sample project (regression-fantasy genre) with: 2 tracks (protagonist + antagonist faction), 8-10 scenes (2 "Edited", 1 "AI Draft", rest "Empty"), 4-5 characters with 5-6 relationship lines (solid/dashed/arrowed), and a fully populated Config. Project appears on dashboard with an "Example" badge (`source_type = 'sample'`). Fully editable and deletable as a normal project. Pre-crafted content — no per-user AI call, no quota impact, no latency. Serves as REQ-005 (onboarding tutorial) substitute: users explore the real workspace with real data before committing to their own story. | Time-to-Value = 0 seconds. Removes the cognitive barrier of "what story should I write?" before the user has even seen the product. Directly contributes to the Phase 1 success metric of 40% core loop completion. |
+| P0 | REQ-063 | System auto-creates a sample project on first signup | On first Google OAuth signup, server inserts a pre-crafted sample project as a single atomic DB transaction. **Genre: Regression Fantasy** — chosen because (a) it is among the most popular Korean web novel genres, maximizing target user resonance; (b) its inherent dual-timeline structure (past/present) naturally showcases the NLE multi-track UI; (c) it provides clear protagonist goals, conflicts, and character relationships that fill the character map meaningfully; (d) it matches the primary persona (Ji-yeon). **Composition:** 2 tracks (protagonist + antagonist faction), 8-10 scenes (protagonist track 6-7 scenes, antagonist track 2-3 scenes, 1 merge point; states: 2 "Edited", 1 "AI Draft", rest "Empty"), 4-5 characters (protagonist, childhood friend turned rival, mentor, heroine, antagonist leader) with 5-6 relationship lines (solid/dashed/arrowed all represented), and a fully populated Config (genre=regression fantasy, mood=tense coming-of-age, era=medieval fantasy, POV=3rd person limited, tone=restrained narrative). **Scene layout example:** Scene 1 "회귀의 순간" (Edited — protagonist dies in battle, awakens in 12-year-old body), Scene 2 "첫 번째 선택" (AI Draft — re-encountering a missed opportunity), Scene 3 "스승과의 재회" (Empty), Scene 4 "그림자의 움직임" (Empty — antagonist track, parallel), etc. **Approach: Pre-crafted seed data** (not per-user AI generation) — zero AI cost, zero wait time, full quality control. Project appears on dashboard with an "Example" badge (`source_type = 'sample'`). Fully editable and deletable. Once deleted, not re-created. Pre-crafted draft content does not count against user's AI quota; new AI generations within the sample project count normally. The same fixture data is shared with the client-side guest demo (REQ-069). | Time-to-Value = 0 seconds. Removes the cognitive barrier of "what story should I write?" before the user has even seen the product. Serves as REQ-005 (onboarding tutorial) substitute. Directly contributes to the Phase 1 success metric of 40% core loop completion. |
 
 **Acceptance criteria for REQ-063:**
 - On first signup, the user's dashboard contains the sample project before any user action. The project is ready when the dashboard loads.
@@ -223,7 +223,65 @@ The core loop is: idea in -> visual structure out -> arrange story -> generate s
 
 | Priority | REQ-ID | Requirement | Phase 1 Detail | Rationale |
 |----------|--------|-------------|-----------------|-----------|
-| P1 | REQ-051 | Product team can monitor key usage and cost metrics | Phase 1 tracking: (a) Project creation funnel (started -> input provided -> structure generated -> first scene edited -> first draft generated -> first edit made); (b) AI generation count per user per day/week/month; (c) Per-user AI cost (token usage); (d) Text retention rate (% of AI-generated text retained after user editing); (e) Session duration and frequency; (f) Scene completion rate (% of scenes in a project that have edited drafts). | Without analytics, we cannot evaluate Phase 1 success criteria. This is P1 rather than P0 because the product can technically launch without it, but it should ship within the first week. |
+| P1 | REQ-051 | Product team can monitor key usage and cost metrics | Phase 1 tracking: (a) Project creation funnel (started -> input provided -> structure generated -> first scene edited -> first draft generated -> first edit made); (b) AI generation count per user per day/week/month; (c) Per-user AI cost (token usage); (d) Text retention rate (% of AI-generated text retained after user editing); (e) Session duration and frequency; (f) Scene completion rate (% of scenes in a project that have edited drafts); (g) Guest browsing metrics — see REQ-075. | Without analytics, we cannot evaluate Phase 1 success criteria. This is P1 rather than P0 because the product can technically launch without it, but it should ship within the first week. |
+| P1 | REQ-075 | Product team can monitor guest-specific conversion funnel | Guest metrics: (a) Guest dashboard visit count; (b) Guest workspace entry rate (dashboard -> workspace click-through); (c) Guest interaction frequency by type (scene click, character click, editor open, config change); (d) Login modal exposure count by trigger type (AI generation, AI edit, new project); (e) Login modal-to-signup completion rate; (f) Guest average session duration. | Guest Mode conversion funnel is a primary Phase 1 success metric. Without these metrics, we cannot evaluate whether removing the login wall actually improves visitor-to-signup conversion. |
+
+### 3.10 Guest Browsing Mode
+
+| Priority | REQ-ID | Requirement | Phase 1 Detail | Rationale |
+|----------|--------|-------------|-----------------|-----------|
+| P0 | REQ-064 | Unauthenticated visitors can access the app dashboard | When a visitor opens Narrex without being logged in, the dashboard renders with a client-side in-memory demo project (same content as REQ-063). No redirect to login page. | Removes the login wall — the #1 barrier to visitor-to-signup conversion. Visitors who cannot see the product cannot evaluate it. |
+| P0 | REQ-065 | Demo project card shows a "Try it" badge | The guest dashboard displays the demo project card with a distinguishing badge so visitors know it is not their own project. | Prevents confusion between demo and real data. |
+| P0 | REQ-066 | [+ New Project] button shows login modal for guests | Guest dashboard shows the button, but clicking it triggers the login prompt modal (REQ-071) instead of entering the creation flow. Gate is placed before the action starts — visitors must not invest effort in project creation only to be blocked mid-flow. | Principle: gate before content creation/persistence actions, never after effort is invested. |
+| P1 | REQ-067 | Guest dashboard shows a persistent login entry point | A login/signup button is always visible (e.g., in the header) so guests can authenticate voluntarily at any time. | Some visitors prefer to sign up immediately rather than browsing the demo first. |
+| P0 | REQ-068 | Guests can enter the demo workspace with full interactivity | Clicking the demo project card opens the workspace. Timeline, character map, editor, Config Bar, and scene detail panel are all interactive. Changes are held in client-side memory only. | The core product value is interactive — read-only viewing does not convey the differentiating experience. |
+| P0 | REQ-069 | Demo project uses the same fixture data as REQ-063 | Regression-fantasy genre, 2 tracks, 8-10 scenes (2-3 with draft content), 4-5 characters, 5-6 relationships, populated Config. One fixture is shared between client-side demo and server-side seed. | Single source of content eliminates dual maintenance and ensures consistent experience pre- and post-signup. |
+| P0 | REQ-070 | Demo data is client-side in-memory only, resets on refresh | No server API calls. Browser refresh/tab close resets demo to initial fixture state. No localStorage, sessionStorage, or IndexedDB persistence. | Product decision: consistent clean demo state on every visit enables reliable first impressions and clean funnel measurement. Persistence adds complexity with negligible conversion benefit. |
+| P0 | REQ-071 | Login prompt modal with value proposition | Modal includes: value proposition message (ko/en), Google login button, close button. Copy — ko: "AI가 당신의 이야기를 써드립니다. 무료로 시작하세요." / Subtitle: "Google 계정으로 가입하면, AI 씬 생성과 나만의 프로젝트를 이용할 수 있습니다. 매월 10회 무료." en: "Let AI write your story. Start free." / Subtitle: "Sign in with Google to unlock AI scene generation and your own projects. 10 free generations per month." | The modal is the critical conversion moment. Value proposition copy must answer "why should I sign up?" at the exact moment the visitor is motivated (they just tried to use AI). |
+| P0 | REQ-072 | Login gate triggers on content creation/persistence actions | Gate triggers: AI scene generation, AI editing request, new project creation. Gate fires BEFORE the action starts. | Principle: never let a guest invest effort and then block. Gate early. |
+| P0 | REQ-073 | Guest free actions (no gate) | Free: browse demo project, drag/resize/move scenes, edit scene detail fields, click/edit characters, view relationships, type in editor, change Config, switch theme, switch language. | Guests must experience the full interactive UI to understand the product's value. These actions use no server resources. |
+| P0 | REQ-074 | Guest-to-authenticated transition | On OAuth completion via login modal: (a) discard client-side demo data, (b) load server data (including REQ-063 sample project), (c) navigate to dashboard. No "save your work" prompt — demo edits are exploration, not work. | Clean transition. Server sample project provides identical content, so there is no real data loss. |
+
+**Acceptance criteria for REQ-064:**
+- A visitor who has never logged in opens the app URL and sees the dashboard (not a login page).
+- The dashboard shows exactly one project card (the demo project) with a badge.
+- No API calls to `/v1/projects` or any authenticated endpoint are made during dashboard load in guest mode.
+
+**Acceptance criteria for REQ-068:**
+- Guest clicks the demo project card and the workspace renders with timeline, character map, editor, and Config Bar — all populated.
+- Guest can drag a scene on the timeline to a new position. The scene moves in the UI. No API call is made.
+- Guest can type text in the editor. Text appears in the editor. No API call is made.
+
+**Acceptance criteria for REQ-070:**
+- Guest modifies a scene title, refreshes the browser. The scene title is back to its original fixture value.
+- Opening the app in a new tab shows the demo in its initial state regardless of modifications in another tab.
+
+**Acceptance criteria for REQ-071:**
+- Clicking "Generate AI Draft" in guest mode shows the login modal within 200ms. No generation request is sent to the server.
+- Clicking [+ New Project] in guest mode shows the login modal. No project creation flow is initiated.
+- The modal's Google login button initiates the standard Google OAuth flow.
+- Closing the modal returns the guest to their previous state (workspace or dashboard).
+
+**Acceptance criteria for REQ-074:**
+- After OAuth completion, the dashboard loads with the server sample project (from REQ-063) and no demo project.
+- The client-side demo data store is empty/cleared.
+- All workspace and dashboard UI elements now use server data via normal API calls.
+
+### 3.11 Non-Functional Requirements (Guest Mode)
+
+| Priority | REQ-ID | Requirement | Phase 1 Detail | Rationale |
+|----------|--------|-------------|-----------------|-----------|
+| P1 | REQ-076 | Guest dashboard loads as fast or faster than authenticated dashboard | Demo data is hardcoded in the client bundle — no server round-trip. Load time must not regress relative to the authenticated experience. | Guest mode is the first impression. Slow load kills conversion. |
+| P1 | REQ-077 | Demo workspace loads as fast or faster than server-based workspace | No API calls means no network latency. Workspace should render immediately from in-memory data. | Same rationale — first impression performance. |
+| P0 | REQ-078 | Guest mode does not call authenticated API endpoints | All data is processed in client-side memory. Server AuthUser middleware and API auth logic are unchanged. | Zero server-side changes. Existing security posture is maintained. |
+| P0 | REQ-079 | Manual API calls from guest return 401 | If a guest manually calls authenticated endpoints (e.g., via dev tools), existing JWT middleware returns 401. Guest mode must not weaken API security. | Defense in depth. Guest mode is a client-side concern; server security is independent. |
+| P0 | REQ-080 | Login modal OAuth maintains existing security level | The Google OAuth flow from the login prompt modal uses the same auth pathway as the existing login page (REQ-056~059). No separate auth route is introduced. | No security regression from adding a new auth entry point. |
+
+**Acceptance criteria for REQ-078:**
+- Network inspector shows zero requests to `/v1/*` endpoints during an entire guest session (dashboard load, workspace navigation, demo editing).
+
+**Acceptance criteria for REQ-079:**
+- A `curl` request to `GET /v1/projects` without a Bearer token returns 401 — identical behavior to before Guest Mode was introduced.
 
 ---
 
@@ -256,6 +314,38 @@ The core loop is: idea in -> visual structure out -> arrange story -> generate s
 ---
 
 ## 5. Phase 1 User Journeys
+
+### Journey 0: Guest Browsing to Signup Conversion
+
+This is the top-of-funnel journey. A visitor who completes this journey converts from anonymous browser to signed-up user.
+
+1. Unauthenticated visitor opens Narrex URL.
+2. Dashboard loads (no login redirect). Demo project card ("회귀 기사의 두 번째 인생") appears with a "Try it" badge. [+ New Project] button and login button are visible.
+3. Visitor clicks the demo project card.
+4. Workspace opens. Timeline shows 2 tracks with 8-10 scenes. Character map shows 4-5 characters. Config bar is populated with genre, mood, era, POV.
+5. Visitor clicks scenes on the timeline, reads plot summaries in the scene detail panel.
+6. Visitor opens an "Edited" scene — editor panel shows draft prose. They read the text and make edits (in-memory only).
+7. Visitor selects an "Empty" scene and clicks "Generate AI Draft."
+8. Login prompt modal appears: "AI가 당신의 이야기를 써드립니다. 무료로 시작하세요."
+9. Visitor clicks Google login -> OAuth flow completes -> JWT issued.
+10. Client-side demo data is discarded. Server data loads (REQ-063 sample project included).
+11. Dashboard shows the server sample project with "Example" badge and [+ New Project] button.
+12. User can now enter the server sample project workspace and generate AI drafts, or create their own project.
+
+**Drop-off risks and mitigations:**
+- **Step 3 (demo not clicked):** Visitor may not realize the card is clickable or may not be interested. Mitigation: visually prominent demo card design; demo card is the primary visual element on the guest dashboard.
+- **Step 8 (login modal dismissed):** Visitor may not want to sign up yet. Mitigation: value proposition copy ("10 free per month") reduces commitment anxiety. Visitor can close modal and continue exploring the demo, hitting the gate again later.
+- **Step 10 (demo edits lost):** Visitor's in-memory edits disappear after signup. Mitigation: server sample project provides identical content immediately. Demo is positioned as "try it out," not "your workspace."
+
+**Alternative path — New Project first:**
+1. Visitor clicks [+ New Project] on the guest dashboard.
+2. Login prompt modal appears immediately (before any creation effort).
+3. If visitor logs in -> signup -> dashboard with server data. If visitor cancels -> returns to dashboard, can explore the demo.
+
+**Returning visitor (no signup):**
+1. Visitor explored the demo, closed the browser, returns next day.
+2. Dashboard loads with demo project in initial state (in-memory reset on every page load).
+3. Visitor re-explores or signs up.
 
 ### Journey 1: Idea to First AI Draft (Primary Journey)
 
@@ -325,6 +415,9 @@ This is the journey that validates the core hypothesis. A user who completes thi
 
 | Goal | Metric | Phase 1 Target | Full Product Target | Timeframe |
 |------|--------|----------------|---------------------|-----------|
+| Guests explore the product | Guest workspace entry rate (dashboard visit -> workspace click-through) | 60%+ | N/A (Phase 1 specific) | First 4 weeks |
+| Guests reach the auth gate | % of guest dashboard visitors who trigger the login modal (AI gen, AI edit, or new project) | 25%+ | N/A (Phase 1 specific) | First 4 weeks |
+| Guests convert to signed-up users | Login modal-to-signup completion rate | 30%+ | N/A (Phase 1 specific) | First 4 weeks |
 | Users complete the core loop | % of users who create a project, auto-structure, and generate at least 1 AI draft | 40% of new users | N/A (Phase 1 specific) | First 4 weeks |
 | AI drafts are worth editing | % of AI-generated text retained after user editing (not deleted/replaced) | 50%+ text retention | 60%+ | 8 weeks post-launch |
 | Users build multi-scene drafts | % of users who generate and edit 5+ scene drafts in a single project | 20% of users who complete the core loop | 25% of MAU reach 10+ episodes (full product) | 8 weeks post-launch |
@@ -334,6 +427,8 @@ This is the journey that validates the core hypothesis. A user who completes thi
 
 | Primary Metric | Counter-Metric | Acceptable Range |
 |----------------|----------------|------------------|
+| Guest workspace entry rate (60%+) | Guest average session duration (should be >1 minute, not just a quick peek and leave) | If entry rate is high but session duration is <1 min, the demo content is not compelling enough |
+| Login modal-to-signup conversion (30%+) | 7-day retention of users who signed up via login modal | If conversion is high but retention is low, we are attracting low-intent signups |
 | Core loop completion (40%) | Time to first draft generated (should be under 15 minutes from project creation) | If completion rises but time-to-first-draft exceeds 15 min, onboarding needs simplification |
 | Text retention (50%+) | Full re-generation rate per scene (users clicking "Generate" again to replace the entire draft) | If retention is high but re-generation is also high, users may be settling for mediocre output rather than finding how to improve it |
 | Multi-scene completion (20%) | Average session duration trend (should not decline as users progress through scenes) | If multi-scene completion rises but session duration drops sharply after scene 3-4, the later scenes may have degrading quality |
@@ -367,6 +462,9 @@ If any of the first three criteria are not met after 8 weeks, the team should di
 | Auto-structuring from free text produces useful starting points. | Post-launch: track how many auto-generated elements (scenes, characters) survive user editing vs. how many are deleted and recreated. | High. If users discard and rebuild from scratch, auto-structuring is a false promise. Mitigation: improve structuring prompts, add "structure from scratch" as an explicit path. |
 | Simple per-scene summaries are sufficient context for AI generation continuity over 10+ scenes. | During development: test generation quality at scene 1, scene 5, scene 10, and scene 15 with summary-based context. Check for contradictions and lost plot threads. | Medium. If summaries lose critical details, later scenes will have quality issues. Mitigation: include more recent scenes as full text, tag critical plot points for preservation. |
 | Aspiring writers will try an AI writing tool (awareness and willingness). | Pre-launch: validate messaging and positioning with target audience. Post-launch: track signup-to-project-creation conversion. | Medium. If target users are skeptical of AI writing tools, acquisition will be the bottleneck. Mitigation: position as "story structuring tool with AI assist" rather than "AI writer." |
+| Visitors will explore the demo before signing up ("try before you buy" works for this audience). | Post-launch: track guest workspace entry rate and login modal conversion rate. | Medium. If visitors skip the demo and either sign up directly or leave immediately, the guest mode investment has limited ROI. Mitigation: the demo has near-zero ongoing cost (no server resources), so even moderate conversion improvement justifies the effort. |
+| A single demo genre (regression fantasy) appeals to enough visitors to be effective. | Post-launch: track demo engagement by inferred visitor interest. Phase 2 can add multiple genre demos if needed. | Low-medium. Regression fantasy is the most popular Korean web novel genre, but visitors interested in other genres (romance, modern thriller) may find the demo content less compelling. The demo's purpose is to showcase the tool's UI, not the story itself. |
+| In-memory reset on browser refresh does not cause meaningful visitor frustration or drop-off. | Post-launch: track returning visitor behavior (do they re-engage with the demo or leave?). | Low. Visitors are exploring, not working. If they are deeply enough engaged to be frustrated by a reset, they are likely ready to sign up. |
 
 ### Risks
 
@@ -378,6 +476,10 @@ If any of the first three criteria are not met after 8 weeks, the team should di
 | Users generate one scene and leave — the tool is a novelty, not a workflow | High | Medium | Push toward multi-scene engagement in the UX: after first generation, suggest "Generate the next scene?" Show progress on the timeline. Track generation-to-second-generation conversion as an early warning metric. |
 | Per-user AI costs are higher than modeled due to re-generation and direction-based edits | Medium | Low | Mitigated by monthly 50-generation quota (REQ-060). Monitor per-user token usage from day one. Set internal cost alerts. Quota can be adjusted based on actual usage patterns. |
 | File import parsing fails on edge cases, creating a bad first impression | Low | Low | Support a limited set of well-tested file formats (.md, .txt). Show clear error messages for unsupported formats. Auto-structuring gracefully handles partial parse results. |
+| Regression-fantasy demo does not resonate with visitors interested in other genres | Medium | Medium | The demo showcases the tool (timeline, character map, editor), not the genre. Phase 2 can add genre-specific demos if data shows low engagement. |
+| Guests invest significant time editing the demo, then lose edits on signup | Medium | Low | Demo is positioned as "try it out" exploration. Server sample project (REQ-063) provides identical content immediately after signup, so practical loss is zero. |
+| In-memory demo fixture and server seed data drift out of sync (type mismatch, content mismatch) | Medium | Medium | Shared fixture data source. Both client and server derive from the same content definition. Type consistency enforced at compile time via shared interfaces. |
+| Route guard changes for guest access cause side effects in existing auth logic | High | Low | Only route-level guards are modified. API-level security (AuthUser middleware, JWT validation) is completely unchanged. All existing auth tests must continue to pass. |
 
 ---
 
@@ -400,6 +502,7 @@ Target dates are omitted pending engineering capacity assessment. Estimated tota
 
 - Full PRD (complete product vision): docs/prd.md
 - Product Brief (strategic context): docs/product-brief.md
+- Guest Mode Product Brief: docs/product-brief-guest-mode.md
 - UX Design: docs/ux-design.md
 - Database Design: docs/database-design.md
 - Design Document: docs/design-doc.md

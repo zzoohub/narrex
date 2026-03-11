@@ -1,4 +1,4 @@
-import { createEffect, onCleanup, Show } from 'solid-js'
+import { createEffect, onCleanup, onMount, Show } from 'solid-js'
 import { Portal } from 'solid-js/web'
 import { useI18n } from '@/shared/lib/i18n'
 import { Button } from './button'
@@ -71,29 +71,31 @@ export function Dialog(props: DialogProps) {
 
   /* ── side effects (open / close) ────────────────────────────────── */
 
-  createEffect(() => {
-    if (props.open) {
-      previousFocus = document.activeElement as HTMLElement | null
+  if (typeof document !== 'undefined') {
+    createEffect(() => {
+      if (props.open) {
+        previousFocus = document.activeElement as HTMLElement | null
 
-      // Focus the first button after the portal mounts
-      requestAnimationFrame(() => {
-        const focusable = getFocusableEls()
-        // Focus cancel button (last) by default so confirm isn't accidentally triggered
-        if (focusable.length > 0) {
-          focusable[focusable.length - 1]!.focus()
-        }
-      })
+        // Focus the first button after the portal mounts
+        requestAnimationFrame(() => {
+          const focusable = getFocusableEls()
+          // Focus cancel button (last) by default so confirm isn't accidentally triggered
+          if (focusable.length > 0) {
+            focusable[focusable.length - 1]!.focus()
+          }
+        })
 
-      document.addEventListener('keydown', handleKeyDown, true)
-    } else {
+        document.addEventListener('keydown', handleKeyDown, true)
+      } else {
+        document.removeEventListener('keydown', handleKeyDown, true)
+        previousFocus?.focus()
+      }
+    })
+
+    onCleanup(() => {
       document.removeEventListener('keydown', handleKeyDown, true)
-      previousFocus?.focus()
-    }
-  })
-
-  onCleanup(() => {
-    document.removeEventListener('keydown', handleKeyDown, true)
-  })
+    })
+  }
 
   /* ── render ─────────────────────────────────────────────────────── */
 

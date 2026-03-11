@@ -2,6 +2,9 @@ import { createSignal, Show, onMount, onCleanup } from 'solid-js'
 import { useParams, Link } from '@tanstack/solid-router'
 import { useI18n } from '@/shared/lib/i18n'
 import { WorkspaceProvider, useWorkspace } from '@/features/workspace'
+import { DEMO_PROJECT_ID } from '@/shared/fixtures/demo-project'
+import { useAuth } from '@/shared/stores/auth'
+import type { Locale } from '@/shared/types'
 import {
   IconChevronLeft,
   IconChevronRight,
@@ -16,12 +19,35 @@ import { EditorPanel } from '@/widgets/editor-panel'
 import { SceneDetail } from '@/widgets/scene-detail'
 
 export function WorkspaceView() {
-  const params = useParams({ from: '/_authenticated/project/$id' })
+  const params = useParams({ from: '/project/$id' })
+  const { state, isGuest } = useAuth()
+  const { locale } = useI18n()
+  const isDemo = () => params().id === DEMO_PROJECT_ID
+
   return (
-    <WorkspaceProvider projectId={params().id}>
-      <WorkspaceLayout />
-    </WorkspaceProvider>
+    <Show
+      when={state() !== 'loading'}
+      fallback={
+        <div class="flex min-h-screen items-center justify-center bg-canvas">
+          <div class="h-8 w-8 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+        </div>
+      }
+    >
+      <Show
+        when={state() === 'authenticated' || isDemo()}
+        fallback={<WorkspaceRedirect />}
+      >
+        <WorkspaceProvider projectId={params().id} isDemo={isDemo()} demoLocale={locale() as Locale}>
+          <WorkspaceLayout />
+        </WorkspaceProvider>
+      </Show>
+    </Show>
   )
+}
+
+function WorkspaceRedirect() {
+  if (typeof window !== 'undefined') window.location.href = '/'
+  return null
 }
 
 // ---- Layout -----------------------------------------------------------------
@@ -69,18 +95,19 @@ function WorkspaceLayout() {
 
   // Use an effect-like approach by checking in an interval — SolidJS
   // createEffect would be more idiomatic but we keep it simple
-  let prevSelectedId: string | null = null
-  const selectionPoller = setInterval(() => {
-    const cur = ws.selectedSceneId()
-    if (cur !== prevSelectedId) {
-      prevSelectedId = cur
-      if (cur !== null) {
-        setRightOpen(true)
+  if (typeof window !== 'undefined') {
+    let prevSelectedId: string | null = null
+    const selectionPoller = setInterval(() => {
+      const cur = ws.selectedSceneId()
+      if (cur !== prevSelectedId) {
+        prevSelectedId = cur
+        if (cur !== null) {
+          setRightOpen(true)
+        }
       }
-    }
-  }, 50)
-
-  onCleanup(() => clearInterval(selectionPoller))
+    }, 50)
+    onCleanup(() => clearInterval(selectionPoller))
+  }
 
   // ---- Responsive check ----
   function checkViewport() {
