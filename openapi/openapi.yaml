@@ -247,7 +247,115 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  /v1/me/quota:
+    get:
+      operationId: getQuota
+      tags: [generation]
+      summary: Get AI generation quota for current user
+      description: Returns the user's monthly generation quota usage and limits.
+      responses:
+        '200':
+          description: Quota info
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/QuotaInfo'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   # ---- Projects -----------------------------------------------------------
+
+  /v1/projects/structure:
+    post:
+      operationId: structureProject
+      tags: [projects]
+      summary: Auto-structure a project from user input via AI
+      description: |
+        Streams a 3-phase structuring process via SSE:
+        1. World generation (genre, theme, era, tone, POV)
+        2. Character generation with relationships
+        3. Timeline generation with tracks, scenes, and connections
+
+        Creates the project with all entities on completion.
+
+        SSE event types:
+        - `progress` — `{"message": "..."}` — phase status update
+        - `token` — `{"text": "..."}` — incremental generation token
+        - `completed` — `{"projectId": "..."}` — structuring complete
+        - `error` — `{"message": "..."}` — structuring failed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sourceInput]
+              properties:
+                sourceInput:
+                  type: string
+                  description: User's story idea or text input
+                  minLength: 1
+                clarificationAnswers:
+                  type: array
+                  items:
+                    type: string
+                  description: Answers to clarification prompts (if any)
+                locale:
+                  type: string
+                  enum: [ko, en]
+                  description: Locale for generation progress messages
+      responses:
+        '200':
+          description: SSE stream of structuring progress
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-Sent Events stream
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /v1/projects/import:
+    post:
+      operationId: importProject
+      tags: [projects]
+      summary: Import a project from file
+      description: Creates a new project from an uploaded file (markdown or text).
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Markdown or text file to import
+      responses:
+        '201':
+          description: Imported project
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Project'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
 
   /v1/projects:
     get:
@@ -2140,6 +2248,30 @@ components:
         totalCostUsd:
           type: number
           format: double
+
+    QuotaInfo:
+      type: object
+      required: [used, limit, remaining, warning, exceeded, resetsAt]
+      properties:
+        used:
+          type: integer
+          description: Generations used this month
+        limit:
+          type: integer
+          description: Monthly generation limit (currently 10)
+        remaining:
+          type: integer
+          description: Generations remaining this month
+        warning:
+          type: boolean
+          description: True when usage >= 7 (warning threshold)
+        exceeded:
+          type: boolean
+          description: True when usage >= limit
+        resetsAt:
+          type: string
+          format: date-time
+          description: Start of next month when quota resets
 
     # ---- Generation -------------------------------------------------------
 

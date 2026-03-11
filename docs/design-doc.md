@@ -15,12 +15,12 @@ Aspiring Korean web novel writers have stories in their heads but can't turn the
 
 ![System Context](diagrams/system-context-dark.svg)
 
-A desktop-first web application. The writer interacts with a SolidJS frontend that communicates with a Rust API server. The API authenticates via Google OAuth, generates prose via two LLM providers (CF Workers AI primary, Gemini Flash fallback), persists data in Neon PostgreSQL, and caches context in Upstash Redis.
+A desktop-first web application. The writer interacts with a SolidJS frontend that communicates with a Rust API server. The API authenticates via Google OAuth, generates prose via two LLM providers (Gemini 2.5 Flash-Lite primary, CF Workers AI fallback), persists data in Neon PostgreSQL, and stores user avatars in Cloudflare R2.
 
 ### 1.3 Assumptions
 
-- CF Workers AI free tier sustains Phase 1 traffic (<1000 generations/day).
-- Scene-level Korean prose from current models (Llama 3.1 70B, Gemini Flash) is good enough to revise, not discard.
+- Gemini 2.5 Flash-Lite handles Phase 1 traffic at negligible cost ($0.10/1M tokens).
+- Scene-level Korean prose from Gemini 2.5 Flash-Lite is good enough to revise, not discard.
 - Per-scene summaries (~200-300 tokens) preserve sufficient narrative fidelity for context assembly over 10-20 scenes.
 - Desktop-first is acceptable — target users write on laptops in 1-3 hour sessions.
 - Solo developer for Phase 1 — architecture must be operable by one person.
@@ -80,36 +80,50 @@ SSE streaming is used only for AI generation endpoints where tokens arrive progr
 ### 3.4 Crate & Module Structure
 
 ```
+apps/api/
 ├── crates/
-│   └── llm/                  # Workspace crate — LLM provider abstraction
+│   └── llm/                       # Workspace crate — LLM provider abstraction
 │       ├── src/
 │       │   ├── lib.rs
-│       │   ├── provider.rs   # LlmProvider trait + request/response types
-│       │   ├── cf_workers.rs # CF Workers AI implementation
-│       │   ├── gemini.rs     # Gemini Flash implementation
-│       │   └── gateway.rs    # Failover routing (primary → fallback)
+│       │   ├── provider.rs        # LlmProvider trait + request/response types
+│       │   ├── cf_workers.rs      # CF Workers AI implementation
+│       │   ├── gemini.rs          # Gemini Flash implementation
+│       │   └── gateway.rs         # Failover routing (primary → fallback)
 │       └── Cargo.toml
-├── api/                      # Axum server — depends on crates/llm
-│   └── src/
-│       ├── modules/
-│       │   ├── auth/         # Google OAuth, JWT, sessions
-│       │   ├── project/      # Project CRUD, story config
-│       │   ├── timeline/     # Tracks, scenes, branch/merge
-│       │   ├── character/    # Characters, relationships
-│       │   └── ai/           # Prompt assembly, context compression,
-│       │                     # structuring, generation, editing
-│       └── ...
-└── Cargo.toml               # Workspace root
+├── src/
+│   ├── domain/                    # Business logic (no infra deps)
+│   │   ├── auth/                  # Google OAuth, JWT, sessions
+│   │   ├── project/               # Project CRUD, story config
+│   │   ├── timeline/              # Tracks, scenes, branch/merge
+│   │   ├── character/             # Characters, relationships
+│   │   ├── ai/                    # Prompt assembly, context, generation, editing
+│   │   └── sample/                # Sample project seeding on first login
+│   ├── inbound/http/              # HTTP adapters
+│   │   ├── auth/                  # handlers, request, response
+│   │   ├── project/
+│   │   ├── timeline/
+│   │   ├── character/
+│   │   ├── ai/
+│   │   ├── middleware/auth.rs     # AuthUser JWT extractor
+│   │   ├── error.rs               # RFC 9457 ProblemDetail
+│   │   ├── server.rs              # AppState, build_router()
+│   │   └── response.rs
+│   └── outbound/                  # Infrastructure adapters
+│       ├── postgres/              # SQLx repository impls
+│       ├── jwt.rs                 # JwtTokenService
+│       └── storage.rs             # R2Storage (avatar uploads)
+└── Cargo.toml                     # Workspace root
 ```
 
 | Layer | Component | Owns | Dependencies |
 |---|---|---|---|
 | **crate** | `llm` | `LlmProvider` trait, CF Workers AI + Gemini Flash impls, failover gateway, SSE stream types | None (standalone) |
-| **module** | `auth` | User accounts, sessions, JWT, Google OAuth | — |
+| **module** | `auth` | User accounts, sessions, JWT, Google OAuth, avatar upload (R2) | — |
 | **module** | `project` | Project CRUD, story config (genre, tone, era, POV, mood) | auth |
 | **module** | `timeline` | Tracks, scenes (CRUD, NLE positioning, status), branch/merge connections | project |
 | **module** | `character` | Characters (CRUD, profiles), relationships (type, label, direction) | project |
 | **module** | `ai` | Prompt assembly, context compression, auto-structuring, scene generation, direction-based edits | project, timeline, character, `llm` crate |
+| **module** | `sample` | Sample project seeding on first login (background task) | project, timeline, character |
 
 `llm` crate handles **how** to talk to LLM providers. `ai` module handles **what** to ask — prompt construction, context assembly, and orchestration of use cases (`structure_project()`, `generate_scene()`, `edit_passage()`).
 
@@ -126,7 +140,7 @@ Code structure is **hexagonal (ports & adapters)**. Domain logic has no infrastr
 | **Neon PostgreSQL** | Users, projects, tracks, scenes (metadata + manuscript content in `scene.content`), characters, relationships, AI draft history (`drafts` table — append-only), scene summaries, generation logs | Relational data with complex joins (scene → characters → relationships). `start_position` + `duration` NLE model requires range queries. `scene.content` is the user's manuscript; `drafts` is AI generation history. pgvector available for future semantic search. | Strong (single writer, single DB) |
 | **Upstash Redis** | Rate limiting counters, cached assembled prompt context, hot scene summaries | Fast reads for hot data. TTL-based expiration. HTTP API works from Cloud Run. | Eventual (cache; Postgres is source of truth) |
 
-No object storage in Phase 1 — character profile images stored as URLs (placeholder or user-provided link).
+Object storage: Cloudflare R2 for user avatar uploads (validated magic bytes: JPEG, PNG, WebP; 2MB limit). Character profile images stored as URLs.
 
 ### 4.2 Key Data Flows
 
@@ -168,7 +182,7 @@ User selects scene → clicks Generate
 ```
 User edits text in editor
   → Frontend: debounce 1-2 seconds
-  → API: PATCH /api/scenes/{id} with { content: "..." }
+  → API: PATCH /v1/projects/{projectId}/scenes/{sceneId} with { content: "..." }
   → Update scene.content in Postgres
   → Update scene.status to 'edited' if currently 'ai_draft'
 ```
@@ -213,13 +227,13 @@ Scene summaries are the critical cache — they prevent re-reading and re-summar
 | Cloud Run | ~$0 (free: 2M req/mo) | ~$15-30 |
 | Neon PostgreSQL | ~$0 (free: 0.5GB, 190 compute hrs) | ~$19 (Scale plan) |
 | Upstash Redis | ~$0 (free: 10K cmd/day) | ~$10 |
-| CF Workers AI | ~$0 (free tier) | ~$0 |
-| Gemini Flash (fallback) | ~$2-5 | ~$20-50 |
-| Cloudflare (Workers + CDN) | ~$0 (free plan) | ~$5 (Workers Paid) |
+| Gemini 2.5 Flash-Lite (primary) | ~$2-5 | ~$20-50 |
+| CF Workers AI (fallback) | ~$0 (free tier) | ~$0 |
+| Cloudflare (Workers + CDN + R2) | ~$0 (free plan) | ~$5 (Workers Paid) |
 | Sentry | ~$0 (free: 5K errors/mo) | ~$0 |
 | **Total** | **~$2-5/mo** | **~$70-115/mo** |
 
-AI generation is the biggest variable cost. CF Workers AI free tier is the primary mitigation. Gemini Flash at $0.10/1M input tokens + $0.40/1M output tokens keeps fallback costs low (~$0.002 per scene generation at ~4K tokens).
+AI generation is the biggest variable cost. Gemini 2.5 Flash-Lite at $0.10/1M input tokens + $0.40/1M output tokens keeps costs low (~$0.002 per scene generation at ~4K tokens). CF Workers AI free tier is available as fallback. Monthly quota of 10 generations per user caps exposure.
 
 ---
 
@@ -253,8 +267,8 @@ AI generation is the biggest variable cost. CF Workers AI free tier is the prima
 |---|---|---|
 | Neon PostgreSQL | Primary data store | System offline — no fallback for primary DB |
 | Upstash Redis | Cache, rate limiting | Degrade gracefully: skip cache (read from Postgres), disable rate limiting |
-| CF Workers AI | Primary LLM | Automatic failover to Gemini Flash |
-| Google Gemini Flash | Fallback LLM | Generation unavailable — show error with retry |
+| Google Gemini 2.5 Flash-Lite | Primary LLM | Automatic failover to CF Workers AI |
+| CF Workers AI | Fallback LLM | Generation unavailable — show error with retry |
 | Google OAuth | Authentication | New logins blocked; existing sessions (JWT) continue working |
 | Cloudflare | CDN, DNS, web hosting | Web app unreachable — external dependency, no mitigation |
 | Sentry | Error tracking | Errors go untracked — no user-facing impact |
@@ -280,19 +294,19 @@ pub trait LlmProvider: Send + Sync {
 ```
 
 Two implementations in the crate:
-- `CfWorkersAiProvider` — primary. REST API, free tier.
-- `GeminiFlashProvider` — fallback. REST API, $0.10/$0.40 per 1M tokens.
+- `GeminiFlashProvider` — primary. Gemini 2.5 Flash-Lite, REST API, $0.10/$0.40 per 1M tokens.
+- `CfWorkersAiProvider` — fallback. REST API, free tier.
 
-`LlmGateway` in the crate handles failover routing: try CF Workers AI first, fall back to Gemini Flash on failure (timeout >30s, 5xx, rate limit 429). Logs every failover. Returns a unified response shape regardless of provider.
+`LlmGateway` in the crate handles failover routing: try Gemini Flash-Lite first, fall back to CF Workers AI on failure (timeout >30s, 5xx, rate limit 429). Logs every failover. Returns a unified response shape regardless of provider.
 
 The API's `ai` module consumes the crate — it assembles prompts, passes them to the gateway, and handles the streamed response.
 
 ### 9.2 Streaming
 
 SSE for all generation endpoints:
-- `POST /api/scenes/{id}/generate` → SSE stream of prose tokens
-- `POST /api/scenes/{id}/edit` → SSE stream of replacement tokens
-- `POST /api/projects` (with structuring) → SSE stream of structuring progress
+- `POST /v1/projects/{projectId}/scenes/{sceneId}/generate` → SSE stream of prose tokens
+- `POST /v1/projects/{projectId}/scenes/{sceneId}/edit` → SSE stream of replacement tokens
+- `POST /v1/projects/structure` → SSE stream of structuring progress (3-phase: world → characters → timeline)
 
 Implementation: Axum's `Sse` response type with `async-stream`. The API proxies the LLM provider's SSE stream to the client, transforming provider-specific formats into a unified event shape.
 
@@ -334,12 +348,12 @@ At 15 scenes with 250-token summaries ≈ 3750 tokens — well within limits. Qu
 
 ### 9.5 Cost Management
 
-- **CF Workers AI free tier**: Primary for all generation. Eliminates cost for the majority of requests.
-- **Gemini Flash ($0.10/$0.40 per 1M tokens)**: Fallback only. ~$0.002 per scene generation at ~4K input + ~2K output tokens.
+- **Gemini 2.5 Flash-Lite ($0.10/$0.40 per 1M tokens)**: Primary for all generation. ~$0.002 per scene generation at ~4K input + ~2K output tokens.
+- **CF Workers AI free tier**: Fallback. Eliminates cost when primary fails.
 - **Context compression**: Reduces per-generation input by ~80% compared to full prior scene text.
 - **No prompt caching API in Phase 1**: Stable context (config, characters) changes rarely but native provider caching is deferred to Phase 2.
 - **Generation logging**: Every request logged with token counts and estimated cost for real-time burn rate tracking.
-- **Monthly quota**: 50 AI generations per user per month (resets 1st of each month UTC). Enforced in the domain service layer before any LLM call. Uses existing `generation_log` table with `idx_genlog_user_created` index for efficient counting. Warning at 80% (40/50). Quota exceeded returns 429 with reset date. At worst-case Gemini-only pricing: ~$0.03/user/month, supporting ~1,600 users on a $50/month budget.
+- **Monthly quota**: 10 AI generations per user per month (resets 1st of each month). Enforced in the domain service layer before any LLM call. Uses existing `generation_log` table with `idx_genlog_user_created` index for efficient counting. Warning at 7/10. Quota exceeded returns 429 with reset date.
 
 ### 9.6 Guardrails
 
@@ -356,8 +370,8 @@ At 15 scenes with 250-token summaries ≈ 3750 tokens — well within limits. Qu
 
 | Risk | Impact | What I'll Do |
 |---|---|---|
-| CF Workers AI free tier gets rate-limited or deprecated | Cost structure breaks — all generation becomes paid | Gemini Flash fallback is already built. Monitor CF rate limits. Evaluate other free/cheap providers as backup. |
-| Korean prose quality from CF models is poor | Core value proposition fails — users discard drafts instead of editing | Pre-launch: benchmark 50 test scenes across 3 genres. If insufficient, make Gemini Flash primary (accept ~$50/mo cost at 1K DAU). |
+| Gemini Flash-Lite pricing changes | Cost structure breaks | CF Workers AI free tier is available as fallback. Monitor pricing. Evaluate other providers. |
+| Korean prose quality from Gemini Flash-Lite is poor | Core value proposition fails — users discard drafts instead of editing | Benchmark 50 test scenes across 3 genres. CF Workers AI fallback available for comparison. |
 | Context window limits degrade quality at 15+ scenes | Later scenes lose narrative continuity, contradictions appear | Monitor per-scene quality by position. If summaries lose critical details, invest in hierarchical summarization (chapter-level + scene-level). |
 | Neon cold start after idle (5 min auto-suspend on free tier) | First request after idle has ~1-2s extra latency | Acceptable for Phase 1 beta. Upgrade to Scale plan (configurable suspend timeout) when latency matters. |
 | Solo dev across Rust + SolidJS is a wide stack | Slower velocity on unfamiliar code paths | Lean on AI-assisted development. Keep architecture simple (monolith). Avoid premature optimization. |
@@ -396,10 +410,10 @@ At 15 scenes with 250-token summaries ≈ 3750 tokens — well within limits. Qu
 - **Because**: Compiler-enforced boundary — the crate physically cannot import API internals. Independently testable (mock providers without spinning up Axum). Reusable if a CLI tool or worker needs LLM access. Zero runtime cost — it's a library, not a service.
 - **Revisit when**: Never needs revisiting — this is strictly better than an in-module trait.
 
-### Decision: CF Workers AI + Gemini Flash (Dual Provider)
+### Decision: Gemini 2.5 Flash-Lite Primary + CF Workers AI Fallback (Dual Provider)
 - **Chose**: Two provider implementations behind `LlmProvider` trait in `crates/llm`
 - **Over**: Single provider (OpenAI/Anthropic), managed gateway (LiteLLM sidecar)
-- **Because**: CF Workers AI is free — critical at launch with no revenue. Gemini Flash is the cheapest quality fallback. The trait + gateway live in-process with zero latency overhead. No sidecar to deploy or monitor.
+- **Because**: Gemini 2.5 Flash-Lite offers the best Korean prose quality at the cheapest price ($0.10/1M tokens). CF Workers AI free tier provides a zero-cost fallback. The trait + gateway live in-process with zero latency overhead. No sidecar to deploy or monitor.
 - **Revisit when**: Need 3+ providers or A/B testing across models at scale. Then evaluate a managed gateway.
 
 ### Decision: Google OAuth Only (Phase 1)

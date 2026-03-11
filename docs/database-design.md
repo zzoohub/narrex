@@ -46,6 +46,8 @@ erDiagram
         text email UK
         text display_name
         text profile_image_url
+        text theme_preference
+        text language_preference
         timestamptz created_at
         timestamptz updated_at
     }
@@ -84,6 +86,7 @@ erDiagram
         double_precision duration
         scene_status status
         text title
+        text content
         text plot_summary
         text location
         text_array mood_tags
