@@ -214,6 +214,33 @@ function GraphView(props: {
     untrack(() => rebuildSimulation())
   })
 
+  /* Rebuild when SVG becomes visible / resizes (e.g. collapsed panel opens).
+     Without this, demo mode loads data synchronously while the panel is
+     still width:0 — the simulation builds with fallback dimensions and
+     nodes may end up outside the actual viewport. */
+  let prevSvgWidth = 0
+  let prevSvgHeight = 0
+
+  onMount(() => {
+    if (!svgRef || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0]
+      if (!entry) return
+      const { width, height } = entry.contentRect
+      // Only rebuild when dimensions meaningfully change (avoids loops)
+      if (
+        width > 0 && height > 0 &&
+        (Math.abs(width - prevSvgWidth) > 10 || Math.abs(height - prevSvgHeight) > 10)
+      ) {
+        prevSvgWidth = width
+        prevSvgHeight = height
+        rebuildSimulation()
+      }
+    })
+    ro.observe(svgRef)
+    onCleanup(() => ro.disconnect())
+  })
+
   onCleanup(() => {
     simulation?.stop()
   })
