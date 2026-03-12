@@ -19,7 +19,7 @@ Narrex is a web-based visual novel editor with AI scene generation for Korean we
    - TanStack/SolidJS: `vitest` + `@solidjs/testing-library`
 2. **Post-check**: Run both sub-agents in parallel when all logic changes.
    Skip for cosmetic-only changes (styling, typos, renaming, formatting, docs).
-   - **z-security-reviewer** + **z-verifier** (e2e + browser)
+   - **security-reviewer** + **verifier** (e2e + browser)
    > Fix → re-run → all pass, then proceed. When in doubt, run.
 3. **Docs sync**: Any changes to requirements, scope, architecture, data model, UX/UI, or structure → update `docs/`. API changes → also update `openapi/openapi.yaml`.
 
@@ -93,14 +93,14 @@ shared/                 # Types, stores (signals), API client, i18n, UI componen
 - Scenes: `start_position DOUBLE PRECISION` + `duration DOUBLE PRECISION DEFAULT 1.0`
 
 ## API Workflow (MUST FOLLOW)
-- Schema changes: **z-database-design** → **z-rest-api-design** (plan)
-- Implementation: **z-axum-hexagonal** + **z-postgresql** (queries)
+- Schema changes: **database-design** → **rest-api-design** (plan)
+- Implementation: **axum-hexagonal** + **postgresql** (queries)
 
 ## Web Workflow (MUST FOLLOW)
-- Design system: **z-design-system**
+- Design system: **design-system**
 - UI: **frontend-design**
-- Web source code: **z-solidjs**
-- Motion: **z-motion**
+- Web source code: **solidjs**
+- Motion: **motion**
 
 ## Environment
 

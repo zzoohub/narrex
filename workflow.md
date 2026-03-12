@@ -10,9 +10,9 @@ Move on when you see organic pull. Kill after 2–3 pivots with no signal.
 ## 1. Product → Design → UI
 
 ```
-z-product-brief                       → docs/product-brief.md
-z-prd-craft                           → docs/prd.md
-z-ux-designer                         → docs/ux-design.md
+product-brief                       → docs/product-brief.md
+prd-craft                           → docs/prd.md
+ux-designer                         → docs/ux-design.md
   + Stitch (parallel)               → visual mockups
 UI implementation
 Review feature and UX — revise upstream docs if needed
@@ -25,11 +25,11 @@ Review feature and UX — revise upstream docs if needed
 Tracking plan is defined in parallel with architecture — events are baked in from the start.
 
 ```
-z-software-architecture               → docs/design-doc.md
-z-database-design                     → docs/database-design.md
-z-rest-api-design                     → openapi/openapi.yaml
+software-architecture               → docs/design-doc.md
+database-design                     → docs/database-design.md
+rest-api-design                     → openapi/openapi.yaml
 
-z-data-analyst (parallel)
+data-analyst (parallel)
   → biz/analytics/tracking-plan.md       # events + Aha Moment
   → biz/analytics/funnels.md             # funnel stages + target rates
   → biz/analytics/dashboards.md          # PostHog dashboard specs
@@ -95,7 +95,7 @@ See `~/apps/infra/docs/setup.md` for initial provider setup and secret managemen
 ## 4. Launch → Marketing
 
 ```
-z-marketer
+marketer
   → biz/marketing/strategy.md            # positioning, audience, channels
   → biz/marketing/pricing.md             # tiers and packaging
   → biz/marketing/competitors.md         # competitive landscape
@@ -130,7 +130,7 @@ Runs in parallel — not a sequential step.
 Check dashboard every morning (5 min). First Kill/Keep/Scale call at week 2.
 
 ```
-z-data-analyst
+data-analyst
   → biz/analytics/reports/               # weekly reports
   → biz/analytics/health-score.md        # customer health score
   → Kill / Keep / Scale recommendation
@@ -153,14 +153,14 @@ Fix in this order: **Retention → Activation → Acquisition**
 Only after Scale. Don't grow a leaky product.
 
 ```
-z-growth-optimizer
+growth-optimizer
   → biz/growth/experiments.md            # ICE-scored backlog + results
   → biz/growth/referral-program.md       # referral + viral loops
   → biz/growth/churn-prevention.md       # cancel flow, save offers
   → biz/growth/dunning.md               # payment failure recovery
   → biz/growth/cro/                      # per-page/flow CRO
   → biz/growth/seo/                      # content SEO (keywords, blog, landing pages)
-  → Experiment results → z-data-analyst  # statistical analysis handoff
+  → Experiment results → data-analyst  # statistical analysis handoff
 ```
 
 ### Now add E2E tests
