@@ -161,7 +161,7 @@ export function SettingsView() {
       await deleteAccount()
       window.location.href = '/login'
     } catch {
-      setDeleteError(t('settings.deleteError') ?? 'Failed to delete account')
+      setDeleteError(t('settings.deleteError'))
       setDeleting(false)
     }
   }

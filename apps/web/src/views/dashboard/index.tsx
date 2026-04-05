@@ -38,11 +38,10 @@ export function DashboardView() {
   }
 
   // ── Data source: fixture for guest, API for authenticated ──
-  const guest = () => isGuest()
   const demoProjects = () => [buildDemoProjectSummary(locale())]
 
   const [projects, { refetch }] = createResource(
-    () => authState() === 'authenticated' ? true : false,
+    () => authState() === 'authenticated',
     async (shouldFetch) => {
       if (!shouldFetch) return []
       const res = await listProjects()
@@ -51,7 +50,7 @@ export function DashboardView() {
   )
 
   const displayProjects = (): ProjectSummary[] =>
-    guest() ? demoProjects() : (projects() ?? [])
+    isGuest() ? demoProjects() : (projects() ?? [])
 
   function formatDate(dateStr: string) {
     return new Date(dateStr).toLocaleDateString('ko-KR', {
@@ -100,7 +99,7 @@ export function DashboardView() {
   const [deleteTarget, setDeleteTarget] = createSignal<ProjectSummary | null>(null)
 
   async function handleDeleteConfirm() {
-    if (guest()) return
+    if (isGuest()) return
     const target = deleteTarget()
     if (!target) return
     setDeleteTarget(null)
@@ -227,11 +226,11 @@ export function DashboardView() {
         {/* Title row */}
         <div class="flex items-center justify-between mb-8">
           <h2 class="text-2xl font-display font-semibold text-fg">
-            {guest() ? t('dashboard.guestTitle') : t('dashboard.title')}
+            {isGuest() ? t('dashboard.guestTitle') : t('dashboard.title')}
           </h2>
           <Show when={displayProjects().length > 0}>
             <Show
-              when={!guest()}
+              when={!isGuest()}
               fallback={
                 <Button
                   variant="primary"
@@ -252,7 +251,7 @@ export function DashboardView() {
         </div>
 
         {/* ── Guest mode: show demo project immediately ────────── */}
-        <Show when={guest()}>
+        <Show when={isGuest()}>
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             <For each={demoProjects()}>
               {(project: ProjectSummary) => (
@@ -327,7 +326,7 @@ export function DashboardView() {
         </Show>
 
         {/* ── Authenticated mode: API-driven ──────────────────── */}
-        <Show when={!guest()}>
+        <Show when={!isGuest()}>
           <Suspense
             fallback={
               <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">

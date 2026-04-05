@@ -825,18 +825,18 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
     return [
       {
         label: t('sceneDetail.title'),
-        icon: <IconPen size={14} />,
+        icon: () => <IconPen size={14} />,
         onClick: () => ws.selectScene(sceneId),
       },
       {
         label: t('editor.generate'),
-        icon: <IconSparkles size={14} />,
+        icon: () => <IconSparkles size={14} />,
         onClick: () => ws.startGeneration(sceneId),
       },
       Separator,
       {
         label: t('common.delete'),
-        icon: <IconTrash size={14} />,
+        icon: () => <IconTrash size={14} />,
         danger: true,
         onClick: () => setDeleteSceneId(sceneId),
       },
@@ -852,19 +852,19 @@ export function TimelinePanel(props: { onCollapse?: () => void }) {
     return [
       {
         label: t('timeline.addScene'),
-        icon: <IconPlus size={14} />,
+        icon: () => <IconPlus size={14} />,
         onClick: () => ws.addScene(trackId, insertPos),
       },
       Separator,
       {
         label: t('config.theme') === 'Theme' ? 'Rename Track' : '\uD2B8\uB799 \uC774\uB984 \uBCC0\uACBD',
-        icon: <IconPen size={14} />,
+        icon: () => <IconPen size={14} />,
         onClick: () => startRenamingTrack(trackId, trackLabel),
       },
       Separator,
       {
         label: hasScenes ? t('timeline.removeTrackDisabled') : t('timeline.removeTrack'),
-        icon: <IconTrash size={14} />,
+        icon: () => <IconTrash size={14} />,
         danger: !hasScenes,
         disabled: hasScenes,
         onClick: () => setDeleteTrackId(trackId),

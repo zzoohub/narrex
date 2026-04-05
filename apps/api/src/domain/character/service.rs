@@ -2,8 +2,8 @@ use uuid::Uuid;
 
 use super::error::CharacterError;
 use super::models::{
-    Character, CharacterRelationship, CreateCharacter, CreateRelationship, UpdateCharacter,
-    UpdateRelationship,
+    Character, CharacterRelationship, CreateCharacter, CreateRelationship, RelationshipDirection,
+    UpdateCharacter, UpdateRelationship,
 };
 use super::ports::{CharacterRepository, CharacterService, RelationshipRepository};
 
@@ -52,8 +52,7 @@ impl<CR: CharacterRepository, RR: RelationshipRepository> CharacterServiceImpl<C
         id: Uuid,
         update: &UpdateCharacter,
     ) -> Result<Character, CharacterError> {
-        let _ = self
-            .char_repo
+        self.char_repo
             .find_by_id(id)
             .await?
             .ok_or(CharacterError::NotFound)?;
@@ -61,8 +60,7 @@ impl<CR: CharacterRepository, RR: RelationshipRepository> CharacterServiceImpl<C
     }
 
     pub async fn delete_character(&self, id: Uuid) -> Result<(), CharacterError> {
-        let _ = self
-            .char_repo
+        self.char_repo
             .find_by_id(id)
             .await?
             .ok_or(CharacterError::NotFound)?;
@@ -85,34 +83,25 @@ impl<CR: CharacterRepository, RR: RelationshipRepository> CharacterServiceImpl<C
             (input.character_b_id, input.character_a_id)
         };
 
-        // Verify both characters exist.
-        let _ = self
-            .char_repo
+        self.char_repo
             .find_by_id(a)
             .await?
             .ok_or(CharacterError::NotFound)?;
-        let _ = self
-            .char_repo
+        self.char_repo
             .find_by_id(b)
             .await?
             .ok_or(CharacterError::NotFound)?;
 
-        // Check for existing relationship.
         let exists = self.rel_repo.exists(a, b).await?;
         if exists {
             return Err(CharacterError::RelationshipExists);
         }
 
-        // Determine if direction needs to be flipped when IDs are swapped.
+        // Flip direction when IDs are swapped.
         let direction = if input.character_a_id > input.character_b_id {
-            // IDs were swapped, so flip direction if it's directional.
             match &input.direction {
-                super::models::RelationshipDirection::AToB => {
-                    super::models::RelationshipDirection::BToA
-                }
-                super::models::RelationshipDirection::BToA => {
-                    super::models::RelationshipDirection::AToB
-                }
+                RelationshipDirection::AToB => RelationshipDirection::BToA,
+                RelationshipDirection::BToA => RelationshipDirection::AToB,
                 other => other.clone(),
             }
         } else {
@@ -152,8 +141,7 @@ impl<CR: CharacterRepository, RR: RelationshipRepository> CharacterServiceImpl<C
         id: Uuid,
         update: &UpdateRelationship,
     ) -> Result<CharacterRelationship, CharacterError> {
-        let _ = self
-            .rel_repo
+        self.rel_repo
             .find_by_id(id)
             .await?
             .ok_or(CharacterError::RelationshipNotFound)?;
@@ -161,8 +149,7 @@ impl<CR: CharacterRepository, RR: RelationshipRepository> CharacterServiceImpl<C
     }
 
     pub async fn delete_relationship(&self, id: Uuid) -> Result<(), CharacterError> {
-        let _ = self
-            .rel_repo
+        self.rel_repo
             .find_by_id(id)
             .await?
             .ok_or(CharacterError::RelationshipNotFound)?;

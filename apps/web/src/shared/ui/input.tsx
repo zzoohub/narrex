@@ -1,8 +1,6 @@
 import { splitProps } from 'solid-js'
 import type { JSX } from 'solid-js'
 
-/* ── TextInput ───────────────────────────────────────────────────────── */
-
 interface TextInputProps extends JSX.InputHTMLAttributes<HTMLInputElement> {
   label?: string
 }
@@ -32,8 +30,6 @@ export function TextInput(allProps: TextInputProps) {
     </label>
   )
 }
-
-/* ── TextArea ────────────────────────────────────────────────────────── */
 
 interface TextAreaProps extends JSX.TextareaHTMLAttributes<HTMLTextAreaElement> {
   label?: string

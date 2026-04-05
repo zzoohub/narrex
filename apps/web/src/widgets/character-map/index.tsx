@@ -408,18 +408,16 @@ function GraphView(props: {
     return [
       {
         label: props.t('characters.edit') || 'Edit Character',
-        icon: <IconPen size={14} />,
+        icon: () => <IconPen size={14} />,
         onClick: () => props.onSelect(charId),
       },
       {
         label: props.t('characters.createRelationship') || 'Create Relationship',
-        icon: <IconPlus size={14} />,
+        icon: () => <IconPlus size={14} />,
         onClick: () => {
-          // Start relationship creation mode — show popover centered on character
           const pos = nodePositions().get(charId)
           if (!pos) return
           const svgRect = svgRef.getBoundingClientRect()
-          // Open popover to pick target character
           setPopover({
             x: pos.x + svgRect.left,
             y: pos.y + svgRect.top,
@@ -427,14 +425,14 @@ function GraphView(props: {
             visualType: 'solid',
             editingRelId: null,
             characterAId: charId,
-            characterBId: '', // user must select
+            characterBId: '',
           })
         },
       },
       Separator,
       {
         label: props.t('characters.deleteCharacter'),
-        icon: <IconTrash size={14} />,
+        icon: () => <IconTrash size={14} />,
         danger: true,
         onClick: () => ws.removeCharacter(charId),
       },
@@ -445,7 +443,7 @@ function GraphView(props: {
     return [
       {
         label: props.t('characters.editRelationship') || 'Edit Relationship',
-        icon: <IconPen size={14} />,
+        icon: () => <IconPen size={14} />,
         onClick: () => {
           const rel = ws.state.relationships.find((r) => r.id === relId)
           if (!rel) return
@@ -467,7 +465,7 @@ function GraphView(props: {
       Separator,
       {
         label: props.t('characters.deleteRelationship') || 'Delete Relationship',
-        icon: <IconTrash size={14} />,
+        icon: () => <IconTrash size={14} />,
         danger: true,
         onClick: () => ws.removeRelationship(relId),
       },
@@ -1070,7 +1068,7 @@ function CharacterCard(props: {
       <Dialog
         open={showDeleteDialog()}
         onClose={() => setShowDeleteDialog(false)}
-        title={`${props.t('characters.deleteCharacter')}`}
+        title={props.t('characters.deleteCharacter')}
         description={`${props.t('characters.title')} '${props.character.name}' ${props.t('characters.deleteConfirmSuffix') || "을(를) 삭제하시겠습니까?"}`}
         confirmLabel={props.t('common.delete')}
         confirmVariant="danger"

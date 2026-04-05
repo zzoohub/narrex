@@ -7,6 +7,8 @@ use uuid::Uuid;
 use serde::{Deserialize, Deserializer};
 
 use crate::domain::character::models::{Character, CharacterRelationship};
+use crate::domain::project::models::Project;
+use crate::domain::timeline::models::Scene;
 
 /// Deserializes a value that might be `null` into `T::default()`.
 /// Handles both missing fields (via `#[serde(default)]`) and explicit `null`.
@@ -17,8 +19,6 @@ where
 {
     Option::<T>::deserialize(deserializer).map(|o| o.unwrap_or_default())
 }
-use crate::domain::project::models::Project;
-use crate::domain::timeline::models::Scene;
 
 // ---------------------------------------------------------------------------
 // DraftSource

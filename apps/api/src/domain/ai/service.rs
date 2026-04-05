@@ -1,5 +1,6 @@
 use std::convert::Infallible;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::time::Instant;
 
 use futures::Stream;
@@ -36,7 +37,7 @@ pub struct AiServiceImpl<
     log_repo: GLR,
     context_repo: CAR,
     scene_repo: SR,
-    llm: std::sync::Arc<dyn LlmProvider>,
+    llm: Arc<dyn LlmProvider>,
 }
 
 impl<DR, SSR, GLR, CAR, SR> AiServiceImpl<DR, SSR, GLR, CAR, SR>
@@ -53,7 +54,7 @@ where
         log_repo: GLR,
         context_repo: CAR,
         scene_repo: SR,
-        llm: std::sync::Arc<dyn LlmProvider>,
+        llm: Arc<dyn LlmProvider>,
     ) -> Self {
         Self {
             draft_repo,
@@ -96,9 +97,7 @@ where
 
         let draft_repo = self.draft_repo.clone();
         let scene_repo = self.scene_repo.clone();
-        let _summary_repo = self.summary_repo.clone();
         let log_repo = self.log_repo.clone();
-        let _llm = self.llm.clone();
         let log_repo_for_quota = self.log_repo.clone();
         let start = Instant::now();
 

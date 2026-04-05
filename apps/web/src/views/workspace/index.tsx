@@ -81,20 +81,10 @@ function WorkspaceLayout() {
   const [isMobile, setIsMobile] = createSignal(false)
 
   // Auto-open right panel when scene selected
-  const handleSceneSelected = () => {
-    if (ws.selectedSceneId() !== null) {
-      setRightOpen(true)
-    }
-  }
-
-  // Track selectedSceneId changes to auto-open right panel
   onMount(() => {
-    // Check on mount
-    handleSceneSelected()
+    if (ws.selectedSceneId() !== null) setRightOpen(true)
   })
 
-  // Use an effect-like approach by checking in an interval — SolidJS
-  // createEffect would be more idiomatic but we keep it simple
   if (typeof window !== 'undefined') {
     let prevSelectedId: string | null = null
     const selectionPoller = setInterval(() => {

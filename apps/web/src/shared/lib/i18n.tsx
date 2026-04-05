@@ -1,8 +1,4 @@
-import {
-  createContext,
-  createSignal,
-  useContext,
-} from 'solid-js'
+import { createContext, createSignal, useContext } from 'solid-js'
 import type { Accessor, ParentComponent } from 'solid-js'
 import type { Locale } from '@/shared/types'
 

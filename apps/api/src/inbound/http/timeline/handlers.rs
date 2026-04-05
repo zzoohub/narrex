@@ -173,7 +173,7 @@ pub async fn create_connection(
 
     let input = body
         .try_into()
-        .map_err(|e: String| ApiError::UnprocessableEntity(e))?;
+        .map_err(ApiError::UnprocessableEntity)?;
 
     let connection = state
         .timeline_service()

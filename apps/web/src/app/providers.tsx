@@ -5,7 +5,6 @@ import { useTheme } from '@/shared/stores/theme'
 import { initAuth, useAuth } from '@/shared/stores/auth'
 import type { Locale } from '@/shared/types'
 
-/** Syncs i18n locale from the authenticated user's languagePreference. */
 const LocaleSync: Component = () => {
   const { setLocale } = useI18n()
   const { user } = useAuth()

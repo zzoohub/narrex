@@ -6,8 +6,6 @@ import type { SceneConnection } from '@/entities/connection'
 import type { Workspace } from '@/entities/project/api'
 import type { Locale } from '@/shared/types'
 
-// ---- Constants ----------------------------------------------------------------
-
 export const DEMO_PROJECT_ID = 'demo-project'
 
 const TRACK_PRESENT = 'demo-track-present'
@@ -33,8 +31,6 @@ const REL_IDS = [
 const CONN_IDS = ['demo-conn-1', 'demo-conn-2'] as const
 
 const NOW = '2026-01-01T00:00:00.000Z'
-
-// ---- Content ----------------------------------------------------------------
 
 const SCENE1_CONTENT_KO = `시외버스에서 내리자 바다 냄새가 먼저 왔다. 소금기와 비릿함이 섞인, 해운리만의 냄새.
 
@@ -95,8 +91,6 @@ Kang Doyoon. Sharper jaw, broader shoulders, rougher hands than seven years ago.
 "I got the renovation request. From Grandma Youngsuk, before she passed." A brief pause. "I didn't know you'd be here."
 
 The person she'd spent seven years trying not to think about would be here every day for two weeks. There was no way she'd be fine.`
-
-// ---- Locale data ----------------------------------------------------------------
 
 interface LocaleData {
   title: string
@@ -199,8 +193,6 @@ const EN: LocaleData = {
 
 const LOCALE_DATA: Record<Locale, LocaleData> = { ko: KO, en: EN }
 
-// ---- Scene-to-character mapping (same for both locales) -----------------------
-
 const SCENE_CHARS: string[][] = [
   [CHAR_HAYOON],
   [CHAR_HAYOON, CHAR_DOYOON],
@@ -221,8 +213,6 @@ const SCENE_TRACKS = [
 
 const SCENE_POSITIONS = [0, 1, 2, 3, 4, 5, 1, 3, 4]
 const SCENE_DURATIONS = [1, 1, 1, 1, 1, 1.5, 1, 1, 1]
-
-// ---- Builders ----------------------------------------------------------------
 
 export function buildDemoWorkspace(locale: Locale): Workspace {
   const d = LOCALE_DATA[locale]
@@ -246,18 +236,21 @@ export function buildDemoWorkspace(locale: Locale): Workspace {
     { id: TRACK_PAST, projectId: DEMO_PROJECT_ID, position: 2, label: d.trackLabels[1], createdAt: NOW, updatedAt: NOW },
   ]
 
+  const SCENE_STATUSES: Scene['status'][] = ['edited', 'ai_draft', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty']
+  const SCENE_CONTENTS = [d.scene1Content, d.scene2Content, null, null, null, null, null, null, null]
+
   const scenes: Scene[] = d.scenes.map((s, i) => ({
     id: SCENE_IDS[i]!,
     trackId: SCENE_TRACKS[i]!,
     projectId: DEMO_PROJECT_ID,
     startPosition: SCENE_POSITIONS[i]!,
     duration: SCENE_DURATIONS[i]!,
-    status: i === 0 ? 'edited' as const : i === 1 ? 'ai_draft' as const : 'empty' as const,
+    status: SCENE_STATUSES[i]!,
     title: s.title,
     plotSummary: s.plotSummary,
     location: s.location,
     moodTags: s.moodTags,
-    content: i === 0 ? d.scene1Content : i === 1 ? d.scene2Content : null,
+    content: SCENE_CONTENTS[i] ?? null,
     characterIds: SCENE_CHARS[i]!,
     createdAt: NOW,
     updatedAt: NOW,

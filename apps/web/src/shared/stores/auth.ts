@@ -1,8 +1,6 @@
 import { createSignal } from 'solid-js'
 import { setAccessToken, getAccessToken, BASE_URL, post, patch, del, ApiError } from '@/shared/api/client'
 
-// ---- Types ------------------------------------------------------------------
-
 export interface AuthUser {
   id: string
   displayName: string | null
@@ -14,13 +12,9 @@ export interface AuthUser {
 
 type AuthState = 'loading' | 'authenticated' | 'unauthenticated'
 
-// ---- Signals ----------------------------------------------------------------
-
 const [authState, setAuthState] = createSignal<AuthState>('loading')
 const [user, setUser] = createSignal<AuthUser | null>(null)
-const [isGuest, setIsGuest] = createSignal(true) // fail-closed: assume guest until proven authenticated
-
-// ---- API calls --------------------------------------------------------------
+const [isGuest, setIsGuest] = createSignal(true)
 
 async function fetchMe(): Promise<AuthUser | null> {
   const token = getAccessToken()
@@ -52,10 +46,7 @@ async function refreshToken(): Promise<string | null> {
   }
 }
 
-// ---- Actions ----------------------------------------------------------------
-
 export async function initAuth(): Promise<void> {
-  // Try in-memory token first (e.g. after refresh within the same session).
   if (getAccessToken()) {
     const me = await fetchMe()
     if (me) {
@@ -66,7 +57,6 @@ export async function initAuth(): Promise<void> {
     }
   }
 
-  // Acquire token via httpOnly refresh cookie (no localStorage).
   const newToken = await refreshToken()
   if (newToken) {
     setAccessToken(newToken)
@@ -80,11 +70,9 @@ export async function initAuth(): Promise<void> {
   }
 
   setAuthState('unauthenticated')
-  // isGuest already defaults to true
 }
 
 export function loginWithGoogle(): void {
-  // Redirect to API's Google OAuth endpoint
   window.location.href = `${BASE_URL}/v1/auth/google`
 }
 
@@ -112,7 +100,7 @@ export async function logout(): Promise<void> {
   try {
     await post('/v1/auth/logout')
   } catch {
-    // ignore — clear local state regardless
+    // best-effort
   }
   setAccessToken(null)
   setUser(null)
@@ -159,8 +147,6 @@ export async function uploadAvatar(file: File): Promise<AuthUser> {
   setUser(data.data)
   return data.data
 }
-
-// ---- Hooks ------------------------------------------------------------------
 
 export function useAuth() {
   return {

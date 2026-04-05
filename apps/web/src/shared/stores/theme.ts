@@ -24,7 +24,6 @@ const [preference, setPreference] = createSignal<ThemePreference>(getInitialPref
 const [resolvedTheme, setResolvedTheme] = createSignal<ResolvedTheme>(resolveTheme(getInitialPreference()))
 
 export function useTheme() {
-  // Watch system preference changes
   createEffect(() => {
     const pref = preference()
     setResolvedTheme(resolveTheme(pref))
@@ -37,7 +36,6 @@ export function useTheme() {
     }
   })
 
-  // Apply to DOM
   createEffect(() => {
     const t = resolvedTheme()
     if (typeof document === 'undefined') return

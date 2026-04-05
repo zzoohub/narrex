@@ -136,7 +136,7 @@ pub async fn create_relationship(
 
     let input = body
         .try_into()
-        .map_err(|e: String| ApiError::UnprocessableEntity(e))?;
+        .map_err(ApiError::UnprocessableEntity)?;
 
     let relationship = state
         .character_service()
@@ -160,7 +160,7 @@ pub async fn update_relationship(
 
     let update = body
         .try_into()
-        .map_err(|e: String| ApiError::UnprocessableEntity(e))?;
+        .map_err(ApiError::UnprocessableEntity)?;
 
     let relationship = state
         .character_service()

@@ -2,8 +2,6 @@ import { createSignal, onCleanup, For, Show } from 'solid-js'
 import type { JSX } from 'solid-js'
 import { Portal } from 'solid-js/web'
 
-/* ── Types ──────────────────────────────────────────────────────────── */
-
 export interface ContextMenuItem {
   label: string
   icon?: JSX.Element | (() => JSX.Element)
@@ -19,10 +17,7 @@ export interface ContextMenuProps {
   svg?: boolean
 }
 
-/** Insert between items to render a horizontal divider line. */
 export const Separator = Symbol('ContextMenuSeparator')
-
-/* ── Component ──────────────────────────────────────────────────────── */
 
 export function ContextMenu(props: ContextMenuProps) {
   const [open, setOpen] = createSignal(false)
@@ -31,15 +26,11 @@ export function ContextMenu(props: ContextMenuProps) {
 
   let menuRef: HTMLDivElement | undefined
 
-  /* ── helpers ─────────────────────────────────────────────────────── */
-
-  /** Returns only actionable (non-separator) items. */
   const actionableItems = () =>
     props.items.filter((i): i is ContextMenuItem => i !== Separator)
 
   const actionableCount = () => actionableItems().length
 
-  /** Map from actionable index to the DOM element. */
   const getItemEl = (idx: number): HTMLButtonElement | undefined =>
     menuRef?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')[idx]
 
@@ -47,8 +38,6 @@ export function ContextMenu(props: ContextMenuProps) {
     setOpen(false)
     setFocusIndex(-1)
   }
-
-  /* ── open handler ───────────────────────────────────────────────── */
 
   const handleContextMenu: JSX.EventHandler<HTMLDivElement | SVGGElement, MouseEvent> = (e) => {
     e.preventDefault()
@@ -59,8 +48,6 @@ export function ContextMenu(props: ContextMenuProps) {
     setOpen(true)
     setFocusIndex(-1)
   }
-
-  /* ── global listeners (added once, cleaned up) ──────────────────── */
 
   const handleOutsideClick = (e: MouseEvent) => {
     if (!open()) return
@@ -89,8 +76,6 @@ export function ContextMenu(props: ContextMenuProps) {
     })
   }
 
-  /* ── keyboard nav inside menu ───────────────────────────────────── */
-
   const handleMenuKeyDown = (e: KeyboardEvent) => {
     const count = actionableCount()
     if (count === 0) return
@@ -115,10 +100,8 @@ export function ContextMenu(props: ContextMenuProps) {
     }
   }
 
-  /* ── render ─────────────────────────────────────────────────────── */
-
-  // Track actionable index while iterating all items (including separators)
-  let actionIdx: number
+  const actionIndexOf = (flatIndex: number): number =>
+    props.items.slice(0, flatIndex).filter((i) => i !== Separator).length
 
   return (
     <>
@@ -151,12 +134,8 @@ export function ContextMenu(props: ContextMenuProps) {
               'origin-bottom-left animate-scale-in',
             ].join(' ')}
           >
-            {(() => {
-              actionIdx = 0
-              return null
-            })()}
             <For each={props.items}>
-              {(item) => {
+              {(item, flatIndex) => {
                 if (item === Separator) {
                   return (
                     <div
@@ -166,7 +145,7 @@ export function ContextMenu(props: ContextMenuProps) {
                   )
                 }
 
-                const idx = actionIdx++
+                const idx = actionIndexOf(flatIndex())
                 const menuItem = item as ContextMenuItem
 
                 return (
@@ -181,9 +160,8 @@ export function ContextMenu(props: ContextMenuProps) {
                       menuItem.danger
                         ? 'text-error hover:bg-error-muted focus:bg-error-muted'
                         : 'text-fg hover:bg-surface focus:bg-surface',
-                      menuItem.disabled
-                        ? 'opacity-40 cursor-not-allowed pointer-events-none'
-                        : '',
+                      menuItem.disabled &&
+                        'opacity-40 cursor-not-allowed pointer-events-none',
                     ]
                       .filter(Boolean)
                       .join(' ')}
@@ -193,9 +171,7 @@ export function ContextMenu(props: ContextMenuProps) {
                         close()
                       }
                     }}
-                    onMouseEnter={() => {
-                      setFocusIndex(idx)
-                    }}
+                    onMouseEnter={() => setFocusIndex(idx)}
                   >
                     <Show when={menuItem.icon}>
                       <span class="flex-shrink-0 opacity-70">

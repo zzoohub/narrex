@@ -18,7 +18,6 @@ use narrex_llm::{CfWorkersAiProvider, GeminiFlashProvider, LlmGateway};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // 0. Load .env file (silently ignore if not present).
     dotenvy::dotenv().ok();
 
     // 1. Init tracing.

@@ -1,10 +1,4 @@
-// ---------------------------------------------------------------------------
-// Base HTTP client — domain-free
-// ---------------------------------------------------------------------------
-
 import type { ProblemDetail } from './types'
-
-// ---- Configuration --------------------------------------------------------
 
 const BASE_URL =
   typeof import.meta !== 'undefined' && import.meta.env?.['VITE_API_BASE_URL']
@@ -12,8 +6,6 @@ const BASE_URL =
     : 'http://localhost:8080'
 
 export { BASE_URL }
-
-// ---- Error types ----------------------------------------------------------
 
 export class ApiError extends Error {
   readonly status: number
@@ -43,8 +35,6 @@ export class ApiError extends Error {
   }
 }
 
-// ---- Token management -----------------------------------------------------
-
 let accessToken: string | null = null
 
 export function setAccessToken(token: string | null): void {
@@ -54,8 +44,6 @@ export function setAccessToken(token: string | null): void {
 export function getAccessToken(): string | null {
   return accessToken
 }
-
-// ---- Core fetch helpers ---------------------------------------------------
 
 function buildUrl(path: string, query?: Record<string, string | number | undefined>): string {
   const url = new URL(path, BASE_URL)
@@ -79,7 +67,13 @@ function buildHeaders(): Record<string, string> {
   return headers
 }
 
-async function request<T>(method: string, path: string, opts?: { body?: unknown; query?: Record<string, string | number | undefined>; signal?: AbortSignal }): Promise<T> {
+interface RequestOpts {
+  body?: unknown | undefined
+  query?: Record<string, string | number | undefined> | undefined
+  signal?: AbortSignal | undefined
+}
+
+async function request<T>(method: string, path: string, opts?: RequestOpts): Promise<T> {
   const url = buildUrl(path, opts?.query)
   const headers = buildHeaders()
 
@@ -97,12 +91,10 @@ async function request<T>(method: string, path: string, opts?: { body?: unknown;
 
   const res = await fetch(url, init)
 
-  // 204 No Content
   if (res.status === 204) {
     return undefined as T
   }
 
-  // Parse body
   const contentType = res.headers.get('content-type') ?? ''
   const isJson =
     contentType.includes('application/json') ||
@@ -127,28 +119,18 @@ async function request<T>(method: string, path: string, opts?: { body?: unknown;
   return undefined as T
 }
 
-// Shorthand helpers
 export function get<T>(path: string, query?: Record<string, string | number | undefined>, signal?: AbortSignal): Promise<T> {
-  const opts: { query?: Record<string, string | number | undefined>; signal?: AbortSignal } = {}
-  if (query) opts.query = query
-  if (signal) opts.signal = signal
-  return request<T>('GET', path, opts)
+  return request<T>('GET', path, { query, signal })
 }
 
 export function post<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
-  const opts: { body?: unknown; signal?: AbortSignal } = { body }
-  if (signal) opts.signal = signal
-  return request<T>('POST', path, opts)
+  return request<T>('POST', path, { body, signal })
 }
 
 export function patch<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
-  const opts: { body: unknown; signal?: AbortSignal } = { body }
-  if (signal) opts.signal = signal
-  return request<T>('PATCH', path, opts)
+  return request<T>('PATCH', path, { body, signal })
 }
 
 export function del<T = void>(path: string, signal?: AbortSignal): Promise<T> {
-  const opts: { signal?: AbortSignal } = {}
-  if (signal) opts.signal = signal
-  return request<T>('DELETE', path, opts)
+  return request<T>('DELETE', path, { signal })
 }

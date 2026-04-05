@@ -68,8 +68,7 @@ where
         id: Uuid,
         update: &UpdateTrack,
     ) -> Result<Track, TimelineError> {
-        let _ = self
-            .track_repo
+        self.track_repo
             .find_by_id(id)
             .await?
             .ok_or(TimelineError::TrackNotFound)?;
@@ -77,8 +76,7 @@ where
     }
 
     pub async fn delete_track(&self, id: Uuid) -> Result<(), TimelineError> {
-        let _ = self
-            .track_repo
+        self.track_repo
             .find_by_id(id)
             .await?
             .ok_or(TimelineError::TrackNotFound)?;
@@ -100,9 +98,7 @@ where
         project_id: Uuid,
         input: &CreateScene,
     ) -> Result<Scene, TimelineError> {
-        // Verify the track exists.
-        let _ = self
-            .track_repo
+        self.track_repo
             .find_by_id(input.track_id)
             .await?
             .ok_or(TimelineError::TrackNotFound)?;
@@ -147,16 +143,13 @@ where
         id: Uuid,
         update: &UpdateScene,
     ) -> Result<Scene, TimelineError> {
-        let _ = self
-            .scene_repo
+        self.scene_repo
             .find_by_id(id)
             .await?
             .ok_or(TimelineError::SceneNotFound)?;
 
-        // If changing track, verify the new track exists.
         if let Some(new_track_id) = update.track_id {
-            let _ = self
-                .track_repo
+            self.track_repo
                 .find_by_id(new_track_id)
                 .await?
                 .ok_or(TimelineError::TrackNotFound)?;
@@ -175,8 +168,7 @@ where
     }
 
     pub async fn delete_scene(&self, id: Uuid) -> Result<(), TimelineError> {
-        let _ = self
-            .scene_repo
+        self.scene_repo
             .find_by_id(id)
             .await?
             .ok_or(TimelineError::SceneNotFound)?;
@@ -192,19 +184,15 @@ where
         project_id: Uuid,
         input: &CreateConnection,
     ) -> Result<SceneConnection, TimelineError> {
-        // Verify both scenes exist.
-        let _ = self
-            .scene_repo
+        self.scene_repo
             .find_by_id(input.source_scene_id)
             .await?
             .ok_or(TimelineError::SceneNotFound)?;
-        let _ = self
-            .scene_repo
+        self.scene_repo
             .find_by_id(input.target_scene_id)
             .await?
             .ok_or(TimelineError::SceneNotFound)?;
 
-        // Check for existing connection.
         let exists = self
             .connection_repo
             .exists(input.source_scene_id, input.target_scene_id)

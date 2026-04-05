@@ -3,8 +3,6 @@ import { Portal } from 'solid-js/web'
 import { useI18n } from '@/shared/lib/i18n'
 import { Button } from './button'
 
-/* ── Types ──────────────────────────────────────────────────────────── */
-
 export interface DialogProps {
   open: boolean
   onClose: () => void
@@ -17,15 +15,11 @@ export interface DialogProps {
   cancelLabel?: string
 }
 
-/* ── Component ──────────────────────────────────────────────────────── */
-
 export function Dialog(props: DialogProps) {
   const { t } = useI18n()
 
   let dialogRef: HTMLDivElement | undefined
   let previousFocus: HTMLElement | null = null
-
-  /* ── focus trap ─────────────────────────────────────────────────── */
 
   const getFocusableEls = (): HTMLElement[] => {
     if (!dialogRef) return []
@@ -69,20 +63,14 @@ export function Dialog(props: DialogProps) {
     trapFocus(e)
   }
 
-  /* ── side effects (open / close) ────────────────────────────────── */
-
   if (typeof document !== 'undefined') {
     createEffect(() => {
       if (props.open) {
         previousFocus = document.activeElement as HTMLElement | null
 
-        // Focus the first button after the portal mounts
         requestAnimationFrame(() => {
           const focusable = getFocusableEls()
-          // Focus cancel button (last) by default so confirm isn't accidentally triggered
-          if (focusable.length > 0) {
-            focusable[focusable.length - 1]!.focus()
-          }
+          focusable.at(-1)?.focus()
         })
 
         document.addEventListener('keydown', handleKeyDown, true)
@@ -97,19 +85,15 @@ export function Dialog(props: DialogProps) {
     })
   }
 
-  /* ── render ─────────────────────────────────────────────────────── */
-
   return (
     <Show when={props.open}>
       <Portal>
-        {/* Backdrop */}
         <div
           class="fixed inset-0 z-[9998] bg-black/60 backdrop-blur-sm animate-fade-in"
           onClick={props.onClose}
           aria-hidden="true"
         />
 
-        {/* Dialog */}
         <div
           ref={dialogRef}
           role="dialog"
@@ -123,7 +107,6 @@ export function Dialog(props: DialogProps) {
             'animate-scale-in origin-center',
           ].join(' ')}
         >
-          {/* Title */}
           <h2
             id="dialog-title"
             class="text-lg font-semibold text-fg leading-tight"
@@ -131,7 +114,6 @@ export function Dialog(props: DialogProps) {
             {props.title}
           </h2>
 
-          {/* Description */}
           <Show when={props.description}>
             <p
               id="dialog-desc"
@@ -141,13 +123,12 @@ export function Dialog(props: DialogProps) {
             </p>
           </Show>
 
-          {/* Actions */}
           <div class="mt-6 flex items-center justify-end gap-3">
             <Button variant="ghost" onClick={props.onClose}>
               {props.cancelLabel ?? t('common.cancel')}
             </Button>
             <Button
-              variant={props.confirmVariant === 'danger' ? 'danger' : 'primary'}
+              variant={props.confirmVariant ?? 'primary'}
               disabled={props.confirmDisabled}
               onClick={() => {
                 props.onConfirm()

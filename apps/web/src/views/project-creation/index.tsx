@@ -15,7 +15,6 @@ import type { SSEClarificationEvent, SSECompletedEvent, SSEErrorEvent, SSEProgre
 
 type CreationState = 'input' | 'clarify' | 'processing' | 'error'
 
-/** Sample story prompts — popular web novel genres for quick testing. */
 const samplePrompts = [
   {
     label: {
@@ -117,7 +116,6 @@ const phaseHeadingKeys = [
   'creation.processing.phase.timeline',
 ] as const
 
-/** Asymptotic progress: fast start, slows approaching max. */
 export function calcProgress(elapsedSecs: number, completed: boolean, max = 95, tau = 15): number {
   if (completed) return 100
   return max * (1 - Math.exp(-elapsedSecs / tau))
@@ -380,10 +378,6 @@ export function ProjectCreationView() {
     }
   }
 
-  function handleClarifySubmit() {
-    handleSubmit()
-  }
-
   function updateClarificationAnswer(field: string, value: string) {
     setClarificationAnswers((prev) => ({ ...prev, [field]: value }))
   }
@@ -567,7 +561,7 @@ export function ProjectCreationView() {
                   variant="primary"
                   size="lg"
                   icon={() => <IconSparkles size={18} />}
-                  onClick={handleClarifySubmit}
+                  onClick={handleSubmit}
                 >
                   {t('creation.submit')}
                 </Button>

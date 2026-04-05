@@ -1,13 +1,4 @@
-// ---------------------------------------------------------------------------
-// Generic SSE streaming utilities — domain-free
-// ---------------------------------------------------------------------------
-// Uses fetch + ReadableStream (not EventSource) per design doc.
-// Returns an async iterable of parsed SSE events.
-// ---------------------------------------------------------------------------
-
 import { ApiError, getAccessToken, BASE_URL } from './client'
-
-// ---- Types ----------------------------------------------------------------
 
 export type SSEEventType =
   | 'token'
@@ -27,8 +18,6 @@ export interface SSEStream<T = unknown> {
   /** Abort the underlying fetch request. */
   abort: () => void
 }
-
-// ---- SSE event payload shapes ---------------------------------------------
 
 export interface SSETokenEvent {
   text: string
@@ -51,17 +40,6 @@ export interface SSEClarificationEvent {
   questions: Array<{ question: string; field: string }>
 }
 
-// ---- SSE parser -----------------------------------------------------------
-
-/**
- * Parse an SSE byte stream into structured events.
- *
- * Handles the SSE protocol:
- * - Lines starting with `event:` set the event type
- * - Lines starting with `data:` append to the data buffer
- * - Empty lines dispatch the buffered event
- * - Lines starting with `:` are comments (ignored)
- */
 async function* parseSSE<T = unknown>(
   reader: ReadableStreamDefaultReader<Uint8Array>,
 ): AsyncGenerator<SSEEvent<T>> {
@@ -81,7 +59,6 @@ async function* parseSSE<T = unknown>(
 
     for (const line of lines) {
       if (line === '') {
-        // Dispatch event
         if (dataLines.length > 0) {
           const rawData = dataLines.join('\n')
           let parsed: T
@@ -92,7 +69,6 @@ async function* parseSSE<T = unknown>(
           }
           yield { event: eventType, data: parsed }
         }
-        // Reset for next event
         eventType = 'token'
         dataLines = []
       } else if (line.startsWith('event:')) {
@@ -100,7 +76,6 @@ async function* parseSSE<T = unknown>(
       } else if (line.startsWith('data:')) {
         dataLines.push(line.slice(5).trimStart())
       }
-      // Lines starting with ':' are comments — skip
     }
   }
 
@@ -116,8 +91,6 @@ async function* parseSSE<T = unknown>(
     yield { event: eventType, data: parsed }
   }
 }
-
-// ---- Core SSE fetch -------------------------------------------------------
 
 export function createSSEStream<T = unknown>(
   path: string,
