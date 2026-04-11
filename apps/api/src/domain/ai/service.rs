@@ -80,11 +80,9 @@ where
             .assemble_context(project_id, scene_id)
             .await?;
 
-        let system = PromptBuilder::system_prompt(&ctx, locale);
-        let user = PromptBuilder::user_prompt(&ctx, locale);
         let req = GenerateRequest {
-            system_prompt: system,
-            user_prompt: user,
+            system_prompt: PromptBuilder::system_prompt(&ctx, locale),
+            user_prompt: PromptBuilder::user_prompt(&ctx, locale),
             max_tokens: Some(16384),
             temperature: Some(0.8),
         };
@@ -95,6 +93,75 @@ where
             .await
             .map_err(|e| AiError::GenerationFailed(e.to_string()))?;
 
+        Ok(self.build_generation_stream(
+            llm_stream,
+            user_id,
+            project_id,
+            scene_id,
+            DraftSource::AiGeneration,
+            GenerationType::Scene,
+            None,
+            true,
+        ))
+    }
+
+    /// Edit a scene draft based on a direction, returning an SSE-compatible stream.
+    pub async fn edit_scene_draft(
+        &self,
+        user_id: Uuid,
+        project_id: Uuid,
+        scene_id: Uuid,
+        edit_req: &EditDraftRequest,
+        locale: &str,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<SseEvent, Infallible>> + Send>>, AiError> {
+        self.check_quota(user_id).await?;
+        let has_selection = edit_req.selected_text.is_some();
+
+        let req = GenerateRequest {
+            system_prompt: PromptBuilder::edit_system_prompt(locale, has_selection),
+            user_prompt: PromptBuilder::edit_user_prompt(
+                &edit_req.content,
+                edit_req.selected_text.as_deref(),
+                &edit_req.direction,
+                locale,
+            ),
+            max_tokens: Some(16384),
+            temperature: Some(0.7),
+        };
+
+        let llm_stream = self
+            .llm
+            .generate_stream(req)
+            .await
+            .map_err(|e| AiError::GenerationFailed(e.to_string()))?;
+
+        Ok(self.build_generation_stream(
+            llm_stream,
+            user_id,
+            project_id,
+            scene_id,
+            DraftSource::AiEdit,
+            GenerationType::Edit,
+            Some(edit_req.direction.clone()),
+            false,
+        ))
+    }
+
+    /// Build the SSE stream that processes LLM chunks, saves drafts, logs, and updates scene.
+    #[allow(clippy::too_many_arguments)]
+    fn build_generation_stream(
+        &self,
+        llm_stream: impl Stream<Item = Result<narrex_llm::StreamChunk, narrex_llm::LlmError>>
+            + Send
+            + 'static,
+        user_id: Uuid,
+        project_id: Uuid,
+        scene_id: Uuid,
+        source: DraftSource,
+        generation_type: GenerationType,
+        edit_direction: Option<String>,
+        update_scene_on_complete: bool,
+    ) -> Pin<Box<dyn Stream<Item = Result<SseEvent, Infallible>> + Send>> {
         let draft_repo = self.draft_repo.clone();
         let scene_repo = self.scene_repo.clone();
         let log_repo = self.log_repo.clone();
@@ -136,8 +203,8 @@ where
                                     scene_id,
                                     version: next_version,
                                     content: full_text.clone(),
-                                    source: DraftSource::AiGeneration,
-                                    edit_direction: None,
+                                    source: source.clone(),
+                                    edit_direction: edit_direction.clone(),
                                     model: if final_model.is_empty() { None } else { Some(final_model.clone()) },
                                     provider: if final_provider.is_empty() { None } else { Some(final_provider.clone()) },
                                     tokens_in: Some(tokens_in as i32),
@@ -153,17 +220,19 @@ where
                                 }
                             };
 
-                            // Update scene status and content.
-                            let _ = scene_repo
-                                .update(
-                                    scene_id,
-                                    &crate::domain::timeline::models::UpdateScene {
-                                        content: Some(Some(full_text.clone())),
-                                        status: Some(crate::domain::timeline::models::SceneStatus::AiDraft),
-                                        ..Default::default()
-                                    },
-                                )
-                                .await;
+                            // Update scene status and content (only for generation, not edit).
+                            if update_scene_on_complete {
+                                let _ = scene_repo
+                                    .update(
+                                        scene_id,
+                                        &crate::domain::timeline::models::UpdateScene {
+                                            content: Some(Some(full_text.clone())),
+                                            status: Some(crate::domain::timeline::models::SceneStatus::AiDraft),
+                                            ..Default::default()
+                                        },
+                                    )
+                                    .await;
+                            }
 
                             // Log generation.
                             let elapsed = start.elapsed().as_millis() as i32;
@@ -172,7 +241,7 @@ where
                                 user_id,
                                 project_id: Some(project_id),
                                 scene_id: Some(scene_id),
-                                generation_type: GenerationType::Scene,
+                                generation_type: generation_type.clone(),
                                 status: GenerationStatus::Success,
                                 model: final_model.clone(),
                                 provider: final_provider.clone(),
@@ -185,7 +254,6 @@ where
                             };
                             let _ = log_repo.create(&log).await;
 
-                            // Fetch quota for SSE completed event.
                             let quota = Self::build_quota_info(&log_repo_for_quota, user_id).await;
                             yield Ok(SseEvent::Completed { draft, quota });
                         } else {
@@ -201,134 +269,7 @@ where
             }
         };
 
-        Ok(Box::pin(stream))
-    }
-
-    /// Edit a scene draft based on a direction, returning an SSE-compatible stream.
-    pub async fn edit_scene_draft(
-        &self,
-        user_id: Uuid,
-        project_id: Uuid,
-        scene_id: Uuid,
-        edit_req: &EditDraftRequest,
-        locale: &str,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<SseEvent, Infallible>> + Send>>, AiError> {
-        self.check_quota(user_id).await?;
-        let has_selection = edit_req.selected_text.is_some();
-        let system = PromptBuilder::edit_system_prompt(locale, has_selection);
-        let user = PromptBuilder::edit_user_prompt(
-            &edit_req.content,
-            edit_req.selected_text.as_deref(),
-            &edit_req.direction,
-            locale,
-        );
-
-        let req = GenerateRequest {
-            system_prompt: system,
-            user_prompt: user,
-            max_tokens: Some(16384),
-            temperature: Some(0.7),
-        };
-
-        let llm_stream = self
-            .llm
-            .generate_stream(req)
-            .await
-            .map_err(|e| AiError::GenerationFailed(e.to_string()))?;
-
-        let draft_repo = self.draft_repo.clone();
-        let log_repo = self.log_repo.clone();
-        let log_repo_for_quota = self.log_repo.clone();
-        let direction = edit_req.direction.clone();
-        let start = Instant::now();
-
-        let stream = async_stream::stream! {
-            let mut full_text = String::new();
-            let mut final_model = String::new();
-            let mut final_provider = String::new();
-            let mut tokens_in: u32 = 0;
-            let mut tokens_out: u32 = 0;
-
-            let mut llm_stream = Box::pin(llm_stream);
-            use futures::StreamExt;
-
-            while let Some(result) = llm_stream.next().await {
-                match result {
-                    Ok(chunk) => {
-                        if chunk.done {
-                            if let Some(ref usage) = chunk.usage {
-                                final_model = usage.model.clone();
-                                final_provider = usage.provider.clone();
-                                tokens_in = usage.token_count_input;
-                                tokens_out = usage.token_count_output;
-                            }
-
-                            let next_version = match draft_repo.next_version(scene_id).await {
-                                Ok(v) => v,
-                                Err(e) => {
-                                    yield Ok(SseEvent::Error { message: e.to_string() });
-                                    return;
-                                }
-                            };
-
-                            let draft = match draft_repo
-                                .create(&CreateDraftParams {
-                                    scene_id,
-                                    version: next_version,
-                                    content: full_text.clone(),
-                                    source: DraftSource::AiEdit,
-                                    edit_direction: Some(direction.clone()),
-                                    model: if final_model.is_empty() { None } else { Some(final_model.clone()) },
-                                    provider: if final_provider.is_empty() { None } else { Some(final_provider.clone()) },
-                                    tokens_in: Some(tokens_in as i32),
-                                    tokens_out: Some(tokens_out as i32),
-                                    cost: None,
-                                })
-                                .await
-                            {
-                                Ok(d) => d,
-                                Err(e) => {
-                                    yield Ok(SseEvent::Error { message: e.to_string() });
-                                    return;
-                                }
-                            };
-
-                            let elapsed = start.elapsed().as_millis() as i32;
-                            let log = GenerationLog {
-                                id: Uuid::new_v4(),
-                                user_id,
-                                project_id: Some(project_id),
-                                scene_id: Some(scene_id),
-                                generation_type: GenerationType::Edit,
-                                status: GenerationStatus::Success,
-                                model: final_model.clone(),
-                                provider: final_provider.clone(),
-                                duration_ms: elapsed,
-                                token_count_input: tokens_in as i32,
-                                token_count_output: tokens_out as i32,
-                                cost_usd: 0.0,
-                                error_message: None,
-                                created_at: chrono::Utc::now(),
-                            };
-                            let _ = log_repo.create(&log).await;
-
-                            // Fetch quota for SSE completed event.
-                            let quota = Self::build_quota_info(&log_repo_for_quota, user_id).await;
-                            yield Ok(SseEvent::Completed { draft, quota });
-                        } else {
-                            full_text.push_str(&chunk.text);
-                            yield Ok(SseEvent::Token { text: chunk.text });
-                        }
-                    }
-                    Err(e) => {
-                        yield Ok(SseEvent::Error { message: e.to_string() });
-                        return;
-                    }
-                }
-            }
-        };
-
-        Ok(Box::pin(stream))
+        Box::pin(stream)
     }
 
     /// Save a manual draft.
