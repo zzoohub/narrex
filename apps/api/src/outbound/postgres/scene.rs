@@ -7,52 +7,8 @@ use crate::domain::timeline::error::TimelineError;
 use crate::domain::timeline::models::{CreateScene, Scene, SceneDetail, SceneStatus, UpdateScene};
 use crate::domain::timeline::ports::{SceneCharacterRepository, SceneRepository};
 
+use super::rows::SceneRow;
 use super::Postgres;
-
-// ---------------------------------------------------------------------------
-// Row types
-// ---------------------------------------------------------------------------
-
-#[derive(FromRow)]
-struct SceneRow {
-    id: Uuid,
-    track_id: Uuid,
-    project_id: Uuid,
-    start_position: f64,
-    duration: f64,
-    status: String,
-    title: String,
-    plot_summary: Option<String>,
-    location: Option<String>,
-    mood_tags: Vec<String>,
-    content: Option<String>,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
-}
-
-impl SceneRow {
-    fn into_domain(self, character_ids: Vec<Uuid>) -> Scene {
-        Scene {
-            id: self.id,
-            track_id: self.track_id,
-            project_id: self.project_id,
-            start_position: self.start_position,
-            duration: self.duration,
-            status: self
-                .status
-                .parse::<SceneStatus>()
-                .unwrap_or(SceneStatus::Empty),
-            title: self.title,
-            plot_summary: self.plot_summary,
-            location: self.location,
-            mood_tags: self.mood_tags,
-            content: self.content,
-            character_ids,
-            created_at: self.created_at,
-            updated_at: self.updated_at,
-        }
-    }
-}
 
 #[derive(FromRow)]
 struct DraftRow {

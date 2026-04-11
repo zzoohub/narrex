@@ -1,47 +1,11 @@
-use chrono::{DateTime, Utc};
-use sqlx::FromRow;
 use uuid::Uuid;
 
 use crate::domain::character::error::CharacterError;
 use crate::domain::character::models::{Character, CreateCharacter, UpdateCharacter};
 use crate::domain::character::ports::CharacterRepository;
 
+use super::rows::CharacterRow;
 use super::Postgres;
-
-#[derive(FromRow)]
-struct CharacterRow {
-    id: Uuid,
-    project_id: Uuid,
-    name: String,
-    personality: Option<String>,
-    appearance: Option<String>,
-    secrets: Option<String>,
-    motivation: Option<String>,
-    profile_image_url: Option<String>,
-    graph_x: Option<f64>,
-    graph_y: Option<f64>,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
-}
-
-impl CharacterRow {
-    fn into_domain(self) -> Character {
-        Character {
-            id: self.id,
-            project_id: self.project_id,
-            name: self.name,
-            personality: self.personality,
-            appearance: self.appearance,
-            secrets: self.secrets,
-            motivation: self.motivation,
-            profile_image_url: self.profile_image_url,
-            graph_x: self.graph_x,
-            graph_y: self.graph_y,
-            created_at: self.created_at,
-            updated_at: self.updated_at,
-        }
-    }
-}
 
 #[async_trait::async_trait]
 impl CharacterRepository for Postgres {

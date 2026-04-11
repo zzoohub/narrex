@@ -1,50 +1,14 @@
-use chrono::{DateTime, Utc};
 use sqlx::FromRow;
 use uuid::Uuid;
 
 use crate::domain::character::error::CharacterError;
 use crate::domain::character::models::{
-    CharacterRelationship, CreateRelationship, RelationshipDirection, RelationshipVisual,
-    UpdateRelationship,
+    CharacterRelationship, CreateRelationship, UpdateRelationship,
 };
 use crate::domain::character::ports::RelationshipRepository;
 
+use super::rows::RelationshipRow;
 use super::Postgres;
-
-#[derive(FromRow)]
-struct RelationshipRow {
-    id: Uuid,
-    project_id: Uuid,
-    character_a_id: Uuid,
-    character_b_id: Uuid,
-    label: String,
-    visual_type: String,
-    direction: String,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
-}
-
-impl RelationshipRow {
-    fn into_domain(self) -> CharacterRelationship {
-        CharacterRelationship {
-            id: self.id,
-            project_id: self.project_id,
-            character_a_id: self.character_a_id,
-            character_b_id: self.character_b_id,
-            label: self.label,
-            visual_type: self
-                .visual_type
-                .parse::<RelationshipVisual>()
-                .unwrap_or(RelationshipVisual::Solid),
-            direction: self
-                .direction
-                .parse::<RelationshipDirection>()
-                .unwrap_or(RelationshipDirection::Bidirectional),
-            created_at: self.created_at,
-            updated_at: self.updated_at,
-        }
-    }
-}
 
 #[derive(FromRow)]
 struct ExistsRow {

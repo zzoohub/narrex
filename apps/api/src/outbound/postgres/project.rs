@@ -2,57 +2,21 @@ use chrono::{DateTime, Utc};
 use sqlx::FromRow;
 use uuid::Uuid;
 
-use crate::domain::character::models::{
-    Character, CharacterRelationship, RelationshipDirection, RelationshipVisual,
-};
+use crate::domain::character::models::{Character, CharacterRelationship};
 use crate::domain::project::error::ProjectError;
 use crate::domain::project::models::{
-    PaginatedResult, PaginationParams, PovType, Project, ProjectSummary, SourceType, UpdateProject,
+    PaginatedResult, PaginationParams, Project, ProjectSummary, SourceType, UpdateProject,
     Workspace,
 };
 use crate::domain::project::ports::ProjectRepository;
-use crate::domain::timeline::models::{ConnectionType, Scene, SceneConnection, SceneStatus, Track};
+use crate::domain::timeline::models::{ConnectionType, Scene, SceneConnection, Track};
 
+use super::rows::{CharacterRow, ProjectRow, RelationshipRow, SceneRow};
 use super::Postgres;
 
 // ---------------------------------------------------------------------------
-// Row types
+// Row types (local to this module)
 // ---------------------------------------------------------------------------
-
-#[derive(FromRow)]
-struct ProjectRow {
-    id: Uuid,
-    user_id: Uuid,
-    title: String,
-    genre: Option<String>,
-    theme: Option<String>,
-    era_location: Option<String>,
-    pov: Option<String>,
-    tone: Option<String>,
-    source_type: Option<String>,
-    source_input: Option<String>,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
-}
-
-impl ProjectRow {
-    fn into_domain(self) -> Project {
-        Project {
-            id: self.id,
-            user_id: self.user_id,
-            title: self.title,
-            genre: self.genre,
-            theme: self.theme,
-            era_location: self.era_location,
-            pov: self.pov.and_then(|s| s.parse::<PovType>().ok()),
-            tone: self.tone,
-            source_type: self.source_type.and_then(|s| s.parse::<SourceType>().ok()),
-            source_input: self.source_input,
-            created_at: self.created_at,
-            updated_at: self.updated_at,
-        }
-    }
-}
 
 #[derive(FromRow)]
 struct ProjectSummaryRow {
@@ -94,117 +58,6 @@ impl TrackRow {
             project_id: self.project_id,
             position: self.position,
             label: self.label,
-            created_at: self.created_at,
-            updated_at: self.updated_at,
-        }
-    }
-}
-
-#[derive(FromRow)]
-struct SceneRow {
-    id: Uuid,
-    track_id: Uuid,
-    project_id: Uuid,
-    start_position: f64,
-    duration: f64,
-    status: String,
-    title: String,
-    plot_summary: Option<String>,
-    location: Option<String>,
-    mood_tags: Vec<String>,
-    content: Option<String>,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
-}
-
-impl SceneRow {
-    fn into_domain(self, character_ids: Vec<Uuid>) -> Scene {
-        Scene {
-            id: self.id,
-            track_id: self.track_id,
-            project_id: self.project_id,
-            start_position: self.start_position,
-            duration: self.duration,
-            status: self
-                .status
-                .parse::<SceneStatus>()
-                .unwrap_or(SceneStatus::Empty),
-            title: self.title,
-            plot_summary: self.plot_summary,
-            location: self.location,
-            mood_tags: self.mood_tags,
-            content: self.content,
-            character_ids,
-            created_at: self.created_at,
-            updated_at: self.updated_at,
-        }
-    }
-}
-
-#[derive(FromRow)]
-struct CharacterRow {
-    id: Uuid,
-    project_id: Uuid,
-    name: String,
-    personality: Option<String>,
-    appearance: Option<String>,
-    secrets: Option<String>,
-    motivation: Option<String>,
-    profile_image_url: Option<String>,
-    graph_x: Option<f64>,
-    graph_y: Option<f64>,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
-}
-
-impl CharacterRow {
-    fn into_domain(self) -> Character {
-        Character {
-            id: self.id,
-            project_id: self.project_id,
-            name: self.name,
-            personality: self.personality,
-            appearance: self.appearance,
-            secrets: self.secrets,
-            motivation: self.motivation,
-            profile_image_url: self.profile_image_url,
-            graph_x: self.graph_x,
-            graph_y: self.graph_y,
-            created_at: self.created_at,
-            updated_at: self.updated_at,
-        }
-    }
-}
-
-#[derive(FromRow)]
-struct RelationshipRow {
-    id: Uuid,
-    project_id: Uuid,
-    character_a_id: Uuid,
-    character_b_id: Uuid,
-    label: String,
-    visual_type: String,
-    direction: String,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
-}
-
-impl RelationshipRow {
-    fn into_domain(self) -> CharacterRelationship {
-        CharacterRelationship {
-            id: self.id,
-            project_id: self.project_id,
-            character_a_id: self.character_a_id,
-            character_b_id: self.character_b_id,
-            label: self.label,
-            visual_type: self
-                .visual_type
-                .parse::<RelationshipVisual>()
-                .unwrap_or(RelationshipVisual::Solid),
-            direction: self
-                .direction
-                .parse::<RelationshipDirection>()
-                .unwrap_or(RelationshipDirection::Bidirectional),
             created_at: self.created_at,
             updated_at: self.updated_at,
         }

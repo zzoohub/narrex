@@ -22,6 +22,8 @@ impl Postgres {
     }
 }
 
+mod rows;
+
 pub mod character;
 pub mod connection;
 pub mod context;
