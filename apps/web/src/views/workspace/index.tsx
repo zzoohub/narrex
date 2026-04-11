@@ -2,6 +2,7 @@ import { createSignal, Show, onMount, onCleanup } from 'solid-js'
 import { useParams, Link } from '@tanstack/solid-router'
 import { useI18n } from '@/shared/lib/i18n'
 import { useMobile } from '@/shared/lib/use-mobile'
+import { useResize } from '@/shared/lib/use-resize'
 import { WorkspaceProvider, useWorkspace } from '@/features/workspace'
 import { DEMO_PROJECT_ID } from '@/shared/fixtures/demo-project'
 import { useAuth } from '@/shared/stores/auth'
@@ -69,8 +70,8 @@ function WorkspaceLayout() {
   const [rightWidth, setRightWidth] = createSignal(340)
   const [bottomHeight, setBottomHeight] = createSignal(240)
 
-  // ---- Resize-in-progress flag (disables CSS transitions) ----
-  const [isResizing, setIsResizing] = createSignal(false)
+  // ---- Resize handlers ----
+  const { isResizing, createHorizontalResize, createVerticalResize } = useResize()
 
   // ---- Fullscreen character map ----
   const [charMapFullscreen, setCharMapFullscreen] = createSignal(false)
@@ -185,57 +186,12 @@ function WorkspaceLayout() {
     document.removeEventListener('keydown', handleKeyDown)
   })
 
-  // ---- Resize handlers ----
-  function createHorizontalResize(
-    setter: (v: number) => void,
-    getter: () => number,
-    min: number,
-    max: number,
-    direction: 1 | -1,
-  ) {
-    return (e: PointerEvent) => {
-      setIsResizing(true)
-      const startX = e.clientX
-      const startSize = getter()
-      const onMove = (ev: PointerEvent) => {
-        const delta = (ev.clientX - startX) * direction
-        setter(Math.min(max, Math.max(min, startSize + delta)))
-      }
-      const onUp = () => {
-        document.removeEventListener('pointermove', onMove)
-        document.removeEventListener('pointerup', onUp)
-        document.body.style.cursor = ''
-        document.body.style.userSelect = ''
-        setIsResizing(false)
-      }
-      document.addEventListener('pointermove', onMove)
-      document.addEventListener('pointerup', onUp)
-      document.body.style.cursor = 'col-resize'
-      document.body.style.userSelect = 'none'
-    }
-  }
-
-  function handleBottomResize(e: PointerEvent) {
-    setIsResizing(true)
-    const startY = e.clientY
-    const startSize = bottomHeight()
-    const maxH = window.innerHeight * 0.5
-    const onMove = (ev: PointerEvent) => {
-      const delta = startY - ev.clientY
-      setBottomHeight(Math.min(maxH, Math.max(160, startSize + delta)))
-    }
-    const onUp = () => {
-      document.removeEventListener('pointermove', onMove)
-      document.removeEventListener('pointerup', onUp)
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
-      setIsResizing(false)
-    }
-    document.addEventListener('pointermove', onMove)
-    document.addEventListener('pointerup', onUp)
-    document.body.style.cursor = 'row-resize'
-    document.body.style.userSelect = 'none'
-  }
+  const handleBottomResize = createVerticalResize(
+    setBottomHeight,
+    bottomHeight,
+    160,
+    () => window.innerHeight * 0.5,
+  )
 
   // ---- Save status label ----
   function saveStatusText() {
