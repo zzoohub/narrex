@@ -1,44 +1,9 @@
 import { createSignal, Show, For, onCleanup } from 'solid-js'
 import { useI18n } from '@/shared/lib/i18n'
+import { debounce } from '@/shared/lib/debounce'
+import { STATUS_COLORS, STATUS_KEYS } from '@/shared/lib/scene-status'
 import { useWorkspace } from '@/features/workspace'
 import { Chip, Button, IconX, IconPlus } from '@/shared/ui'
-import type { SceneStatus } from '@/entities/scene'
-
-// ---- Status helpers ---------------------------------------------------------
-
-const STATUS_COLORS: Record<SceneStatus, string> = {
-  empty: 'text-fg-muted bg-surface-raised',
-  ai_draft: 'text-accent bg-accent-muted',
-  edited: 'text-success bg-success-muted',
-  needs_revision: 'text-warning bg-warning-muted',
-}
-
-const STATUS_KEYS: Record<SceneStatus, string> = {
-  empty: 'status.empty',
-  ai_draft: 'status.aiDraft',
-  edited: 'status.edited',
-  needs_revision: 'status.needsRevision',
-}
-
-// ---- Debounce utility -------------------------------------------------------
-
-function createDebounce(fn: () => void, ms: number) {
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const trigger = () => {
-    if (timer) clearTimeout(timer)
-    timer = setTimeout(() => {
-      fn()
-      timer = undefined
-    }, ms)
-  }
-  const cancel = () => {
-    if (timer) {
-      clearTimeout(timer)
-      timer = undefined
-    }
-  }
-  return { trigger, cancel }
-}
 
 // ---- Component --------------------------------------------------------------
 
@@ -54,7 +19,7 @@ export function SceneDetail() {
 
   // ---- Debounced save -------------------------------------------------------
 
-  const titleSave = createDebounce(() => {
+  const titleSave = debounce(() => {
     const s = ws.selectedScene()
     if (s && pendingTitle !== undefined) {
       ws.updateScene(s.id, { title: pendingTitle })
@@ -62,7 +27,7 @@ export function SceneDetail() {
     }
   }, 500)
 
-  const locationSave = createDebounce(() => {
+  const locationSave = debounce(() => {
     const s = ws.selectedScene()
     if (s && pendingLocation !== undefined) {
       ws.updateScene(s.id, { location: pendingLocation || null })
@@ -70,7 +35,7 @@ export function SceneDetail() {
     }
   }, 500)
 
-  const plotSave = createDebounce(() => {
+  const plotSave = debounce(() => {
     const s = ws.selectedScene()
     if (s && pendingPlot !== undefined) {
       ws.updateScene(s.id, { plotSummary: pendingPlot || null })

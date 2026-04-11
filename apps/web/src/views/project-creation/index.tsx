@@ -1,6 +1,7 @@
-import { createSignal, Show, For, onCleanup, onMount } from 'solid-js'
+import { createSignal, Show, For, onCleanup } from 'solid-js'
 import { Link, useNavigate } from '@tanstack/solid-router'
 import { useI18n } from '@/shared/lib/i18n'
+import { useMobile } from '@/shared/lib/use-mobile'
 import {
   Button,
   IconArrowLeft,
@@ -132,13 +133,7 @@ export function ProjectCreationView() {
   const navigate = useNavigate()
 
   // ── Responsive check ──
-  const [isMobile, setIsMobile] = createSignal(false)
-  onMount(() => {
-    const check = () => setIsMobile(window.innerWidth < 768)
-    check()
-    window.addEventListener('resize', check)
-    onCleanup(() => window.removeEventListener('resize', check))
-  })
+  const isMobile = useMobile()
 
   const [state, setState] = createSignal<CreationState>('input')
   const [text, setText] = createSignal('')

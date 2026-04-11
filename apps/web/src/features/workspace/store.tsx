@@ -15,6 +15,7 @@ import type { Track } from '@/entities/track'
 import type { Character, CharacterRelationship } from '@/entities/character'
 import type { SceneConnection } from '@/entities/connection'
 
+import { debounce } from '@/shared/lib/debounce'
 import * as projectApi from '@/entities/project/api'
 import * as sceneApi from '@/entities/scene/api'
 import * as trackApi from '@/entities/track/api'
@@ -98,15 +99,8 @@ function tempId(): string {
   return `temp_${crypto.randomUUID()}`
 }
 
-function debounce(fn: () => void, ms: number) {
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const trigger = () => {
-    if (timer) clearTimeout(timer)
-    timer = setTimeout(() => { fn(); timer = undefined }, ms)
-  }
-  const cancel = () => { if (timer) { clearTimeout(timer); timer = undefined } }
-  return { trigger, cancel }
-}
+
+
 
 // ---- Context ----------------------------------------------------------------
 

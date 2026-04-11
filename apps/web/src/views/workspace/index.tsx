@@ -1,6 +1,7 @@
 import { createSignal, Show, onMount, onCleanup } from 'solid-js'
 import { useParams, Link } from '@tanstack/solid-router'
 import { useI18n } from '@/shared/lib/i18n'
+import { useMobile } from '@/shared/lib/use-mobile'
 import { WorkspaceProvider, useWorkspace } from '@/features/workspace'
 import { DEMO_PROJECT_ID } from '@/shared/fixtures/demo-project'
 import { useAuth } from '@/shared/stores/auth'
@@ -78,7 +79,7 @@ function WorkspaceLayout() {
   const [showDeleteDialog, setShowDeleteDialog] = createSignal(false)
 
   // ---- Responsive ----
-  const [isMobile, setIsMobile] = createSignal(false)
+  const isMobile = useMobile()
 
   // Auto-open right panel when scene selected
   onMount(() => {
@@ -99,18 +100,6 @@ function WorkspaceLayout() {
     onCleanup(() => clearInterval(selectionPoller))
   }
 
-  // ---- Responsive check ----
-  function checkViewport() {
-    setIsMobile(window.innerWidth < 768)
-  }
-
-  onMount(() => {
-    checkViewport()
-    window.addEventListener('resize', checkViewport)
-  })
-  onCleanup(() => {
-    window.removeEventListener('resize', checkViewport)
-  })
 
   // ---- Keyboard shortcuts ----
   function handleKeyDown(e: KeyboardEvent) {

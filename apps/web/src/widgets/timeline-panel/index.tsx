@@ -10,6 +10,7 @@ import {
 import type { JSX } from 'solid-js'
 import { Portal } from 'solid-js/web'
 import { useI18n } from '@/shared/lib/i18n'
+import { STATUS_KEYS } from '@/shared/lib/scene-status'
 import {
   Button,
   IconPlus,
@@ -66,18 +67,7 @@ function sceneStatusIcon(status: string): JSX.Element | null {
 }
 
 function sceneTooltip(t: (k: string) => string, status: string): string {
-  switch (status) {
-    case 'empty':
-      return t('status.empty')
-    case 'ai_draft':
-      return t('status.aiDraft')
-    case 'edited':
-      return t('status.edited')
-    case 'needs_revision':
-      return t('status.needsRevision')
-    default:
-      return ''
-  }
+  return t(STATUS_KEYS[status as keyof typeof STATUS_KEYS] ?? '') || ''
 }
 
 /** Compute scale so all scenes fit within the visible viewport. */

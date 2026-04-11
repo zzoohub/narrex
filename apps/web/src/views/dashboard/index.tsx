@@ -1,6 +1,8 @@
 import { createResource, createSignal, For, onCleanup, onMount, Show, Suspense } from 'solid-js'
 import { Link } from '@tanstack/solid-router'
 import { useI18n } from '@/shared/lib/i18n'
+import { formatDate } from '@/shared/lib/format-date'
+import { useMobile } from '@/shared/lib/use-mobile'
 import { useTheme } from '@/shared/stores/theme'
 import {
   Button,
@@ -52,13 +54,6 @@ export function DashboardView() {
   const displayProjects = (): ProjectSummary[] =>
     isGuest() ? demoProjects() : (projects() ?? [])
 
-  function formatDate(dateStr: string) {
-    return new Date(dateStr).toLocaleDateString('ko-KR', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    })
-  }
 
   // ── Profile dropdown ──
   const [avatarImgFailed, setAvatarImgFailed] = createSignal(false)
@@ -85,15 +80,7 @@ export function DashboardView() {
   }
 
   // ── Responsive check ──
-  const [isMobile, setIsMobile] = createSignal(false)
-  if (typeof window !== 'undefined') {
-    onMount(() => {
-      const check = () => setIsMobile(window.innerWidth < 768)
-      check()
-      window.addEventListener('resize', check)
-      onCleanup(() => window.removeEventListener('resize', check))
-    })
-  }
+  const isMobile = useMobile()
 
   // ── Delete project ──
   const [deleteTarget, setDeleteTarget] = createSignal<ProjectSummary | null>(null)
