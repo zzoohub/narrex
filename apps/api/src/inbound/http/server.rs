@@ -61,7 +61,7 @@ impl AppState {
         pool: Option<PgPool>,
         config: Config,
     ) -> Self {
-        let jwt_secret = config.jwt_secret.clone();
+        let jwt_secret = config.oauth.jwt_secret.clone();
         Self {
             auth_service: Arc::new(auth_service),
             project_service: Arc::new(project_service),

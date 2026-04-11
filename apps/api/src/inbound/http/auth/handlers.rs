@@ -34,7 +34,7 @@ pub struct GoogleCallbackQuery {
 
 /// `GET /v1/auth/google` — redirect to Google OAuth consent screen.
 pub async fn initiate_google_auth(State(state): State<AppState>) -> Result<Response, ApiError> {
-    let redirect_uri = &state.config().google_redirect_uri;
+    let redirect_uri = &state.config().oauth.google_redirect_uri;
     let state_nonce = Uuid::new_v4().to_string();
 
     let google_url = format!(
@@ -45,7 +45,7 @@ pub async fn initiate_google_auth(State(state): State<AppState>) -> Result<Respo
          scope=openid%20email%20profile&\
          access_type=offline&\
          state={}",
-        state.config().google_client_id,
+        state.config().oauth.google_client_id,
         urlencoding::encode(redirect_uri),
         urlencoding::encode(&state_nonce),
     );
@@ -90,9 +90,9 @@ pub async fn handle_google_callback(
     // Exchange the authorization code for a Google access token.
     let google_tokens = exchange_google_code(
         &query.code,
-        &state.config().google_client_id,
-        &state.config().google_client_secret,
-        &state.config().google_redirect_uri,
+        &state.config().oauth.google_client_id,
+        &state.config().oauth.google_client_secret,
+        &state.config().oauth.google_redirect_uri,
     )
     .await
     .map_err(|e| {

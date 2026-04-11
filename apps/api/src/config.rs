@@ -1,25 +1,43 @@
 use std::env;
 
+/// OAuth / JWT authentication configuration.
+#[derive(Debug, Clone)]
+pub struct OAuthConfig {
+    pub jwt_secret: String,
+    pub google_client_id: String,
+    pub google_client_secret: String,
+    pub google_redirect_uri: String,
+}
+
+/// LLM provider configuration.
+#[derive(Debug, Clone)]
+pub struct AiConfig {
+    pub cf_account_id: String,
+    pub cf_api_token: String,
+    pub gemini_api_key: String,
+}
+
+/// Cloudflare R2 object storage configuration.
+#[derive(Debug, Clone)]
+pub struct StorageConfig {
+    pub r2_account_id: String,
+    pub r2_access_key_id: String,
+    pub r2_secret_access_key: String,
+    pub r2_bucket_name: String,
+    pub r2_public_url: String,
+}
+
 /// Application configuration loaded from environment variables.
 #[derive(Debug, Clone)]
 pub struct Config {
     pub run_mode: String,
     pub port: u16,
     pub database_url: String,
-    pub jwt_secret: String,
-    pub google_client_id: String,
-    pub google_client_secret: String,
-    pub google_redirect_uri: String,
-    pub cf_account_id: String,
-    pub cf_api_token: String,
-    pub gemini_api_key: String,
     pub web_app_url: String,
     pub cors_origin: String,
-    pub r2_account_id: String,
-    pub r2_access_key_id: String,
-    pub r2_secret_access_key: String,
-    pub r2_bucket_name: String,
-    pub r2_public_url: String,
+    pub oauth: OAuthConfig,
+    pub ai: AiConfig,
+    pub storage: StorageConfig,
 }
 
 impl Config {
@@ -43,25 +61,32 @@ impl Config {
                 .map_err(|_| anyhow::anyhow!("PORT must be a valid u16"))?,
             database_url: env::var("DATABASE_URL")
                 .map_err(|_| anyhow::anyhow!("DATABASE_URL is required"))?,
-            jwt_secret: env::var("JWT_SECRET")
-                .map_err(|_| anyhow::anyhow!("JWT_SECRET is required"))?,
-            google_client_id: env::var("GOOGLE_CLIENT_ID")
-                .map_err(|_| anyhow::anyhow!("GOOGLE_CLIENT_ID is required"))?,
-            google_client_secret: env::var("GOOGLE_CLIENT_SECRET")
-                .map_err(|_| anyhow::anyhow!("GOOGLE_CLIENT_SECRET is required"))?,
-            google_redirect_uri: env::var("GOOGLE_REDIRECT_URI")
-                .unwrap_or_else(|_| "http://localhost:8080/v1/auth/google/callback".into()),
-            cf_account_id: env::var("CF_ACCOUNT_ID").unwrap_or_default(),
-            cf_api_token: env::var("CF_API_TOKEN").unwrap_or_default(),
-            gemini_api_key: env::var("GEMINI_API_KEY").unwrap_or_default(),
             web_app_url: env::var("WEB_APP_URL").unwrap_or_else(|_| "http://localhost:3000".into()),
             cors_origin: env::var("CORS_ORIGIN").unwrap_or_else(|_| "http://localhost:3000".into()),
-            r2_account_id: env::var("R2_ACCOUNT_ID").unwrap_or_default(),
-            r2_access_key_id: env::var("R2_ACCESS_KEY_ID").unwrap_or_default(),
-            r2_secret_access_key: env::var("R2_SECRET_ACCESS_KEY").unwrap_or_default(),
-            r2_bucket_name: env::var("R2_BUCKET_NAME").unwrap_or_else(|_| "narrex-assets".into()),
-            r2_public_url: env::var("R2_PUBLIC_URL")
-                .unwrap_or_else(|_| "http://localhost:9000".into()),
+            oauth: OAuthConfig {
+                jwt_secret: env::var("JWT_SECRET")
+                    .map_err(|_| anyhow::anyhow!("JWT_SECRET is required"))?,
+                google_client_id: env::var("GOOGLE_CLIENT_ID")
+                    .map_err(|_| anyhow::anyhow!("GOOGLE_CLIENT_ID is required"))?,
+                google_client_secret: env::var("GOOGLE_CLIENT_SECRET")
+                    .map_err(|_| anyhow::anyhow!("GOOGLE_CLIENT_SECRET is required"))?,
+                google_redirect_uri: env::var("GOOGLE_REDIRECT_URI")
+                    .unwrap_or_else(|_| "http://localhost:8080/v1/auth/google/callback".into()),
+            },
+            ai: AiConfig {
+                cf_account_id: env::var("CF_ACCOUNT_ID").unwrap_or_default(),
+                cf_api_token: env::var("CF_API_TOKEN").unwrap_or_default(),
+                gemini_api_key: env::var("GEMINI_API_KEY").unwrap_or_default(),
+            },
+            storage: StorageConfig {
+                r2_account_id: env::var("R2_ACCOUNT_ID").unwrap_or_default(),
+                r2_access_key_id: env::var("R2_ACCESS_KEY_ID").unwrap_or_default(),
+                r2_secret_access_key: env::var("R2_SECRET_ACCESS_KEY").unwrap_or_default(),
+                r2_bucket_name: env::var("R2_BUCKET_NAME")
+                    .unwrap_or_else(|_| "narrex-assets".into()),
+                r2_public_url: env::var("R2_PUBLIC_URL")
+                    .unwrap_or_else(|_| "http://localhost:9000".into()),
+            },
         })
     }
 
@@ -74,20 +99,26 @@ impl Config {
             run_mode: "test".into(),
             port: 0,
             database_url: String::new(),
-            jwt_secret: "test-secret-for-integration-tests-1234".into(),
-            google_client_id: "test-client-id".into(),
-            google_client_secret: "test-client-secret".into(),
-            google_redirect_uri: "http://localhost/callback".into(),
-            cf_account_id: String::new(),
-            cf_api_token: String::new(),
-            gemini_api_key: String::new(),
             web_app_url: "http://localhost:3000".into(),
             cors_origin: "http://localhost:3000".into(),
-            r2_account_id: String::new(),
-            r2_access_key_id: String::new(),
-            r2_secret_access_key: String::new(),
-            r2_bucket_name: "test-bucket".into(),
-            r2_public_url: "http://localhost:9000".into(),
+            oauth: OAuthConfig {
+                jwt_secret: "test-secret-for-integration-tests-1234".into(),
+                google_client_id: "test-client-id".into(),
+                google_client_secret: "test-client-secret".into(),
+                google_redirect_uri: "http://localhost/callback".into(),
+            },
+            ai: AiConfig {
+                cf_account_id: String::new(),
+                cf_api_token: String::new(),
+                gemini_api_key: String::new(),
+            },
+            storage: StorageConfig {
+                r2_account_id: String::new(),
+                r2_access_key_id: String::new(),
+                r2_secret_access_key: String::new(),
+                r2_bucket_name: "test-bucket".into(),
+                r2_public_url: "http://localhost:9000".into(),
+            },
         }
     }
 }

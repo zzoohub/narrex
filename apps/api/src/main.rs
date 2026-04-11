@@ -42,21 +42,21 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("database connected");
 
     // 4. Create LLM gateway (Gemini 2.5 Flash-Lite primary, CF Workers AI fallback).
-    let primary = GeminiFlashProvider::new(config.gemini_api_key.clone());
+    let primary = GeminiFlashProvider::new(config.ai.gemini_api_key.clone());
     let fallback =
-        CfWorkersAiProvider::new(config.cf_account_id.clone(), config.cf_api_token.clone());
+        CfWorkersAiProvider::new(config.ai.cf_account_id.clone(), config.ai.cf_api_token.clone());
     let llm = Arc::new(LlmGateway::new(Box::new(primary), Box::new(fallback)));
 
     // 5. Create JwtTokenService.
-    let token_service = JwtTokenService::new(&config.jwt_secret);
+    let token_service = JwtTokenService::new(&config.oauth.jwt_secret);
 
     // 6. Create R2 storage adapter.
     let r2_storage = R2Storage::new(
-        &config.r2_account_id,
-        &config.r2_access_key_id,
-        &config.r2_secret_access_key,
-        &config.r2_bucket_name,
-        &config.r2_public_url,
+        &config.storage.r2_account_id,
+        &config.storage.r2_access_key_id,
+        &config.storage.r2_secret_access_key,
+        &config.storage.r2_bucket_name,
+        &config.storage.r2_public_url,
     );
 
     // 7. Assemble domain services with adapters.
