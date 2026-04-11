@@ -4,6 +4,11 @@ use super::error::AuthError;
 use super::models::{AuthTokens, GoogleUserInfo, UpdateProfile, User};
 use super::ports::{AuthService, AvatarStorage, TokenService, UserRepository};
 
+const MAX_DISPLAY_NAME_LENGTH: usize = 50;
+const VALID_THEMES: &[&str] = &["system", "light", "dark"];
+const VALID_LANGUAGES: &[&str] = &["ko", "en"];
+const MAX_AVATAR_SIZE: usize = 2 * 1024 * 1024; // 2MB
+
 #[derive(Clone)]
 pub struct AuthServiceImpl<U: UserRepository, T: TokenService, S: AvatarStorage> {
     user_repo: U,
@@ -73,7 +78,7 @@ impl<U: UserRepository, T: TokenService, S: AvatarStorage> AuthServiceImpl<U, T,
                     "display name cannot be empty".into(),
                 ));
             }
-            if trimmed.len() > 50 {
+            if trimmed.len() > MAX_DISPLAY_NAME_LENGTH {
                 return Err(AuthError::InvalidInput(
                     "display name must be 50 characters or fewer".into(),
                 ));
@@ -82,7 +87,7 @@ impl<U: UserRepository, T: TokenService, S: AvatarStorage> AuthServiceImpl<U, T,
 
         // Validate theme_preference if provided.
         if let Some(ref theme) = update.theme_preference {
-            if !["system", "light", "dark"].contains(&theme.as_str()) {
+            if !VALID_THEMES.contains(&theme.as_str()) {
                 return Err(AuthError::InvalidInput(
                     "theme must be one of: system, light, dark".into(),
                 ));
@@ -91,7 +96,7 @@ impl<U: UserRepository, T: TokenService, S: AvatarStorage> AuthServiceImpl<U, T,
 
         // Validate language_preference if provided.
         if let Some(ref lang) = update.language_preference {
-            if !["ko", "en"].contains(&lang.as_str()) {
+            if !VALID_LANGUAGES.contains(&lang.as_str()) {
                 return Err(AuthError::InvalidInput(
                     "language must be one of: ko, en".into(),
                 ));
@@ -152,8 +157,7 @@ impl<U: UserRepository, T: TokenService, S: AvatarStorage> AuthServiceImpl<U, T,
             .await?
             .ok_or(AuthError::UserNotFound)?;
 
-        // Validate size (2MB max).
-        if data.len() > 2 * 1024 * 1024 {
+        if data.len() > MAX_AVATAR_SIZE {
             return Err(AuthError::InvalidInput("file too large (max 2MB)".into()));
         }
 

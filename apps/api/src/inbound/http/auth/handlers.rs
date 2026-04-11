@@ -15,6 +15,9 @@ use crate::inbound::http::server::AppState;
 use super::request::{TestLoginRequest, UpdateProfileRequest};
 use super::response::{AuthTokensResponse, UserResponse};
 
+/// Refresh token cookie lifetime in seconds (30 days).
+const REFRESH_COOKIE_MAX_AGE: i64 = 30 * 24 * 60 * 60;
+
 // ---------------------------------------------------------------------------
 // Query params
 // ---------------------------------------------------------------------------
@@ -143,7 +146,7 @@ pub async fn handle_google_callback(
     let refresh_cookie = format!(
         "refresh_token={}; HttpOnly; Secure; SameSite=None; Path=/v1/auth; Max-Age={}",
         refresh_token,
-        30 * 24 * 60 * 60, // 30 days
+        REFRESH_COOKIE_MAX_AGE,
     );
 
     // Clear the one-time state cookie.
@@ -188,7 +191,7 @@ pub async fn refresh_token(
     let cookie = format!(
         "refresh_token={}; HttpOnly; Secure; SameSite=None; Path=/v1/auth; Max-Age={}",
         new_refresh,
-        30 * 24 * 60 * 60, // 30 days
+        REFRESH_COOKIE_MAX_AGE,
     );
 
     let mut response = ApiSuccess::new(AuthTokensResponse::from(&tokens)).into_response();
@@ -319,7 +322,7 @@ pub async fn test_login(
     let refresh_cookie = format!(
         "refresh_token={}; HttpOnly; Secure; SameSite=None; Path=/v1/auth; Max-Age={}",
         refresh_token,
-        30 * 24 * 60 * 60, // 30 days
+        REFRESH_COOKIE_MAX_AGE,
     );
 
     let mut response = ApiSuccess::new(AuthTokensResponse::from(&tokens)).into_response();
